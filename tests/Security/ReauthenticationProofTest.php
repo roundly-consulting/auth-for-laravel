@@ -5,11 +5,17 @@ declare(strict_types=1);
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\Notification;
 use Illuminate\Support\Facades\Route;
+use RoundlyConsulting\Auth\DataTransferObjects\CurrentToken;
 use RoundlyConsulting\Auth\DataTransferObjects\TokenPair;
 use RoundlyConsulting\Auth\Enums\AuthMethodReference;
+use RoundlyConsulting\Auth\Enums\InvalidationReason;
+use RoundlyConsulting\Auth\Facades\Authentication;
 use RoundlyConsulting\Auth\Notifications\EmailOtpNotification;
 use RoundlyConsulting\Auth\Tests\Fixtures\Models\User;
+use RoundlyConsulting\Jwt\Facades\Jwt;
 use RoundlyConsulting\Passkeys\Models\Passkey;
+use RoundlyConsulting\RefreshTokens\DataTransferObjects\IssueContext;
+use RoundlyConsulting\RefreshTokens\Facades\RefreshToken;
 
 /**
  * An account with a second factor re-proves itself WITH it: neither a password (or email
@@ -206,4 +212,36 @@ it('applies the same rule on host routes behind the middleware', function (): vo
 
     $this->get('/_sudo', bearer(issuePair($user)))->assertForbidden();
     $this->get('/_sudo', bearer(issuePair($user, amr: [AuthMethodReference::Pwd, AuthMethodReference::Otp, AuthMethodReference::Mfa])))->assertOk();
+});
+
+it('never treats a session without a recorded auth_time as a fresh login', function (): void {
+    $user = User::factory()->create();
+
+    // A session the host issued without the package's metadata (a pre-adoption family).
+    $issued = RefreshToken::issue($user, new IssueContext(ipAddress: '10.0.0.1', userAgent: 'PestBrowser/1.0'));
+
+    CarbonImmutable::setTestNow('2026-09-26 18:00:00');
+
+    $access = $this->postJson('/users/auth/refresh', ['refresh_token' => $issued->plainText], ['User-Agent' => 'PestBrowser/1.0'])
+        ->assertOk()
+        ->json('access_token');
+
+    expect(Jwt::verify($access, 'app-users')->authTime())->toBe(CarbonImmutable::parse('2026-09-26 10:00:00')->getTimestamp());
+
+    $this->postJson('/users/auth/logout/everywhere', [], ['Authorization' => 'Bearer '.$access, 'User-Agent' => 'PestBrowser/1.0'])
+        ->assertForbidden()
+        ->assertJsonPath('code', 'reauthentication_required');
+});
+
+it('keeps the session start as auth_time when re-issuing a session without one', function (): void {
+    $user = User::factory()->create();
+    $issued = RefreshToken::issue($user, new IssueContext(ipAddress: '10.0.0.1', userAgent: 'PestBrowser/1.0'));
+
+    CarbonImmutable::setTestNow('2026-09-26 18:00:00');
+
+    $keep = new CurrentToken('kept-jti', CarbonImmutable::now()->addMinutes(5), $issued->token->family_id);
+    $pair = Authentication::guard('users')->invalidate($user, InvalidationReason::PasswordChanged, $keep, sessionContext());
+
+    expect($pair)->not->toBeNull()
+        ->and(claimsOf($pair)->authTime())->toBe(CarbonImmutable::parse('2026-09-26 10:00:00')->getTimestamp());
 });

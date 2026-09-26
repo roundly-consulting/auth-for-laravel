@@ -69,7 +69,9 @@ final readonly class RefreshTokenPair
         }
 
         $meta = $redeemed->redeemedToken->meta ?? [];
-        $authTime = is_int($meta['auth_time'] ?? null) ? CarbonImmutable::createFromTimestamp($meta['auth_time']) : CarbonImmutable::now();
+        // A session without a recorded auth_time (issued by host code) was authenticated
+        // when it started — never "just now", which would pass every fresh-login gate.
+        $authTime = is_int($meta['auth_time'] ?? null) ? CarbonImmutable::createFromTimestamp($meta['auth_time']) : $redeemed->redeemedToken->sessionStartedAt();
 
         $access = Jwt::mintAccessToken($this->buildRequest->execute(
             $config,

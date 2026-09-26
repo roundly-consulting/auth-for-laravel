@@ -99,7 +99,7 @@ final readonly class InvalidateAccountTokens
 
         if ($kept !== null) {
             $method = LoginMethod::tryFrom(is_string($meta['method'] ?? null) ? $meta['method'] : '') ?? LoginMethod::Host;
-            $authTime = is_int($meta['auth_time'] ?? null) ? CarbonImmutable::createFromTimestamp($meta['auth_time']) : CarbonImmutable::now();
+            $authTime = is_int($meta['auth_time'] ?? null) ? CarbonImmutable::createFromTimestamp($meta['auth_time']) : $kept->sessionStartedAt();
 
             $tokens = $this->issueTokenPair->execute(
                 $guard,
