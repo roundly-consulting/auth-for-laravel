@@ -18,6 +18,7 @@ use RoundlyConsulting\Auth\Enums\NotificationType;
 use RoundlyConsulting\Auth\Events\TwoFactorEnabled;
 use RoundlyConsulting\Auth\Exceptions\ChallengeFactorFailed;
 use RoundlyConsulting\Auth\Exceptions\ChallengeInvalid;
+use RoundlyConsulting\Auth\Exceptions\EnrolmentRequired;
 use RoundlyConsulting\Auth\Guards\GuardRegistry;
 use RoundlyConsulting\Auth\Support\AccountModels;
 use RoundlyConsulting\Auth\Support\NotificationDispatcher;
@@ -30,6 +31,10 @@ use RoundlyConsulting\TwoFactor\Exceptions\TwoFactorNotPendingException;
  * satisfies the login's second factor (amr `otp`). The account's pre-existing sessions
  * die with the 2FA change — but not this challenge, whose token-version snapshot moves
  * with it.
+ *
+ * The step only exists while the account has no TOTP: once TOTP was enabled elsewhere
+ * (another challenge, the account endpoints, host code) this challenge is ended — a
+ * fresh login then asks for the enrolled factor instead of accepting any code here.
  */
 final readonly class ConfirmTwoFactorEnrolmentStep
 {
@@ -41,6 +46,7 @@ final readonly class ConfirmTwoFactorEnrolmentStep
         private ConfirmEnrolment $confirmEnrolment,
         private InvalidateAccountTokens $invalidate,
         private NotificationDispatcher $notifications,
+        private InvalidateChallenge $invalidateChallenge,
     ) {}
 
     public function execute(string $guard, ChallengeFactorData $data): LoginResult
@@ -55,12 +61,23 @@ final readonly class ConfirmTwoFactorEnrolmentStep
             throw new ChallengeInvalid;
         }
 
+        if (! $config->allowsEnrolmentInChallenge() || ($config->enrolmentRequiresVerifiedEmail() && ! $account->hasVerifiedEmail())) {
+            throw new EnrolmentRequired;
+        }
+
+        $model = AccountModels::twoFactor($account);
+
+        if ($model->hasTwoFactorEnabled()) {
+            $this->invalidateChallenge->execute($challenge);
+        }
+
         try {
-            $this->confirmEnrolment->execute(AccountModels::twoFactor($account), (string) $data->code);
+            $this->confirmEnrolment->execute($model, (string) $data->code);
         } catch (InvalidTwoFactorCodeException $e) {
             throw ChallengeFactorFailed::withAttemptsLeft($this->recordFailure->execute($challenge, ActivityOutcome::FailedFactor, $data->context, FactorMethod::TotpEnrolment->value), $e);
-        } catch (TwoFactorNotPendingException $e) {
-            throw new ChallengeInvalid($e);
+        } catch (TwoFactorNotPendingException) {
+            // Enabled (or cancelled) between the check above and the confirmation.
+            $this->invalidateChallenge->execute($challenge);
         }
 
         event(new TwoFactorEnabled($guard, $account));

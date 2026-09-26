@@ -27,6 +27,7 @@ final readonly class StartTwoFactorEnrolmentStep
         private GuardRegistry $guards,
         private FindActiveChallenge $findChallenge,
         private TwoFactorEnrolments $enrolments,
+        private InvalidateChallenge $invalidateChallenge,
     ) {}
 
     public function execute(string $guard, #[SensitiveParameter] string $challengeToken, SessionContext $context): TwoFactorSetupData
@@ -47,8 +48,9 @@ final readonly class StartTwoFactorEnrolmentStep
 
         try {
             return $this->enrolments->start($config, $account);
-        } catch (TwoFactorAlreadyEnabled $e) {
-            throw new ChallengeInvalid($e);
+        } catch (TwoFactorAlreadyEnabled) {
+            // Enabled elsewhere meanwhile: this step no longer fits the account.
+            $this->invalidateChallenge->execute($challenge);
         }
     }
 }
