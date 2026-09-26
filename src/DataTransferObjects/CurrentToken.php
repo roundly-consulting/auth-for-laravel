@@ -7,6 +7,7 @@ namespace RoundlyConsulting\Auth\DataTransferObjects;
 use Carbon\CarbonImmutable;
 use Illuminate\Auth\AuthenticationException;
 use Illuminate\Http\Request;
+use RoundlyConsulting\Auth\Enums\AuthMethodReference;
 use RoundlyConsulting\Auth\Guards\GuardConfig;
 use RoundlyConsulting\Jwt\Facades\Jwt;
 use RoundlyConsulting\Jwt\Jose\Claims;
@@ -16,11 +17,15 @@ use RoundlyConsulting\Jwt\Jose\Claims;
  */
 final readonly class CurrentToken
 {
+    /**
+     * @param  list<AuthMethodReference>  $authMethods  the login's `amr` (unknown values dropped)
+     */
     public function __construct(
         public string $jti,
         public CarbonImmutable $expiresAt,
         public ?string $sessionId = null,
         public ?CarbonImmutable $authTime = null,
+        public array $authMethods = [],
     ) {}
 
     public static function fromClaims(Claims $claims): self
@@ -32,6 +37,7 @@ final readonly class CurrentToken
             expiresAt: CarbonImmutable::createFromTimestamp($claims->int('exp')),
             sessionId: $claims->sessionId(),
             authTime: $authTime === null ? null : CarbonImmutable::createFromTimestamp($authTime),
+            authMethods: AuthMethodReference::fromValues($claims->get('amr')),
         );
     }
 

@@ -10,6 +10,7 @@ use RoundlyConsulting\Auth\Actions\Challenges\BeginPasskeyStep;
 use RoundlyConsulting\Auth\Actions\Login\CompletePasskeyLogin;
 use RoundlyConsulting\Auth\DataTransferObjects\ChallengeFactorData;
 use RoundlyConsulting\Auth\DataTransferObjects\PasswordCredentials;
+use RoundlyConsulting\Auth\Enums\AuthMethodReference;
 use RoundlyConsulting\Auth\Enums\FactorMethod;
 use RoundlyConsulting\Auth\Events\PasskeyAdded;
 use RoundlyConsulting\Auth\Events\PasskeyRemoved;
@@ -157,6 +158,10 @@ it('manages passkeys over http', function (): void {
         ->assertJsonPath('tokens', null)
         ->json('passkey.id');
 
+    // The account now has a passkey: the password login no longer satisfies the gate.
+    $this->deleteJson("/users/auth/passkeys/{$id}", [], bearer($pair))->assertForbidden()->assertJsonPath('methods', ['passkey']);
+    $pair = issuePair($this->user, amr: [AuthMethodReference::Hwk, AuthMethodReference::User, AuthMethodReference::Mfa]);
+
     $this->getJson('/users/auth/passkeys', bearer($pair))->assertOk()->assertJsonCount(1, 'data');
     $this->patchJson("/users/auth/passkeys/{$id}", ['name' => 'Work phone'], bearer($pair))->assertOk()->assertJsonPath('data.name', 'Work phone');
     $this->patchJson('/users/auth/passkeys/abc', ['name' => 'x'], bearer($pair))->assertNotFound();
@@ -187,7 +192,7 @@ it('rejects a malformed credential payload', function (): void {
 it('protects the last passkey when it is the only way in', function (): void {
     $this->configureGuard('users', ['login.password' => false, 'login.magic_link' => false, 'login.email_otp' => false]);
     registerVirtualPasskey($this->user);
-    $pair = issuePair($this->user);
+    $pair = issuePair($this->user, amr: [AuthMethodReference::Hwk, AuthMethodReference::User, AuthMethodReference::Mfa]);
 
     $this->deleteJson('/users/auth/passkeys/'.Passkey::query()->sole()->getKey(), [], bearer($pair))
         ->assertStatus(409)

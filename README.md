@@ -243,8 +243,8 @@ one table is authorization, not a guard) or an audience.
 | `lockout.enabled` / `.threshold` / `.duration` / `.reset_unlocks` | `false` / `10` / `900` / `true` | opt-in hard lock |
 | `reauthentication.timeout` | `900` | how long a re-authentication counts |
 | `reauthentication.methods` | all five | allowed methods |
-| `reauthentication.require_second_factor_when_enrolled` | `true` | accounts with a second factor must use it |
-| `reauthentication.fresh_login_counts` | `true` | a login within the window counts |
+| `reauthentication.require_second_factor_when_enrolled` | `true` | accounts with a second factor must use it — to re-authenticate, and for a re-authentication or fresh login to satisfy a gate (checked against the factors the account has *now*) |
+| `reauthentication.fresh_login_counts` | `true` | a login within the window counts — for an account with a second factor, only a login that used it (`amr` has `mfa` or `hwk`) |
 | `reauthentication.required_for` | all eight actions | `SensitiveAction` values that need a recent re-authentication; remove one to drop its gate (`set_password` = a passwordless account setting a first password) |
 | `activity.enabled` / `.store_identifier` / `.retention_days` | `true` / `plain` / `90` | login-activity log (`plain`, `hash`, `none`) |
 | `activity.new_device.enabled` / `.header` / `.skip_first_login` | `true` / `X-Device-Id` / `true` | new-device detection |
@@ -456,7 +456,7 @@ development — it writes links to the log.
 |---|---|
 | `authentication.guard:{guard}` | binds a package route to its guard |
 | `authentication.verified[:guard]` | 403 `email_not_verified` for unverified accounts when verification is required |
-| `authentication.reauthenticated[:seconds[,guard]]` | 403 `reauthentication_required` without a recent re-authentication |
+| `authentication.reauthenticated[:seconds[,guard]]` | 403 `reauthentication_required` without a recent re-authentication (a second-factor one for accounts that have a second factor) |
 | `authentication.locale[:guard]` | applies the account's (or negotiated) locale |
 | `authentication.active[:guard]` | 403 for disabled accounts |
 | `authentication.no-store` | `Cache-Control: no-store` |
@@ -505,7 +505,10 @@ $this->assertTokensInvalidated($user, InvalidationReason::PasswordChanged);
   tokens until they expire — keep `access_ttl` short (≤ 15 min), `tv++` covers the rest.
 - **Forced enrolment** — a password-only attacker could enrol their own authenticator under a
   `required` mode; enrolment is therefore limited to verified addresses and announced to them.
-- **Re-authentication** — accounts with a second factor must re-authenticate with it.
+- **Re-authentication** — accounts with a second factor must re-authenticate with it; a password or
+  email-code proof, or a login that skipped the factor, never satisfies a gate for them — also when
+  the factor was enrolled after that proof (the marker records the method, the check uses the
+  account's current factors).
 - **Secrets at rest** — HMAC-SHA-256 with a key derived from `APP_KEY` (or `hash_key`); plaintext
   exists only in the response or the notification.
 

@@ -5,6 +5,7 @@ declare(strict_types=1);
 use Illuminate\Support\Facades\Notification;
 use RoundlyConsulting\Auth\Actions\TwoFactor\DisableTwoFactor;
 use RoundlyConsulting\Auth\DataTransferObjects\CurrentToken;
+use RoundlyConsulting\Auth\Enums\AuthMethodReference;
 use RoundlyConsulting\Auth\Exceptions\TwoFactorRequired;
 use RoundlyConsulting\Auth\Notifications\TwoFactorDisabledNotification;
 use RoundlyConsulting\Auth\Tests\Fixtures\Models\Client;
@@ -52,13 +53,14 @@ it('refuses a wrong confirmation code and a second enrolment', function (): void
     $this->postJson('/users/auth/two-factor/confirm', ['code' => '000000'], bearer($pair))->assertStatus(422);
 
     enableTotp($user);
-    $this->postJson('/users/auth/two-factor', [], bearer($pair))->assertStatus(409)->assertJsonPath('code', 'two_factor_already_enabled');
+    $totpLogin = issuePair($user, amr: [AuthMethodReference::Pwd, AuthMethodReference::Otp, AuthMethodReference::Mfa]);
+    $this->postJson('/users/auth/two-factor', [], bearer($totpLogin))->assertStatus(409)->assertJsonPath('code', 'two_factor_already_enabled');
 });
 
 it('disables totp and tells the owner', function (): void {
     $user = User::factory()->create();
     enableTotp($user);
-    $pair = issuePair($user);
+    $pair = issuePair($user, amr: [AuthMethodReference::Pwd, AuthMethodReference::Otp, AuthMethodReference::Mfa]);
 
     $this->deleteJson('/users/auth/two-factor', [], bearer($pair))
         ->assertOk()
@@ -85,7 +87,7 @@ it('regenerates recovery codes and keeps the caller signed in', function (): voi
     $this->configureGuard('users', ['invalidation.two_factor_changed' => 'none']);
     $user = User::factory()->create();
     enableTotp($user);
-    $pair = issuePair($user);
+    $pair = issuePair($user, amr: [AuthMethodReference::Pwd, AuthMethodReference::Otp, AuthMethodReference::Mfa]);
 
     $this->postJson('/users/auth/two-factor/recovery-codes', [], bearer($pair))
         ->assertOk()

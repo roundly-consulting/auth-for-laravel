@@ -30,6 +30,18 @@ enum AuthMethodReference: string
     }
 
     /**
+     * Whether a login's `amr` proves a second factor: `mfa` (a completed challenge step or
+     * a user-verified passkey) or `hwk` (a passkey). `otp` alone does not — an emailed
+     * login code carries it too.
+     *
+     * @param  list<self>  $methods
+     */
+    public static function provesSecondFactor(array $methods): bool
+    {
+        return in_array(self::Mfa, $methods, true) || in_array(self::Hwk, $methods, true);
+    }
+
+    /**
      * Parse stored `amr` values back into cases, dropping anything unknown.
      *
      * @return list<self>

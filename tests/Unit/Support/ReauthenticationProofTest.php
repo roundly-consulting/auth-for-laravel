@@ -3,7 +3,9 @@
 declare(strict_types=1);
 
 use Carbon\CarbonImmutable;
+use RoundlyConsulting\Auth\DataTransferObjects\CurrentToken;
 use RoundlyConsulting\Auth\DataTransferObjects\ReauthenticationProof;
+use RoundlyConsulting\Auth\Enums\AuthMethodReference;
 use RoundlyConsulting\Auth\Enums\ReauthenticationMethod;
 use RoundlyConsulting\Auth\Support\ReauthenticationMarker;
 use RoundlyConsulting\Auth\Support\ReauthenticationMethods;
@@ -14,6 +16,17 @@ it('classifies re-authentication methods by whether they prove a second factor',
 
     expect($second)->toBe([ReauthenticationMethod::Totp, ReauthenticationMethod::RecoveryCode, ReauthenticationMethod::Passkey]);
 });
+
+it('reads a second factor from a login amr only through mfa or hwk', function (array $amr, bool $proves): void {
+    expect(AuthMethodReference::provesSecondFactor($amr))->toBe($proves);
+})->with([
+    'password' => [[AuthMethodReference::Pwd], false],
+    'email code' => [[AuthMethodReference::Otp], false],
+    'magic link' => [[AuthMethodReference::Email], false],
+    'none' => [[], false],
+    'password + totp' => [[AuthMethodReference::Pwd, AuthMethodReference::Otp, AuthMethodReference::Mfa], true],
+    'passkey' => [[AuthMethodReference::Hwk, AuthMethodReference::User], true],
+]);
 
 it('records the method with the time and ignores a marker without one', function (): void {
     $marker = app(ReauthenticationMarker::class);
@@ -32,6 +45,13 @@ it('records the method with the time and ignores a marker without one', function
 
     $marker->forget('users', 'sid-1');
     expect($marker->proof('users', 'sid-1'))->toBeNull();
+});
+
+it('carries the login amr on the current token', function (): void {
+    $user = User::factory()->create();
+
+    expect(CurrentToken::fromClaims(claimsOf(issuePair($user, amr: [AuthMethodReference::Pwd, AuthMethodReference::Otp, AuthMethodReference::Mfa])))->authMethods)
+        ->toBe([AuthMethodReference::Pwd, AuthMethodReference::Otp, AuthMethodReference::Mfa]);
 });
 
 it('requires a second-factor proof only from accounts with one, and only when the guard says so', function (): void {
