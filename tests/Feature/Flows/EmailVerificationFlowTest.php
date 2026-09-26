@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Notification;
 use Illuminate\Support\Facades\Route;
@@ -61,6 +62,31 @@ it('resends to real unverified accounts only, with a per-account cooldown', func
 
     Notification::assertSentToTimes($user, VerifyEmailNotification::class, 1);
     Notification::assertNotSentTo($verified, VerifyEmailNotification::class);
+});
+
+it('applies the same cooldown and address budget to the signed-in send', function (): void {
+    $user = User::factory()->unverified()->create();
+    $headers = bearer(issuePair($user));
+    CarbonImmutable::setTestNow(CarbonImmutable::now());
+
+    foreach (range(1, 3) as $attempt) {
+        $this->postJson('/users/auth/email/verification', [], $headers)->assertStatus(202);
+    }
+
+    Notification::assertSentToTimes($user, VerifyEmailNotification::class, 1);
+
+    // verification.resend_decay = 60 s.
+    CarbonImmutable::setTestNow(CarbonImmutable::now()->addSeconds(61));
+    $this->postJson('/users/auth/email/verification', [], $headers)->assertStatus(202);
+    Notification::assertSentToTimes($user, VerifyEmailNotification::class, 2);
+
+    // email_request_account = 10 per hour and address.
+    foreach (range(5, 10) as $attempt) {
+        $this->postJson('/users/auth/email/verification', [], $headers)->assertStatus(202);
+    }
+
+    $this->postJson('/users/auth/email/verification', [], $headers)->assertStatus(429)->assertJsonPath('code', 'too_many_attempts');
+    CarbonImmutable::setTestNow();
 });
 
 it('does nothing for a verified account and is absent when verification is off', function (): void {

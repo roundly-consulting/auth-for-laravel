@@ -15,12 +15,15 @@ use RoundlyConsulting\Auth\Enums\UrlKind;
 use RoundlyConsulting\Auth\Events\EmailVerificationSent;
 use RoundlyConsulting\Auth\Exceptions\LoginMethodDisabled;
 use RoundlyConsulting\Auth\Guards\GuardRegistry;
+use RoundlyConsulting\Auth\Support\AccountModels;
 use RoundlyConsulting\Auth\Support\NotificationDispatcher;
 use RoundlyConsulting\Auth\Support\UrlTemplate;
 
 /**
  * Mails a verification link (or code, per `verification.channel`) to the account's
  * current address. Each send kills the previous one. A no-op for verified accounts.
+ * Unthrottled itself: the request paths ({@see RequestEmailVerification},
+ * {@see ResendEmailVerification}) apply the limits.
  */
 final readonly class SendEmailVerification
 {
@@ -54,5 +57,15 @@ final readonly class SendEmailVerification
         ));
 
         event(new EmailVerificationSent($guard, $account));
+    }
+
+    /**
+     * The per-account `verification.resend_decay` cooldown both request paths share.
+     */
+    public static function cooldownKey(string $guard, Account $account): string
+    {
+        $model = AccountModels::of($account);
+
+        return "authentication:{$guard}:verification-resend:{$model->getMorphClass()}:{$model->getKey()}";
     }
 }

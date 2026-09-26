@@ -6,14 +6,14 @@ namespace RoundlyConsulting\Auth\Http\Controllers\Email;
 
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use RoundlyConsulting\Auth\Actions\Email\SendEmailVerification;
+use RoundlyConsulting\Auth\Actions\Email\RequestEmailVerification;
 use RoundlyConsulting\Auth\DataTransferObjects\SessionContext;
 use RoundlyConsulting\Auth\Http\RequestGuard;
 use RoundlyConsulting\Auth\Http\Responses\LoginResponse;
 
 final class SendVerificationController
 {
-    public function __invoke(Request $request, SendEmailVerification $send): JsonResponse
+    public function __invoke(Request $request, RequestEmailVerification $send): JsonResponse
     {
         $guard = RequestGuard::config($request);
 

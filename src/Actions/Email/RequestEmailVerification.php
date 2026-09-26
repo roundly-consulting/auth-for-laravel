@@ -4,20 +4,22 @@ declare(strict_types=1);
 
 namespace RoundlyConsulting\Auth\Actions\Email;
 
+use RoundlyConsulting\Auth\Contracts\Account;
 use RoundlyConsulting\Auth\DataTransferObjects\SessionContext;
 use RoundlyConsulting\Auth\Enums\EmailVerificationMode;
 use RoundlyConsulting\Auth\Enums\ThrottleKind;
 use RoundlyConsulting\Auth\Exceptions\LoginMethodDisabled;
-use RoundlyConsulting\Auth\Guards\AccountRepository;
+use RoundlyConsulting\Auth\Exceptions\TooManyAttempts;
 use RoundlyConsulting\Auth\Guards\GuardRegistry;
 use RoundlyConsulting\Auth\Support\Throttle;
 
 /**
- * A guest "resend the verification email": throttled per address+IP, IP and address,
- * plus a per-account `verification.resend_decay` cooldown. Sends only to a real,
- * unverified account; always 202 at the HTTP layer.
+ * The signed-in "send me the verification email": the same limits as the guest resend —
+ * the per-address `email_request_account` budget (429 once spent) and the per-account
+ * `verification.resend_decay` cooldown (inside it nothing is sent, the answer is the
+ * same) — so a session cannot mail-bomb its own (or a typo'd) address.
  */
-final readonly class ResendEmailVerification
+final readonly class RequestEmailVerification
 {
     public function __construct(
         private GuardRegistry $guards,
@@ -25,7 +27,10 @@ final readonly class ResendEmailVerification
         private SendEmailVerification $send,
     ) {}
 
-    public function execute(string $guard, string $email, SessionContext $context): void
+    /**
+     * @throws TooManyAttempts
+     */
+    public function execute(string $guard, Account $account, SessionContext $context): void
     {
         $config = $this->guards->get($guard);
 
@@ -33,13 +38,13 @@ final readonly class ResendEmailVerification
             throw new LoginMethodDisabled;
         }
 
-        $this->throttle->attempt($config, [ThrottleKind::EmailRequest, ThrottleKind::EmailRequestIp, ThrottleKind::EmailRequestAccount], $email, $context);
+        $email = $account->accountEmail();
 
-        $account = (new AccountRepository($config))->findByEmail($email);
-
-        if ($account === null || $account->hasVerifiedEmail() || $account->isDisabled()) {
+        if ($email === null || $account->hasVerifiedEmail()) {
             return;
         }
+
+        $this->throttle->attempt($config, [ThrottleKind::EmailRequestAccount], $email, $context);
 
         if ($this->throttle->cooldown(SendEmailVerification::cooldownKey($guard, $account), $config->verificationResendDecay())) {
             $this->send->execute($guard, $account, $context);
