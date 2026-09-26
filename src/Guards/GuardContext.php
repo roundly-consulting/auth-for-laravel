@@ -6,6 +6,9 @@ namespace RoundlyConsulting\Auth\Guards;
 
 use Illuminate\Contracts\Container\Container;
 use Illuminate\Support\Collection;
+use RoundlyConsulting\Auth\Actions\Account\DisableAccount;
+use RoundlyConsulting\Auth\Actions\Account\EnableAccount;
+use RoundlyConsulting\Auth\Actions\Account\UnlockAccount;
 use RoundlyConsulting\Auth\Actions\Challenges\CompletePasskeyEnrolmentStep;
 use RoundlyConsulting\Auth\Actions\Challenges\CompletePasskeyStep;
 use RoundlyConsulting\Auth\Actions\Challenges\CompleteTwoFactorStep;
@@ -208,5 +211,22 @@ final readonly class GuardContext
         return $this->container->make(InvalidateAccountTokens::class)
             ->execute($this->config, $account, $reason, $keep, $context ?? new SessionContext)
             ->tokens;
+    }
+
+    // ── Account lifecycle ────────────────────────────────────────────────
+
+    public function disable(Account $account, ?string $reason = null): void
+    {
+        $this->container->make(DisableAccount::class)->execute($this->name(), $account, $reason);
+    }
+
+    public function enable(Account $account): void
+    {
+        $this->container->make(EnableAccount::class)->execute($this->name(), $account);
+    }
+
+    public function unlock(Account $account): void
+    {
+        $this->container->make(UnlockAccount::class)->execute($this->name(), $account);
     }
 }
