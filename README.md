@@ -1,10 +1,12 @@
+<!-- roundly-hero:start -->
 <p align="center">
-  <a href="https://roundly-consulting.com/open-source">
-    <img src="art/hero.png" alt="Auth For Laravel — Roundly open source" width="100%">
+  <a href="https://roundly-consulting.com/open-source/docs/auth-for-laravel?utm_source=github&utm_medium=readme&utm_campaign=open-source&utm_content=auth-for-laravel">
+    <img src="art/hero.png" alt="Auth for Laravel — Roundly open source" width="100%">
   </a>
 </p>
+<!-- roundly-hero:end -->
 
-# auth-for-laravel
+# Auth for Laravel
 
 Headless, multi-guard account authentication for Laravel: password, magic-link, email-code
 and passkey login; a multi-step challenge engine for two-factor, passkey second factors and
