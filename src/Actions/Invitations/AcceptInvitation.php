@@ -24,6 +24,7 @@ use RoundlyConsulting\Auth\Enums\AuthMethodReference;
 use RoundlyConsulting\Auth\Enums\EmailVerificationMode;
 use RoundlyConsulting\Auth\Enums\LoginMethod;
 use RoundlyConsulting\Auth\Enums\NotificationType;
+use RoundlyConsulting\Auth\Enums\RegistrationMode;
 use RoundlyConsulting\Auth\Enums\RegistrationStatus;
 use RoundlyConsulting\Auth\Enums\ThrottleKind;
 use RoundlyConsulting\Auth\Events\AccountRegistered;
@@ -31,6 +32,7 @@ use RoundlyConsulting\Auth\Events\InvitationAccepted;
 use RoundlyConsulting\Auth\Exceptions\EnrolmentRequired;
 use RoundlyConsulting\Auth\Exceptions\InvalidInvitation;
 use RoundlyConsulting\Auth\Exceptions\InvitationAddressTaken;
+use RoundlyConsulting\Auth\Exceptions\RegistrationClosed;
 use RoundlyConsulting\Auth\Guards\AccountRepository;
 use RoundlyConsulting\Auth\Guards\GuardConfig;
 use RoundlyConsulting\Auth\Guards\GuardRegistry;
@@ -42,7 +44,9 @@ use RoundlyConsulting\Auth\Support\RegistrationValidator;
 use RoundlyConsulting\Auth\Support\Throttle;
 
 /**
- * Accepts an invitation by creating its account. The claim (`accepted_at … WHERE
+ * Accepts an invitation by creating its account — refused (`registration_closed`) while
+ * the guard's `registration.mode` is `closed`: closed means no new accounts, by any
+ * route (`invite_only` is the mode for invitation-only sign-up). The claim (`accepted_at … WHERE
  * accepted_at IS NULL AND revoked_at IS NULL AND expires_at > now`) precedes the
  * account creation in ONE transaction, so two concurrent accepts create one account.
  * The invited address counts as verified (possession proven); with `lock_email = false`
@@ -72,6 +76,11 @@ final readonly class AcceptInvitation
     public function execute(string $guard, AcceptInvitationData $data): RegistrationResult
     {
         $config = $this->guards->get($guard);
+
+        if ($config->registrationMode() === RegistrationMode::Closed) {
+            throw new RegistrationClosed;
+        }
+
         $this->throttle->attempt($config, [ThrottleKind::Registration], null, $data->context, ActivityType::InvitationAccepted);
 
         $invitation = $this->preview->execute($guard, $data->token);

@@ -121,6 +121,13 @@ it('warns about suspicious but valid combinations', function (): void {
         ->and(ConfigValidation::warnings(app(GuardRegistry::class)->all()['users']))->toHaveCount(1);
 });
 
+it('warns that closed registration also closes invitation acceptance', function (): void {
+    $this->configureGuard('users', ['registration.mode' => 'closed']);
+
+    expect(implode("\n", ConfigValidation::warnings(app(GuardRegistry::class)->all()['users'])))
+        ->toContain('registration.mode is closed, so invitations cannot be accepted');
+});
+
 it('keeps the client fixture a distinct guard model', function (): void {
     expect((new Client)->getMorphClass())->not->toBe((new User)->getMorphClass());
 });

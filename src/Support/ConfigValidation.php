@@ -97,6 +97,10 @@ final class ConfigValidation
                 $warnings[] = "{$prefix}.passwords.reset.enabled is ignored because login.password is off.";
             }
 
+            if ($guard->registrationMode() === RegistrationMode::Closed && $guard->invitationsEnabled()) {
+                $warnings[] = "{$prefix}.registration.mode is closed, so invitations cannot be accepted; use invite_only for invitation-only sign-up.";
+            }
+
             if ($guard->notificationDelivery()->value === 'sync') {
                 $warnings[] = "{$prefix}.notifications.delivery = sync makes known-account responses measurably slower (timing enumeration); prefer after_response or queue.";
             }

@@ -201,3 +201,15 @@ it('answers accepted when a forced enrolment cannot happen in the challenge', fu
         ->and($result->login)->toBeNull()
         ->and(User::query()->sole()->hasVerifiedEmail())->toBeTrue();
 });
+
+it('creates no account through an invitation while registration is closed', function (): void {
+    $token = invite();
+    $this->configureGuard('users', ['registration.mode' => 'closed']);
+
+    $this->postJson('/users/auth/invitations/accept', ['token' => $token, 'password' => 'a-long-enough-passphrase'], ['User-Agent' => 'PestBrowser/1.0'])
+        ->assertForbidden()
+        ->assertJsonPath('code', 'registration_closed');
+
+    expect(User::query()->count())->toBe(0)
+        ->and(Invitation::query()->sole()->accepted_at)->toBeNull();
+});
