@@ -10,14 +10,17 @@ use RoundlyConsulting\Auth\Actions\OneTimeTokens\VerifyOneTimeCode;
 use RoundlyConsulting\Auth\Actions\Passwords\VerifyPassword;
 use RoundlyConsulting\Auth\Contracts\Account;
 use RoundlyConsulting\Auth\DataTransferObjects\LoginActivityData;
+use RoundlyConsulting\Auth\DataTransferObjects\NotificationData;
 use RoundlyConsulting\Auth\DataTransferObjects\ReauthenticationData;
 use RoundlyConsulting\Auth\DataTransferObjects\ReauthenticationProof;
 use RoundlyConsulting\Auth\Enums\ActivityOutcome;
 use RoundlyConsulting\Auth\Enums\ActivityType;
+use RoundlyConsulting\Auth\Enums\NotificationType;
 use RoundlyConsulting\Auth\Enums\OneTimeTokenPurpose;
 use RoundlyConsulting\Auth\Enums\ReauthenticationMethod;
 use RoundlyConsulting\Auth\Enums\ThrottleKind;
 use RoundlyConsulting\Auth\Events\Reauthenticated;
+use RoundlyConsulting\Auth\Events\RecoveryCodeUsed;
 use RoundlyConsulting\Auth\Exceptions\AccountLocked;
 use RoundlyConsulting\Auth\Exceptions\AuthException;
 use RoundlyConsulting\Auth\Exceptions\FactorNotAllowed;
@@ -28,6 +31,7 @@ use RoundlyConsulting\Auth\Guards\GuardConfig;
 use RoundlyConsulting\Auth\Guards\GuardRegistry;
 use RoundlyConsulting\Auth\Support\AccountModels;
 use RoundlyConsulting\Auth\Support\Lockout;
+use RoundlyConsulting\Auth\Support\NotificationDispatcher;
 use RoundlyConsulting\Auth\Support\ReauthenticationMarker;
 use RoundlyConsulting\Auth\Support\ReauthenticationMethods;
 use RoundlyConsulting\Auth\Support\Throttle;
@@ -35,6 +39,7 @@ use RoundlyConsulting\Crypto\Hash\ConstantTime;
 use RoundlyConsulting\Passkeys\DataTransferObjects\AuthenticationExpectation;
 use RoundlyConsulting\Passkeys\Exceptions\PasskeyException;
 use RoundlyConsulting\Passkeys\Facades\Passkeys;
+use RoundlyConsulting\TwoFactor\Enums\TwoFactorMethod;
 use RoundlyConsulting\TwoFactor\Exceptions\TwoFactorRateLimitedException;
 use RoundlyConsulting\TwoFactor\Facades\TwoFactor;
 use SensitiveParameter;
@@ -45,6 +50,10 @@ use SensitiveParameter;
  * so a second factor enrolled later still demands a second-factor proof. An account with a second factor
  * must use it (password and email codes are refused) — a stolen session plus a leaked
  * password must not be able to disable the factor that protects the account.
+ *
+ * The TOTP and recovery-code methods share one check (two-factor reports which one
+ * matched): the marker records the factor that actually matched, and a spent recovery
+ * code is announced to the owner exactly as at login.
  */
 final readonly class Reauthenticate
 {
@@ -55,6 +64,7 @@ final readonly class Reauthenticate
         private VerifyOneTimeCode $verifyCode,
         private ReauthenticationMarker $marker,
         private RecordLoginActivity $recordActivity,
+        private NotificationDispatcher $notifications,
     ) {}
 
     public function execute(string $guard, Account $account, ReauthenticationData $data): CarbonImmutable
@@ -66,6 +76,7 @@ final readonly class Reauthenticate
 
         // The attempt stays counted only for a wrong proof; any other refusal gives it back.
         $wrong = false;
+        $recoveryCodesLeft = null;
 
         try {
             if ($account->isLocked()) {
@@ -77,7 +88,7 @@ final readonly class Reauthenticate
             }
 
             try {
-                $verified = $this->verify($config, $account, $data);
+                $proven = $this->verify($config, $account, $data, $recoveryCodesLeft);
             } catch (InvalidCode $e) {
                 $wrong = true;
                 $this->fail($config, $account, $data);
@@ -85,7 +96,7 @@ final readonly class Reauthenticate
                 throw $e;
             }
 
-            if (! $verified) {
+            if ($proven === null) {
                 $wrong = true;
                 $this->fail($config, $account, $data);
 
@@ -98,7 +109,7 @@ final readonly class Reauthenticate
         }
 
         $now = CarbonImmutable::now();
-        $this->marker->put($guard, $sessionKey, new ReauthenticationProof($data->method, $now), $config->reauthenticationTimeout());
+        $this->marker->put($guard, $sessionKey, new ReauthenticationProof($proven, $now), $config->reauthenticationTimeout());
         $this->throttle->clear($config, ThrottleKind::Reauthentication, $sessionKey, null);
 
         $this->recordActivity->execute(new LoginActivityData(
@@ -106,36 +117,68 @@ final readonly class Reauthenticate
             type: ActivityType::Reauthentication,
             outcome: ActivityOutcome::Succeeded,
             context: $data->context,
-            method: $data->method->value,
+            method: $proven->value,
             account: $account,
             sessionId: $data->current->sessionId,
         ));
 
-        event(new Reauthenticated($guard, $account, $data->method));
+        event(new Reauthenticated($guard, $account, $proven));
+
+        if ($proven === ReauthenticationMethod::RecoveryCode) {
+            event(new RecoveryCodeUsed($guard, $account, (int) $recoveryCodesLeft));
+
+            $this->notifications->send($config, NotificationType::RecoveryCodeUsed, $account, new NotificationData(
+                guard: $guard,
+                replacements: ['remaining' => (int) $recoveryCodesLeft],
+            ));
+        }
 
         return $now->addSeconds($config->reauthenticationTimeout());
     }
 
     /**
+     * The method that proved the account (null: the proof failed).
+     *
+     * @param-out int|null $recoveryCodesLeft
+     *
      * @throws AuthException
      */
-    private function verify(GuardConfig $guard, Account $account, ReauthenticationData $data): bool
+    private function verify(GuardConfig $guard, Account $account, ReauthenticationData $data, ?int &$recoveryCodesLeft): ?ReauthenticationMethod
     {
-        return match ($data->method) {
+        $verified = match ($data->method) {
             ReauthenticationMethod::Password => $this->verifyPassword->execute($account, (string) $data->password),
-            ReauthenticationMethod::Totp, ReauthenticationMethod::RecoveryCode => $this->verifyTwoFactor($account, (string) $data->code),
+            ReauthenticationMethod::Totp, ReauthenticationMethod::RecoveryCode => $this->verifyTwoFactor($account, (string) $data->code, $recoveryCodesLeft),
             ReauthenticationMethod::Passkey => $this->verifyPasskey($guard, $account, $data),
             ReauthenticationMethod::EmailOtp => $this->verifyCode->execute($guard->name(), OneTimeTokenPurpose::Reauthentication, (string) $account->accountEmail(), (string) $data->code, revealAttempts: true)->account->getAuthIdentifier() === $account->getAuthIdentifier(),
         };
+
+        if (! $verified) {
+            return null;
+        }
+
+        if ($data->method === ReauthenticationMethod::Totp || $data->method === ReauthenticationMethod::RecoveryCode) {
+            return $recoveryCodesLeft === null ? ReauthenticationMethod::Totp : ReauthenticationMethod::RecoveryCode;
+        }
+
+        return $data->method;
     }
 
-    private function verifyTwoFactor(Account $account, #[SensitiveParameter] string $code): bool
+    /**
+     * @param-out int|null $recoveryCodesLeft  set only when a recovery code matched
+     */
+    private function verifyTwoFactor(Account $account, #[SensitiveParameter] string $code, ?int &$recoveryCodesLeft): bool
     {
         try {
-            return TwoFactor::attempt(AccountModels::twoFactor($account), $code)->verified;
+            $result = TwoFactor::attempt(AccountModels::twoFactor($account), $code);
         } catch (TwoFactorRateLimitedException $e) {
             throw TooManyAttempts::retryAfter($e->secondsUntilAvailable, $e);
         }
+
+        if ($result->verified && $result->method === TwoFactorMethod::RecoveryCode) {
+            $recoveryCodesLeft = $result->remainingRecoveryCodes;
+        }
+
+        return $result->verified;
     }
 
     private function verifyPasskey(GuardConfig $guard, Account $account, ReauthenticationData $data): bool

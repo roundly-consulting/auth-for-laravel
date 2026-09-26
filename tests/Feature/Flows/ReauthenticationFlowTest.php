@@ -7,8 +7,12 @@ use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Notification;
 use Illuminate\Support\Facades\Route;
 use RoundlyConsulting\Auth\DataTransferObjects\TokenPair;
+use RoundlyConsulting\Auth\Enums\ReauthenticationMethod;
 use RoundlyConsulting\Auth\Events\Reauthenticated;
+use RoundlyConsulting\Auth\Events\RecoveryCodeUsed;
 use RoundlyConsulting\Auth\Notifications\EmailOtpNotification;
+use RoundlyConsulting\Auth\Notifications\RecoveryCodeUsedNotification;
+use RoundlyConsulting\Auth\Support\ReauthenticationMarker;
 use RoundlyConsulting\Auth\Tests\Fixtures\Models\User;
 
 beforeEach(function (): void {
@@ -145,3 +149,18 @@ it('protects host routes with the middleware', function (): void {
     CarbonImmutable::setTestNow('2026-09-26 10:02:00');
     $this->get('/_sudo', bearer(issuePair($user, context: null)))->assertOk();
 });
+
+it('announces a recovery code spent on a re-authentication and records it as such', function (string $claimed): void {
+    Notification::fake();
+    Event::fake([RecoveryCodeUsed::class, Reauthenticated::class]);
+    $user = User::factory()->create();
+    enableTotp($user);
+    $pair = staleSession($user);
+
+    $this->postJson('/users/auth/reauthenticate', ['method' => $claimed, 'code' => recoveryCodes()[0]], bearer($pair))->assertOk();
+
+    Event::assertDispatched(RecoveryCodeUsed::class, fn (RecoveryCodeUsed $event): bool => $event->remaining === 2);
+    Event::assertDispatched(Reauthenticated::class, fn (Reauthenticated $event): bool => $event->method === ReauthenticationMethod::RecoveryCode);
+    Notification::assertSentTo($user, RecoveryCodeUsedNotification::class);
+    expect(app(ReauthenticationMarker::class)->proof('users', $pair->sessionId)?->method)->toBe(ReauthenticationMethod::RecoveryCode);
+})->with(['recovery_code', 'totp']);
