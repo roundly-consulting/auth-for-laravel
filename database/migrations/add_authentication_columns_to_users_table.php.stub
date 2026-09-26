@@ -1,0 +1,21 @@
+<?php
+
+declare(strict_types=1);
+
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+use RoundlyConsulting\Auth\Support\AuthenticationColumns;
+
+return new class extends Migration
+{
+    public function up(): void
+    {
+        // The default guard's model table (`users` until that model exists). For every
+        // further guard table, call `$table->authenticationColumns()` in its own
+        // migration — `php artisan authentication:guard <name>` generates one.
+        Schema::table(AuthenticationColumns::defaultTable(), function (Blueprint $table): void {
+            $table->authenticationColumns();
+        });
+    }
+};

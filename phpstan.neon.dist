@@ -1,8 +1,14 @@
+# larastan's extension.neon and the package toolkit's Blueprint-macro declarations
+# are both auto-loaded by phpstan/extension-installer — including either by hand
+# here would load it twice.
 parameters:
     level: 7
     paths:
         - src
+        - database
         - config
+        # Analysed so the consumer-facing HasAuthentication trait has a concrete user.
+        - tests/Fixtures/Models/User.php
     # This package ships its own config/ dir; env() is correct there.
     configDirectories:
         - config
