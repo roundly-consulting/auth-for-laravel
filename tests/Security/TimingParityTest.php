@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use Illuminate\Hashing\HashManager;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Notification;
 use RoundlyConsulting\Auth\DataTransferObjects\PasswordCredentials;
 use RoundlyConsulting\Auth\Exceptions\InvalidCredentials;
 use RoundlyConsulting\Auth\Facades\Authentication;
@@ -46,3 +47,22 @@ it('reuses one dummy hash per process', function (): void {
     expect(DummyPasswordHash::get())->toBe(DummyPasswordHash::get())
         ->and(Hash::info(DummyPasswordHash::get())['algoName'])->toBe('bcrypt');
 });
+
+it('hashes a password for a taken address exactly like for a free one when registration is enumeration-safe', function (array $settings): void {
+    Notification::fake();
+    $this->configureGuard('users', $settings);
+    User::factory()->create(['email' => 'taken@example.com']);
+    app()->forgetInstance('hash.driver');
+    $hasher = countingHasher();
+
+    $this->postJson('/users/auth/register', ['email' => 'taken@example.com', 'password' => 'a-long-enough-passphrase'])->assertStatus(202);
+    $taken = $hasher->made;
+
+    $hasher->made = 0;
+    $this->postJson('/users/auth/register', ['email' => 'free@example.com', 'password' => 'a-long-enough-passphrase'])->assertStatus(202);
+
+    expect($taken)->toBe(1)->and($hasher->made)->toBe(1);
+})->with([
+    'verification required for login' => [['verification.mode' => 'required_for_login']],
+    'no login after registration' => [['registration.login_after' => false]],
+]);

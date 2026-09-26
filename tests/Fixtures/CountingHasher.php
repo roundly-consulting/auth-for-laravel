@@ -8,12 +8,15 @@ use Illuminate\Contracts\Hashing\Hasher;
 use SensitiveParameter;
 
 /**
- * Wraps the real hasher and records every hash a password was checked against.
+ * Wraps the real hasher and records every hash a password was checked against, and how
+ * many hashes were made. Swapped in for the `hash` manager, so it is its own driver.
  */
 final class CountingHasher implements Hasher
 {
     /** @var list<string> */
     public array $checked = [];
+
+    public int $made = 0;
 
     public function __construct(private readonly Hasher $inner) {}
 
@@ -24,7 +27,14 @@ final class CountingHasher implements Hasher
 
     public function make(#[SensitiveParameter] $value, array $options = []): string
     {
+        $this->made++;
+
         return $this->inner->make($value, $options);
+    }
+
+    public function driver(?string $name = null): self
+    {
+        return $this;
     }
 
     public function check(#[SensitiveParameter] $value, $hashedValue, array $options = []): bool

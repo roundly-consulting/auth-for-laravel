@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace RoundlyConsulting\Auth\Actions\Registration;
 
 use Illuminate\Contracts\Container\Container;
+use Illuminate\Contracts\Hashing\Hasher;
 use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Validation\ValidationException;
 use RoundlyConsulting\Auth\Actions\Activity\RecordLoginActivity;
@@ -43,8 +44,10 @@ use RoundlyConsulting\Auth\Support\Throttle;
  * Open registration. When the answer would not issue tokens anyway (verification
  * required for login, or `login_after = false`), an address already in use gets an
  * "account exists" notice and the caller the very same status a new account would —
- * registration cannot probe for accounts. When tokens WOULD be issued immediately the
- * difference is observable regardless, so a plain "email taken" error is returned.
+ * registration cannot probe for accounts — including through its timing: the taken
+ * address pays the same password hash a new account's creation does. When tokens WOULD
+ * be issued immediately the difference is observable regardless, so a plain "email
+ * taken" error is returned.
  */
 final readonly class RegisterAccount
 {
@@ -58,6 +61,7 @@ final readonly class RegisterAccount
         private NotificationDispatcher $notifications,
         private RecordLoginActivity $recordActivity,
         private SecretHasher $hasher,
+        private Hasher $passwords,
     ) {}
 
     public function execute(string $guard, RegistrationData $data): RegistrationResult
@@ -77,7 +81,7 @@ final readonly class RegisterAccount
         $attributes = $this->validator->validate($config, $email, $data->password, $data->attributes);
 
         if ($accounts->emailTaken($email)) {
-            return $this->existing($config, $email, $data);
+            return $this->existing($config, $email, $data, hashed: false);
         }
 
         try {
@@ -90,7 +94,8 @@ final readonly class RegisterAccount
                 attributes: $attributes,
             )));
         } catch (UniqueConstraintViolationException) {
-            return $this->existing($config, $email, $data);
+            // Lost the insert race: the creator already hashed the password.
+            return $this->existing($config, $email, $data, hashed: true);
         }
 
         event(new AccountRegistered($guard, $account, LoginMethod::Registration));
@@ -123,10 +128,16 @@ final readonly class RegisterAccount
         return new RegistrationResult(RegistrationStatus::Authenticated, $login);
     }
 
-    private function existing(GuardConfig $guard, string $email, RegistrationData $data): RegistrationResult
+    private function existing(GuardConfig $guard, string $email, RegistrationData $data, bool $hashed): RegistrationResult
     {
         if (! $this->enumerationSafe($guard)) {
             throw ValidationException::withMessages(['email' => __('authentication::validation.email_taken')]);
+        }
+
+        // Equal cost: creating the account would have hashed the password (bcrypt is the
+        // dominant term of the response time — skipping it is a timing oracle).
+        if (! $hashed && $data->password !== null) {
+            $this->passwords->make($data->password);
         }
 
         if ($this->throttle->cooldown("authentication:{$guard->name()}:account-exists:".$this->hasher->identifier($guard->name(), $email), 600)) {
