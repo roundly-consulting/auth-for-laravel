@@ -148,7 +148,7 @@ final readonly class GuardContext
         return $this->container->make(CreateInvitation::class)->execute($this->name(), $data);
     }
 
-    public function acceptInvitation(AcceptInvitationData $data): LoginResult
+    public function acceptInvitation(AcceptInvitationData $data): RegistrationResult
     {
         return $this->container->make(AcceptInvitation::class)->execute($this->name(), $data);
     }

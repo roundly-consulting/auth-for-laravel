@@ -15,18 +15,20 @@ use RoundlyConsulting\Auth\Contracts\Account;
 use RoundlyConsulting\Auth\Contracts\CreatesAccounts;
 use RoundlyConsulting\Auth\DataTransferObjects\AcceptInvitationData;
 use RoundlyConsulting\Auth\DataTransferObjects\LoginActivityData;
-use RoundlyConsulting\Auth\DataTransferObjects\LoginResult;
 use RoundlyConsulting\Auth\DataTransferObjects\NewAccountData;
 use RoundlyConsulting\Auth\DataTransferObjects\NotificationData;
+use RoundlyConsulting\Auth\DataTransferObjects\RegistrationResult;
 use RoundlyConsulting\Auth\Enums\ActivityOutcome;
 use RoundlyConsulting\Auth\Enums\ActivityType;
 use RoundlyConsulting\Auth\Enums\AuthMethodReference;
 use RoundlyConsulting\Auth\Enums\EmailVerificationMode;
 use RoundlyConsulting\Auth\Enums\LoginMethod;
 use RoundlyConsulting\Auth\Enums\NotificationType;
+use RoundlyConsulting\Auth\Enums\RegistrationStatus;
 use RoundlyConsulting\Auth\Enums\ThrottleKind;
 use RoundlyConsulting\Auth\Events\AccountRegistered;
 use RoundlyConsulting\Auth\Events\InvitationAccepted;
+use RoundlyConsulting\Auth\Exceptions\EnrolmentRequired;
 use RoundlyConsulting\Auth\Exceptions\InvalidInvitation;
 use RoundlyConsulting\Auth\Exceptions\InvitationAddressTaken;
 use RoundlyConsulting\Auth\Guards\AccountRepository;
@@ -47,6 +49,11 @@ use RoundlyConsulting\Auth\Support\Throttle;
  * another address may be used, stored unverified. An address that already has an
  * account rolls the claim back: uniform `invalid_invitation`, and a notice to that
  * address.
+ *
+ * Like registration, the answer after the account exists is never an error: an
+ * unverified address under `required_for_login`, or a forced enrolment the challenge
+ * cannot run, answers `verification_required` (unverified) / `accepted` (verified) —
+ * the account signs in once it can.
  */
 final readonly class AcceptInvitation
 {
@@ -62,7 +69,7 @@ final readonly class AcceptInvitation
         private RecordLoginActivity $recordActivity,
     ) {}
 
-    public function execute(string $guard, AcceptInvitationData $data): LoginResult
+    public function execute(string $guard, AcceptInvitationData $data): RegistrationResult
     {
         $config = $this->guards->get($guard);
         $this->throttle->attempt($config, [ThrottleKind::Registration], null, $data->context, ActivityType::InvitationAccepted);
@@ -106,7 +113,17 @@ final readonly class AcceptInvitation
             $this->sendVerification->execute($guard, $account, $data->context);
         }
 
-        return $this->completeFirstFactor->execute($config, $account, LoginMethod::Invitation, $data->context, $verified ? [AuthMethodReference::Email] : []);
+        if (! $verified && $config->verificationMode() === EmailVerificationMode::RequiredForLogin) {
+            return new RegistrationResult(RegistrationStatus::VerificationRequired);
+        }
+
+        try {
+            $login = $this->completeFirstFactor->execute($config, $account, LoginMethod::Invitation, $data->context, $verified ? [AuthMethodReference::Email] : []);
+        } catch (EnrolmentRequired) {
+            return new RegistrationResult($verified ? RegistrationStatus::Accepted : RegistrationStatus::VerificationRequired);
+        }
+
+        return new RegistrationResult(RegistrationStatus::Authenticated, $login);
     }
 
     /**

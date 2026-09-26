@@ -13,6 +13,10 @@ final class AcceptInvitationController
 {
     public function __invoke(AcceptInvitationRequest $request, AcceptInvitation $accept): JsonResponse
     {
-        return LoginResponse::make($accept->execute($request->guardConfig()->name(), $request->toData()), $request);
+        $result = $accept->execute($request->guardConfig()->name(), $request->toData());
+
+        return $result->login !== null
+            ? LoginResponse::make($result->login, $request)
+            : LoginResponse::status($result->status->value);
     }
 }

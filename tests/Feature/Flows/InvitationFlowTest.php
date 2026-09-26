@@ -12,6 +12,7 @@ use RoundlyConsulting\Auth\Actions\Invitations\RevokeInvitation;
 use RoundlyConsulting\Auth\Actions\Invitations\SendInvitation;
 use RoundlyConsulting\Auth\DataTransferObjects\AcceptInvitationData;
 use RoundlyConsulting\Auth\DataTransferObjects\InvitationData;
+use RoundlyConsulting\Auth\Enums\RegistrationStatus;
 use RoundlyConsulting\Auth\Events\InvitationAccepted;
 use RoundlyConsulting\Auth\Exceptions\InvalidInvitation;
 use RoundlyConsulting\Auth\Exceptions\TooManyAttempts;
@@ -102,7 +103,7 @@ it('keeps the address locked, or stores another one unverified when unlocked', f
 
     $user = User::query()->where('email', 'chosen@example.com')->sole();
     expect($user->hasVerifiedEmail())->toBeFalse()
-        ->and(claimsOf($result->tokens)->authMethods())->toBe([]);
+        ->and(claimsOf($result->login->tokens)->authMethods())->toBe([]);
 });
 
 it('refuses an existing address with a uniform error and a notice', function (): void {
@@ -173,4 +174,30 @@ it('lets two concurrent accepts create exactly one account', function (): void {
 
     expect(fn () => Authentication::guard('users')->acceptInvitation(new AcceptInvitationData($token, 'a-long-enough-passphrase', sessionContext())))->toThrow(InvalidInvitation::class)
         ->and(User::query()->count())->toBe(0);
+});
+
+it('answers a pending verification, not an error, once the unverified account exists', function (array $settings, string $status): void {
+    $this->configureGuard('users', ['invitations.lock_email' => false, ...$settings]);
+    $token = invite();
+
+    $this->postJson('/users/auth/invitations/accept', ['token' => $token, 'password' => 'a-long-enough-passphrase', 'email' => 'other@example.com'], ['User-Agent' => 'PestBrowser/1.0'])
+        ->assertStatus(202)
+        ->assertExactJson(['status' => $status]);
+
+    expect(User::query()->where('email', 'other@example.com')->exists())->toBeTrue()
+        ->and(Invitation::query()->sole()->accepted_at)->not->toBeNull();
+})->with([
+    'verification required for login' => [['verification.mode' => 'required_for_login'], 'verification_required'],
+    'forced enrolment of an unverified address' => [['two_factor.mode' => 'required'], 'verification_required'],
+]);
+
+it('answers accepted when a forced enrolment cannot happen in the challenge', function (): void {
+    $this->configureGuard('users', ['two_factor.mode' => 'required', 'challenge.allow_enrolment' => false]);
+    $token = invite();
+
+    $result = Authentication::guard('users')->acceptInvitation(new AcceptInvitationData($token, 'a-long-enough-passphrase', sessionContext()));
+
+    expect($result->status)->toBe(RegistrationStatus::Accepted)
+        ->and($result->login)->toBeNull()
+        ->and(User::query()->sole()->hasVerifiedEmail())->toBeTrue();
 });
