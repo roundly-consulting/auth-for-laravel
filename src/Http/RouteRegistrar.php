@@ -10,7 +10,12 @@ use RoundlyConsulting\Auth\Enums\LoginMethod;
 use RoundlyConsulting\Auth\Guards\GuardConfig;
 use RoundlyConsulting\Auth\Http\Controllers\Account\LoginActivityController;
 use RoundlyConsulting\Auth\Http\Controllers\Account\MeController;
+use RoundlyConsulting\Auth\Http\Controllers\Account\UpdateLocaleController;
+use RoundlyConsulting\Auth\Http\Controllers\Login\ConsumeMagicLinkController;
 use RoundlyConsulting\Auth\Http\Controllers\Login\PasswordLoginController;
+use RoundlyConsulting\Auth\Http\Controllers\Login\RequestEmailOtpController;
+use RoundlyConsulting\Auth\Http\Controllers\Login\RequestMagicLinkController;
+use RoundlyConsulting\Auth\Http\Controllers\Login\VerifyEmailOtpController;
 use RoundlyConsulting\Auth\Http\Controllers\Sessions\ListSessionsController;
 use RoundlyConsulting\Auth\Http\Controllers\Sessions\LogoutController;
 use RoundlyConsulting\Auth\Http\Controllers\Sessions\LogoutEverywhereController;
@@ -171,12 +176,17 @@ final class RouteRegistrar
         return [
             // Login
             new RouteDefinition('login', 'POST', 'login', 'login', PasswordLoginController::class, enabled: $this->guard->loginMethodEnabled(LoginMethod::Password)),
+            new RouteDefinition('login', 'POST', 'login/magic-link', 'login.magic-link', RequestMagicLinkController::class, enabled: $this->guard->loginMethodEnabled(LoginMethod::MagicLink)),
+            new RouteDefinition('login', 'POST', 'login/magic-link/consume', 'login.magic-link.consume', ConsumeMagicLinkController::class, enabled: $this->guard->loginMethodEnabled(LoginMethod::MagicLink)),
+            new RouteDefinition('login', 'POST', 'login/otp', 'login.otp', RequestEmailOtpController::class, enabled: $this->guard->loginMethodEnabled(LoginMethod::EmailOtp)),
+            new RouteDefinition('login', 'POST', 'login/otp/verify', 'login.otp.verify', VerifyEmailOtpController::class, enabled: $this->guard->loginMethodEnabled(LoginMethod::EmailOtp)),
 
             // Tokens
             new RouteDefinition('tokens', 'POST', 'refresh', 'refresh', RefreshController::class),
 
             // Account
             new RouteDefinition('account', 'GET', 'me', 'me', MeController::class, authenticated: true),
+            new RouteDefinition('account', 'PATCH', 'locale', 'locale', UpdateLocaleController::class, authenticated: true),
             new RouteDefinition('account', 'GET', 'activity', 'activity', LoginActivityController::class, authenticated: true, enabled: $this->guard->activityEnabled()),
 
             // Sessions

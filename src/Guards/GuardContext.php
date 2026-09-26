@@ -7,6 +7,10 @@ namespace RoundlyConsulting\Auth\Guards;
 use Illuminate\Contracts\Container\Container;
 use Illuminate\Support\Collection;
 use RoundlyConsulting\Auth\Actions\Login\AttemptPasswordLogin;
+use RoundlyConsulting\Auth\Actions\Login\ConsumeMagicLink;
+use RoundlyConsulting\Auth\Actions\Login\RequestEmailOtp;
+use RoundlyConsulting\Auth\Actions\Login\RequestMagicLink;
+use RoundlyConsulting\Auth\Actions\Login\VerifyEmailOtp;
 use RoundlyConsulting\Auth\Actions\Sessions\InvalidateAccountTokens;
 use RoundlyConsulting\Auth\Actions\Sessions\ListSessions;
 use RoundlyConsulting\Auth\Actions\Sessions\LogoutCurrentSession;
@@ -62,6 +66,26 @@ final readonly class GuardContext
     public function attempt(PasswordCredentials $credentials, SessionContext $context): LoginResult
     {
         return $this->container->make(AttemptPasswordLogin::class)->execute($this->name(), $credentials, $context);
+    }
+
+    public function requestMagicLink(string $email, SessionContext $context): void
+    {
+        $this->container->make(RequestMagicLink::class)->execute($this->name(), $email, $context);
+    }
+
+    public function consumeMagicLink(#[SensitiveParameter] string $token, SessionContext $context): LoginResult
+    {
+        return $this->container->make(ConsumeMagicLink::class)->execute($this->name(), $token, $context);
+    }
+
+    public function requestEmailOtp(string $email, SessionContext $context): void
+    {
+        $this->container->make(RequestEmailOtp::class)->execute($this->name(), $email, $context);
+    }
+
+    public function verifyEmailOtp(string $email, #[SensitiveParameter] string $code, SessionContext $context): LoginResult
+    {
+        return $this->container->make(VerifyEmailOtp::class)->execute($this->name(), $email, $code, $context);
     }
 
     // ── Tokens & sessions ────────────────────────────────────────────────

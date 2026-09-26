@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Notification;
 use RoundlyConsulting\Auth\Contracts\Account;
 use RoundlyConsulting\Auth\DataTransferObjects\SessionContext;
 use RoundlyConsulting\Auth\DataTransferObjects\TokenPair;
@@ -12,6 +13,7 @@ use RoundlyConsulting\Auth\Enums\LoginMethod;
 use RoundlyConsulting\Auth\Facades\Authentication;
 use RoundlyConsulting\Auth\Guards\ConfigMerger;
 use RoundlyConsulting\Auth\Guards\GuardConfig;
+use RoundlyConsulting\Auth\Notifications\AuthenticationNotification;
 use RoundlyConsulting\Auth\Tests\Fixtures\Models\User;
 use RoundlyConsulting\Auth\Tests\TestCase;
 use RoundlyConsulting\Jwt\Facades\Jwt;
@@ -107,4 +109,31 @@ function sessionContext(string $userAgent = 'PestBrowser/1.0', ?string $ip = '10
 function recoveryCodes(): array
 {
     return $GLOBALS['authentication_test_recovery_codes'] ?? [];
+}
+
+/**
+ * The last notification of a class sent to a notifiable (Notification::fake() active).
+ *
+ * @template T of \RoundlyConsulting\Auth\Notifications\AuthenticationNotification
+ *
+ * @param  class-string<T>  $class
+ * @return T
+ */
+function sentNotification(object $notifiable, string $class): AuthenticationNotification
+{
+    $sent = Notification::sent($notifiable, $class);
+
+    expect($sent)->not->toBeEmpty();
+
+    return $sent->last();
+}
+
+/**
+ * The secret carried in an emailed URL's fragment (`#token=…`).
+ */
+function tokenFromUrl(?string $url): string
+{
+    expect($url)->toBeString()->toContain('#token=');
+
+    return rawurldecode((string) substr((string) strstr((string) $url, '#token='), 7));
 }
