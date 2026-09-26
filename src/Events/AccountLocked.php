@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace RoundlyConsulting\Auth\Events;
 
 use Carbon\CarbonImmutable;
+use Illuminate\Queue\SerializesModels;
 use RoundlyConsulting\Auth\Contracts\Account;
 
 /**
@@ -12,6 +13,8 @@ use RoundlyConsulting\Auth\Contracts\Account;
  */
 final readonly class AccountLocked
 {
+    use SerializesModels;
+
     public function __construct(
         public string $guard,
         public Account $account,

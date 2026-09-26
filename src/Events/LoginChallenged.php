@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace RoundlyConsulting\Auth\Events;
 
+use Illuminate\Queue\SerializesModels;
 use RoundlyConsulting\Auth\Contracts\Account;
 use RoundlyConsulting\Auth\DataTransferObjects\ChallengeRequirement;
 
@@ -12,6 +13,8 @@ use RoundlyConsulting\Auth\DataTransferObjects\ChallengeRequirement;
  */
 final readonly class LoginChallenged
 {
+    use SerializesModels;
+
     /**
      * @param  list<ChallengeRequirement>  $remaining
      */

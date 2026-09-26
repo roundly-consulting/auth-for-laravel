@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace RoundlyConsulting\Auth\Events;
 
+use Illuminate\Queue\SerializesModels;
 use RoundlyConsulting\Auth\Contracts\Account;
 use RoundlyConsulting\Auth\Enums\InvalidationReason;
 use RoundlyConsulting\Auth\Enums\InvalidationScope;
@@ -13,6 +14,8 @@ use RoundlyConsulting\Auth\Enums\InvalidationScope;
  */
 final readonly class AccountTokensInvalidated
 {
+    use SerializesModels;
+
     public function __construct(
         public string $guard,
         public Account $account,

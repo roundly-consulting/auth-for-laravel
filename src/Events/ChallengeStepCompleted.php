@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace RoundlyConsulting\Auth\Events;
 
+use Illuminate\Queue\SerializesModels;
 use RoundlyConsulting\Auth\Contracts\Account;
 use RoundlyConsulting\Auth\Enums\ChallengeStep;
 use RoundlyConsulting\Auth\Enums\FactorMethod;
@@ -13,6 +14,8 @@ use RoundlyConsulting\Auth\Enums\FactorMethod;
  */
 final readonly class ChallengeStepCompleted
 {
+    use SerializesModels;
+
     public function __construct(
         public string $guard,
         public Account $account,
