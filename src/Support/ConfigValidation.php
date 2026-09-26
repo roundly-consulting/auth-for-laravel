@@ -163,6 +163,10 @@ final class ConfigValidation
         if (! is_string($resolver) || ! is_a($resolver, TokenVersionResolver::class, true)) {
             $problems[] = "The jwt guard [{$guard->laravelGuard()}] must use ".TokenVersionResolver::class.' as its token_version (jwt.guard.token_version or auth.guards.'.$guard->laravelGuard().'.token_version); without it invalidation revokes nothing.';
         }
+
+        if (! $settings->checkDenylist) {
+            $problems[] = "The jwt guard [{$guard->laravelGuard()}] must keep check_denylist on (jwt.guard.check_denylist or auth.guards.{$guard->laravelGuard()}.check_denylist); logout, session revocation and every token denial rely on it.";
+        }
     }
 
     /**

@@ -46,6 +46,13 @@ it('requires the token version resolver on the jwt guard', function (): void {
     app(GuardRegistry::class)->get('users');
 })->throws(AuthenticationMisconfigured::class, 'TokenVersionResolver');
 
+it('requires the denylist check on the jwt guard', function (mixed $value): void {
+    config()->set('auth.guards.users.check_denylist', $value);
+    app(GuardRegistry::class)->flush();
+
+    app(GuardRegistry::class)->get('users');
+})->throws(AuthenticationMisconfigured::class, 'check_denylist')->with([false, 'false']);
+
 it('requires distinct audiences once there are several guards', function (): void {
     config()->set('auth.guards.clients.audience', 'app-users');
     app(GuardRegistry::class)->flush();
