@@ -11,10 +11,12 @@ use RoundlyConsulting\PackageToolkit\Enums\KeyType;
 use RuntimeException;
 
 /**
- * Scaffolds a new guard: the account model, its create-table migration (with the
+ * Scaffolds a new guard: the account model (generating the uuid/ulid key the configured
+ * `authentication.key_type` asks for), its create-table migration (with the
  * authentication, two-factor and passkey-handle columns) and a factory — then prints
- * the `authentication.guards` block and the `config/auth.php` wiring. Never edits
- * config files.
+ * the `authentication.guards` block (switching two-factor / passkeys off when they were
+ * left out, since the shipped defaults turn both on) and the `config/auth.php` wiring.
+ * Never edits config files.
  */
 final class MakeGuardCommand extends Command
 {
@@ -65,11 +67,29 @@ final class MakeGuardCommand extends Command
 
         $this->newLine();
         $this->components->info('Add to config/authentication.php (guards):');
-        $this->line("    '{$name}' => ['model' => \\{$namespace}\\{$class}::class],");
+        $this->line("    '{$name}' => ".$this->guardBlock($namespace, $class, $twoFactor, $passkeys).',');
         $this->components->info('Add to config/auth.php:');
         $this->line(InstallCommand::authSnippet($name, $name));
 
         return self::SUCCESS;
+    }
+
+    /**
+     * The guard's `authentication.guards` entry, exactly as printed.
+     */
+    private function guardBlock(string $namespace, string $class, bool $twoFactor, bool $passkeys): string
+    {
+        $block = ["'model' => \\{$namespace}\\{$class}::class"];
+
+        if (! $twoFactor) {
+            $block[] = "'two_factor' => ['mode' => 'off']";
+        }
+
+        if (! $passkeys) {
+            $block[] = "'passkeys' => ['mode' => 'off', 'second_factor' => 'off']";
+        }
+
+        return '['.implode(', ', $block).']';
     }
 
     /**
@@ -99,6 +119,18 @@ final class MakeGuardCommand extends Command
         $interfaces = ['Account'];
         $traits = ['AuthenticatableConcern', 'HasAuthentication', 'HasFactory', 'HasRefreshTokens', 'Notifiable', 'SoftDeletes'];
         $casts = '...$this->authenticationCasts(), ';
+
+        // The migration creates a uuid/ulid primary key; the model must generate it.
+        $keyTrait = match (KeyType::fromConfig('authentication.key_type')) {
+            KeyType::Uuid => 'HasUuids',
+            KeyType::Ulid => 'HasUlids',
+            KeyType::BigInt => null,
+        };
+
+        if ($keyTrait !== null) {
+            $imports[] = 'Illuminate\Database\Eloquent\Concerns\\'.$keyTrait;
+            $traits[] = $keyTrait;
+        }
 
         if ($twoFactor) {
             $imports[] = 'RoundlyConsulting\TwoFactor\Concerns\HasTwoFactorAuthentication';

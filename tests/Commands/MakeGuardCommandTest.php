@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Schema;
+use RoundlyConsulting\Auth\Guards\GuardRegistry;
+use RoundlyConsulting\Auth\Support\ConfigValidation;
 use Symfony\Component\Process\Process;
 
 beforeEach(function (): void {
@@ -67,4 +69,44 @@ it('refuses to overwrite without --force and rejects bad names', function (): vo
     $this->artisan('authentication:guard', ['name' => 'staff'])->assertFailed();
     $this->artisan('authentication:guard', ['name' => 'staff', '--force' => true])->assertSuccessful();
     $this->artisan('authentication:guard', ['name' => 'staff', '--model' => 'bad name'])->assertFailed();
+});
+
+it('scaffolds a model that generates the uuid or ulid key its migration expects', function (string $keyType, string $class, string $trait): void {
+    foreach (['authentication.key_type', 'passkeys.key_type', 'refresh-tokens.key_type'] as $key) {
+        config()->set($key, $keyType);
+    }
+
+    $name = strtolower($class).'s';
+    $this->artisan('authentication:guard', ['name' => $name, '--no-two-factor' => true, '--no-passkeys' => true])->assertSuccessful();
+
+    $model = $this->scaffold."/app/Models/{$class}.php";
+    expect(File::get($model))->toContain("use {$trait};");
+
+    require $model;
+    (require File::glob($this->scaffold."/database/migrations/*_create_{$name}_table.php")[0])->up();
+
+    $fqcn = 'App\\Models\\'.$class;
+    $account = (new $fqcn)->forceFill(['email' => "{$name}@example.com", 'password' => 'x']);
+    $account->save();
+
+    expect($account->getKey())->toBeString()->not->toBeEmpty();
+})->with([
+    'uuid' => ['uuid', 'Partner', 'HasUuids'],
+    'ulid' => ['ulid', 'Supplier', 'HasUlids'],
+]);
+
+it('prints a guard block that validates when two-factor and passkeys are left out', function (): void {
+    $this->artisan('authentication:guard', ['name' => 'vendors', '--no-two-factor' => true, '--no-passkeys' => true])
+        ->expectsOutputToContain("'vendors' => ['model' => \\App\\Models\\Vendor::class, 'two_factor' => ['mode' => 'off'], 'passkeys' => ['mode' => 'off', 'second_factor' => 'off']],")
+        ->assertSuccessful();
+
+    require $this->scaffold.'/app/Models/Vendor.php';
+
+    // Exactly the printed block, merged over the shipped defaults.
+    config()->set('authentication.guards.vendors', ['model' => 'App\\Models\\Vendor', 'two_factor' => ['mode' => 'off'], 'passkeys' => ['mode' => 'off', 'second_factor' => 'off']]);
+    config()->set('auth.guards.vendors', ['driver' => 'jwt', 'provider' => 'vendors', 'audience' => 'app-vendors']);
+    config()->set('auth.providers.vendors', ['driver' => 'authentication', 'guard' => 'vendors']);
+    app(GuardRegistry::class)->flush();
+
+    expect(ConfigValidation::problems(app(GuardRegistry::class)->all()['vendors'], app(GuardRegistry::class)))->toBe([]);
 });
