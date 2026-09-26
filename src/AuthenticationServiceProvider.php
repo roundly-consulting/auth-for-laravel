@@ -11,6 +11,11 @@ use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Routing\Router;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Event;
+use RoundlyConsulting\Auth\Commands\CheckCommand;
+use RoundlyConsulting\Auth\Commands\InstallCommand;
+use RoundlyConsulting\Auth\Commands\LogoutEverywhereCommand;
+use RoundlyConsulting\Auth\Commands\MakeGuardCommand;
+use RoundlyConsulting\Auth\Commands\PruneCommand;
 use RoundlyConsulting\Auth\Contracts\AssessesLoginRisk;
 use RoundlyConsulting\Auth\Contracts\ChecksBreachedPasswords;
 use RoundlyConsulting\Auth\Contracts\FingerprintsDevices;
@@ -53,7 +58,13 @@ final class AuthenticationServiceProvider extends PackageServiceProvider
             ->hasMigrations()
             ->hasMigration('add_authentication_columns_to_users_table')
             ->hasTranslations()
-            ->hasCommands([])
+            ->hasCommands([
+                InstallCommand::class,
+                MakeGuardCommand::class,
+                CheckCommand::class,
+                PruneCommand::class,
+                LogoutEverywhereCommand::class,
+            ])
             ->contributesToAbout(static fn (): array => AboutSection::data());
     }
 

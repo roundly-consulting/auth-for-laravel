@@ -36,6 +36,7 @@ use RoundlyConsulting\Passkeys\Exceptions\PasskeyException;
 use RoundlyConsulting\Passkeys\Facades\Passkeys;
 use RoundlyConsulting\TwoFactor\Exceptions\TwoFactorRateLimitedException;
 use RoundlyConsulting\TwoFactor\Facades\TwoFactor;
+use SensitiveParameter;
 
 /**
  * "Sudo mode": the signed-in account re-proves itself, and its session (`sid`) counts as
@@ -115,7 +116,7 @@ final readonly class Reauthenticate
         };
     }
 
-    private function verifyTwoFactor(Account $account, string $code): bool
+    private function verifyTwoFactor(Account $account, #[SensitiveParameter] string $code): bool
     {
         try {
             return TwoFactor::attempt(AccountModels::twoFactor($account), $code)->verified;

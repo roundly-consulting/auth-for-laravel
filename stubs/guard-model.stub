@@ -1,0 +1,26 @@
+<?php
+
+declare(strict_types=1);
+
+namespace {{ namespace }};
+
+{{ imports }}
+
+final class {{ class }} extends Model implements {{ interfaces }}
+{
+{{ traits }}
+
+    protected $table = '{{ table }}';
+
+    protected $guarded = [];
+
+    protected $hidden = ['password'];
+
+    /**
+     * @return array<string, string>
+     */
+    protected function casts(): array
+    {
+        return [{{ casts }}'email_verified_at' => 'datetime'];
+    }
+}

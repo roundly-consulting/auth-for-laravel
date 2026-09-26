@@ -9,6 +9,8 @@ parameters:
         - config
         # Analysed so the consumer-facing HasAuthentication trait has a concrete user.
         - tests/Fixtures/Models/User.php
+        # Analysed so the host-facing InteractsWithAuthentication trait has a concrete user.
+        - tests/TestCase.php
     # This package ships its own config/ dir; env() is correct there.
     configDirectories:
         - config

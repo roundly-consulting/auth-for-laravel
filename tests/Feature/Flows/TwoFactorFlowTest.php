@@ -5,6 +5,7 @@ declare(strict_types=1);
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Notification;
+use RoundlyConsulting\Auth\Actions\Challenges\StartTwoFactorEnrolmentStep;
 use RoundlyConsulting\Auth\Contracts\RendersQrCode;
 use RoundlyConsulting\Auth\DataTransferObjects\ChallengeFactorData;
 use RoundlyConsulting\Auth\DataTransferObjects\PasswordCredentials;
@@ -12,6 +13,8 @@ use RoundlyConsulting\Auth\Enums\FactorMethod;
 use RoundlyConsulting\Auth\Events\RecoveryCodeUsed;
 use RoundlyConsulting\Auth\Events\TwoFactorEnabled;
 use RoundlyConsulting\Auth\Exceptions\ChallengeFactorFailed;
+use RoundlyConsulting\Auth\Exceptions\ChallengeInvalid;
+use RoundlyConsulting\Auth\Exceptions\EnrolmentRequired;
 use RoundlyConsulting\Auth\Facades\Authentication;
 use RoundlyConsulting\Auth\Notifications\RecoveryCodeUsedNotification;
 use RoundlyConsulting\Auth\Notifications\TwoFactorEnabledNotification;
@@ -184,4 +187,19 @@ it('keeps a two-step challenge pending after the first step', function (): void 
     expect(array_map(fn ($r) => $r->step->value, $pending->remaining))->toBe(['passkey', 'second_factor']);
 
     CarbonImmutable::setTestNow();
+});
+
+it('guards the forced totp enrolment step', function (): void {
+    $this->configureGuard('users', ['two_factor.mode' => 'required', 'challenge.enrolment_requires_verified_email' => false]);
+    $user = User::factory()->unverified()->create();
+    $pending = Authentication::guard('users')->attempt(new PasswordCredentials($user->email, 'correct-horse-battery'), sessionContext())->challenge;
+
+    $this->configureGuard('users', ['challenge.enrolment_requires_verified_email' => true]);
+    expect(fn () => app(StartTwoFactorEnrolmentStep::class)->execute('users', $pending->token, sessionContext()))
+        ->toThrow(EnrolmentRequired::class);
+
+    $this->configureGuard('users', ['challenge.enrolment_requires_verified_email' => false]);
+    enableTotp($user);
+    expect(fn () => app(StartTwoFactorEnrolmentStep::class)->execute('users', $pending->token, sessionContext()))
+        ->toThrow(ChallengeInvalid::class);
 });

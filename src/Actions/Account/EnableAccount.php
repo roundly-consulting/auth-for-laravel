@@ -1,0 +1,25 @@
+<?php
+
+declare(strict_types=1);
+
+namespace RoundlyConsulting\Auth\Actions\Account;
+
+use RoundlyConsulting\Auth\Contracts\Account;
+use RoundlyConsulting\Auth\Events\AccountEnabled;
+use RoundlyConsulting\Auth\Guards\GuardRegistry;
+use RoundlyConsulting\Auth\Support\AccountState;
+use RoundlyConsulting\Auth\Support\Columns;
+
+final readonly class EnableAccount
+{
+    public function __construct(private GuardRegistry $guards) {}
+
+    public function execute(string $guard, Account $account): void
+    {
+        $this->guards->get($guard);
+
+        AccountState::write($account, [Columns::disabledAt() => null, Columns::disabledReason() => null]);
+
+        event(new AccountEnabled($guard, $account));
+    }
+}

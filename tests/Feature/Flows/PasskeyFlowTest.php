@@ -6,9 +6,15 @@ use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Notification;
 use RoundlyConsulting\Auth\Actions\Challenges\BeginPasskeyEnrolmentStep;
+use RoundlyConsulting\Auth\Actions\Challenges\BeginPasskeyStep;
 use RoundlyConsulting\Auth\Actions\Login\CompletePasskeyLogin;
+use RoundlyConsulting\Auth\DataTransferObjects\ChallengeFactorData;
+use RoundlyConsulting\Auth\DataTransferObjects\PasswordCredentials;
+use RoundlyConsulting\Auth\Enums\FactorMethod;
 use RoundlyConsulting\Auth\Events\PasskeyAdded;
 use RoundlyConsulting\Auth\Events\PasskeyRemoved;
+use RoundlyConsulting\Auth\Exceptions\ChallengeFactorFailed;
+use RoundlyConsulting\Auth\Exceptions\EnrolmentRequired;
 use RoundlyConsulting\Auth\Exceptions\InvalidCredentials;
 use RoundlyConsulting\Auth\Facades\Authentication;
 use RoundlyConsulting\Auth\Notifications\PasskeyAddedNotification;
@@ -204,3 +210,49 @@ it('reauthenticates with a passkey bound to the session', function (): void {
         ->assertStatus(422);
     CarbonImmutable::setTestNow();
 });
+
+it('walks a two-step challenge: passkey first, then totp', function (): void {
+    $this->configureGuard('users', ['two_factor.mode' => 'required', 'passkeys.second_factor' => 'required', 'two_factor.passkey_satisfies_required' => false]);
+    $secret = enableTotp($this->user);
+    $authenticator = registerVirtualPasskey($this->user);
+
+    $pending = Authentication::guard('users')->attempt(new PasswordCredentials($this->user->email, 'correct-horse-battery'), sessionContext())->challenge;
+    $options = app(BeginPasskeyStep::class)->execute('users', $pending->token, sessionContext());
+
+    $halfway = Authentication::guard('users')->completeChallenge(new ChallengeFactorData($pending->token, FactorMethod::Passkey, sessionContext(), assertion: $authenticator->assert($options)));
+
+    expect($halfway->requiresChallenge())->toBeTrue()
+        ->and(array_map(fn ($step) => $step->value, $halfway->challenge->completed))->toBe(['passkey'])
+        ->and($halfway->challenge->remaining[0]->step->value)->toBe('second_factor')
+        ->and($halfway->challenge->token)->toBe($pending->token);
+
+    $done = Authentication::guard('users')->completeChallenge(new ChallengeFactorData($pending->token, FactorMethod::Totp, sessionContext(), code: totpCode($secret)));
+
+    expect($done->isAuthenticated())->toBeTrue()
+        ->and(claimsOf($done->tokens)->authMethods())->toBe(['pwd', 'hwk', 'otp', 'mfa']);
+});
+
+it('counts a failed passkey enrolment and refuses a stray ceremony', function (): void {
+    $this->configureGuard('users', ['passkeys.second_factor' => 'required']);
+    $pending = Authentication::guard('users')->attempt(new PasswordCredentials($this->user->email, 'correct-horse-battery'), sessionContext())->challenge;
+    $stray = VirtualAuthenticator::es256()->register(Passkeys::registrationOptions($this->user));
+
+    expect(fn () => Authentication::guard('users')->completeChallenge(new ChallengeFactorData($pending->token, FactorMethod::PasskeyEnrolment, sessionContext(), attestation: $stray)))
+        ->toThrow(ChallengeFactorFailed::class);
+
+    $options = app(BeginPasskeyEnrolmentStep::class)->execute('users', $pending->token, sessionContext());
+    Passkeys::fake()->failRegistrationWith(CredentialAlreadyRegistered::make());
+
+    expect(fn () => Authentication::guard('users')->completeChallenge(new ChallengeFactorData($pending->token, FactorMethod::PasskeyEnrolment, sessionContext(), attestation: VirtualAuthenticator::es256()->register($options))))
+        ->toThrow(ChallengeFactorFailed::class);
+});
+
+it('refuses forced passkey enrolment for an unverified address', function (): void {
+    $this->configureGuard('users', ['passkeys.second_factor' => 'required', 'challenge.enrolment_requires_verified_email' => false]);
+    $user = User::factory()->unverified()->create();
+    $pending = Authentication::guard('users')->attempt(new PasswordCredentials($user->email, 'correct-horse-battery'), sessionContext())->challenge;
+
+    $this->configureGuard('users', ['challenge.enrolment_requires_verified_email' => true]);
+
+    app(BeginPasskeyEnrolmentStep::class)->execute('users', $pending->token, sessionContext());
+})->throws(EnrolmentRequired::class);

@@ -11,6 +11,7 @@ use Illuminate\Validation\Rules\Password;
 use RoundlyConsulting\Auth\Contracts\ChecksBreachedPasswords;
 use RoundlyConsulting\Auth\Exceptions\BreachCheckUnavailable;
 use RoundlyConsulting\Auth\Guards\GuardConfig;
+use SensitiveParameter;
 
 /**
  * The guard's password policy: Laravel's own `Password` rule for length and
@@ -80,7 +81,7 @@ final readonly class PasswordPolicy implements ValidationRule
         return $rule;
     }
 
-    private function containsIdentifier(string $password): bool
+    private function containsIdentifier(#[SensitiveParameter] string $password): bool
     {
         if (! $this->guard->passwordMustNotContainIdentifier() || $this->email === null) {
             return false;
@@ -91,7 +92,7 @@ final readonly class PasswordPolicy implements ValidationRule
         return mb_strlen($local) >= 3 && str_contains(mb_strtolower($password), $local);
     }
 
-    private function checkBreached(string $password, Closure $fail): void
+    private function checkBreached(#[SensitiveParameter] string $password, Closure $fail): void
     {
         try {
             if (app(ChecksBreachedPasswords::class)->isBreached($password, $this->guard)) {

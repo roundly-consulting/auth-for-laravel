@@ -8,6 +8,7 @@ use Illuminate\Support\ServiceProvider;
 use RoundlyConsulting\Auth\AuthenticationServiceProvider;
 use RoundlyConsulting\Auth\Guards\GuardRegistry;
 use RoundlyConsulting\Auth\Support\TokenVersionResolver;
+use RoundlyConsulting\Auth\Testing\InteractsWithAuthentication;
 use RoundlyConsulting\Auth\Tests\Fixtures\Models\Client;
 use RoundlyConsulting\Auth\Tests\Fixtures\Models\User;
 use RoundlyConsulting\Crypto\CryptoServiceProvider;
@@ -20,6 +21,8 @@ use RoundlyConsulting\TwoFactor\TwoFactorServiceProvider;
 
 abstract class TestCase extends PackageTestCase
 {
+    use InteractsWithAuthentication;
+
     /**
      * @return list<class-string<ServiceProvider>>
      */

@@ -16,6 +16,7 @@ use RoundlyConsulting\Auth\Guards\ConfigMerger;
 use RoundlyConsulting\Auth\Guards\GuardConfig;
 use RoundlyConsulting\Auth\Notifications\AuthenticationNotification;
 use RoundlyConsulting\Auth\Tests\Fixtures\Models\User;
+use RoundlyConsulting\Auth\Tests\SwappedModelsTestCase;
 use RoundlyConsulting\Auth\Tests\TestCase;
 use RoundlyConsulting\Crypto\Codec\Base64Url;
 use RoundlyConsulting\Jwt\Facades\Jwt;
@@ -30,7 +31,10 @@ use RoundlyConsulting\Passkeys\Models\Passkey;
 use RoundlyConsulting\Passkeys\Testing\VirtualAuthenticator;
 use RoundlyConsulting\TwoFactor\Facades\TwoFactor;
 
-uses(TestCase::class)->in(__DIR__);
+uses(TestCase::class)->in('Arch', 'Commands', 'Concurrency', 'Config', 'Feature', 'Migrations', 'Models', 'Security', 'Unit');
+
+// The swap suite boots with the four models swapped for host subclasses.
+uses(SwappedModelsTestCase::class)->in('Swaps');
 
 /**
  * @param  array<string, mixed>  $overrides

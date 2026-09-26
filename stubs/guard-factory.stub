@@ -1,0 +1,30 @@
+<?php
+
+declare(strict_types=1);
+
+namespace {{ factory_namespace }};
+
+use {{ namespace }}\{{ class }};
+use Illuminate\Database\Eloquent\Factories\Factory;
+use Illuminate\Support\Facades\Hash;
+
+/**
+ * @extends Factory<{{ class }}>
+ */
+final class {{ class }}Factory extends Factory
+{
+    protected $model = {{ class }}::class;
+
+    /**
+     * @return array<string, mixed>
+     */
+    public function definition(): array
+    {
+        return [
+            'name' => $this->faker->name(),
+            'email' => strtolower($this->faker->unique()->safeEmail()),
+            'email_verified_at' => now(),
+            'password' => Hash::make('password'),
+        ];
+    }
+}
