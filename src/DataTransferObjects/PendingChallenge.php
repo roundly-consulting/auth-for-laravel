@@ -11,7 +11,7 @@ use SensitiveParameter;
 
 /**
  * A login that needs more steps. The plaintext token is returned to the client once;
- * only its HMAC is stored.
+ * only its HMAC is stored. `challengeId` is internal (events, activity) — never rendered.
  */
 final readonly class PendingChallenge
 {
@@ -26,5 +26,6 @@ final readonly class PendingChallenge
         public array $completed,
         public array $remaining,
         public int $attemptsLeft,
+        public ?int $challengeId = null,
     ) {}
 }

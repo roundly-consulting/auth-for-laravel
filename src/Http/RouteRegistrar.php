@@ -6,8 +6,11 @@ namespace RoundlyConsulting\Auth\Http;
 
 use Illuminate\Routing\Router;
 use RoundlyConsulting\Auth\AuthenticationManager;
+use RoundlyConsulting\Auth\Enums\LoginMethod;
 use RoundlyConsulting\Auth\Guards\GuardConfig;
+use RoundlyConsulting\Auth\Http\Controllers\Account\LoginActivityController;
 use RoundlyConsulting\Auth\Http\Controllers\Account\MeController;
+use RoundlyConsulting\Auth\Http\Controllers\Login\PasswordLoginController;
 use RoundlyConsulting\Auth\Http\Controllers\Sessions\ListSessionsController;
 use RoundlyConsulting\Auth\Http\Controllers\Sessions\LogoutController;
 use RoundlyConsulting\Auth\Http\Controllers\Sessions\LogoutEverywhereController;
@@ -166,11 +169,15 @@ final class RouteRegistrar
     private function all(): array
     {
         return [
+            // Login
+            new RouteDefinition('login', 'POST', 'login', 'login', PasswordLoginController::class, enabled: $this->guard->loginMethodEnabled(LoginMethod::Password)),
+
             // Tokens
             new RouteDefinition('tokens', 'POST', 'refresh', 'refresh', RefreshController::class),
 
             // Account
             new RouteDefinition('account', 'GET', 'me', 'me', MeController::class, authenticated: true),
+            new RouteDefinition('account', 'GET', 'activity', 'activity', LoginActivityController::class, authenticated: true, enabled: $this->guard->activityEnabled()),
 
             // Sessions
             new RouteDefinition('sessions', 'POST', 'logout', 'logout', LogoutController::class, authenticated: true),

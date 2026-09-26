@@ -16,7 +16,9 @@ use RoundlyConsulting\Auth\Database\Factories\LoginChallengeFactory;
 use RoundlyConsulting\Auth\DataTransferObjects\ChallengeRequirement;
 use RoundlyConsulting\Auth\Enums\AuthMethodReference;
 use RoundlyConsulting\Auth\Enums\ChallengeStep;
+use RoundlyConsulting\Auth\Enums\FactorMethod;
 use RoundlyConsulting\Auth\Enums\LoginMethod;
+use RoundlyConsulting\Auth\Exceptions\FactorNotAllowed;
 use RoundlyConsulting\Auth\Support\Tables;
 
 /**
@@ -144,6 +146,25 @@ class LoginChallenge extends Model
     public function authMethods(): array
     {
         return AuthMethodReference::fromValues($this->context['amr'] ?? null);
+    }
+
+    /**
+     * The next requirement — steps complete in order — when it is one of `$steps` and
+     * accepts `$method`.
+     *
+     * @param  list<ChallengeStep>  $steps
+     *
+     * @throws FactorNotAllowed
+     */
+    public function nextRequirement(array $steps, FactorMethod $method): ChallengeRequirement
+    {
+        $next = $this->remaining()[0] ?? null;
+
+        if ($next === null || ! in_array($next->step, $steps, true) || ! $next->allows($method)) {
+            throw new FactorNotAllowed;
+        }
+
+        return $next;
     }
 
     public function contextValue(string $key): mixed

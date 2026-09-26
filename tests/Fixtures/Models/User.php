@@ -21,11 +21,11 @@ use RoundlyConsulting\TwoFactor\Contracts\TwoFactorAuthenticatable;
 final class User extends Model implements Account, HasPasskeys, TwoFactorAuthenticatable
 {
     use AuthenticatableConcern;
-
     use HasAuthentication;
 
     /** @use HasFactory<UserFactory> */
     use HasFactory;
+
     use HasRefreshTokens;
     use HasTwoFactorAuthentication;
     use InteractsWithPasskeys;

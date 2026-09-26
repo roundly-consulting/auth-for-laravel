@@ -6,6 +6,7 @@ namespace RoundlyConsulting\Auth\Guards;
 
 use Illuminate\Contracts\Container\Container;
 use Illuminate\Support\Collection;
+use RoundlyConsulting\Auth\Actions\Login\AttemptPasswordLogin;
 use RoundlyConsulting\Auth\Actions\Sessions\InvalidateAccountTokens;
 use RoundlyConsulting\Auth\Actions\Sessions\ListSessions;
 use RoundlyConsulting\Auth\Actions\Sessions\LogoutCurrentSession;
@@ -16,6 +17,8 @@ use RoundlyConsulting\Auth\Actions\Tokens\IssueTokenPair;
 use RoundlyConsulting\Auth\Actions\Tokens\RefreshTokenPair;
 use RoundlyConsulting\Auth\Contracts\Account;
 use RoundlyConsulting\Auth\DataTransferObjects\CurrentToken;
+use RoundlyConsulting\Auth\DataTransferObjects\LoginResult;
+use RoundlyConsulting\Auth\DataTransferObjects\PasswordCredentials;
 use RoundlyConsulting\Auth\DataTransferObjects\SessionContext;
 use RoundlyConsulting\Auth\DataTransferObjects\SessionData;
 use RoundlyConsulting\Auth\DataTransferObjects\TokenPair;
@@ -52,6 +55,13 @@ final readonly class GuardContext
     public function accounts(): AccountRepository
     {
         return new AccountRepository($this->config);
+    }
+
+    // ── Login ────────────────────────────────────────────────────────────
+
+    public function attempt(PasswordCredentials $credentials, SessionContext $context): LoginResult
+    {
+        return $this->container->make(AttemptPasswordLogin::class)->execute($this->name(), $credentials, $context);
     }
 
     // ── Tokens & sessions ────────────────────────────────────────────────
