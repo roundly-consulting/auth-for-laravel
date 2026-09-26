@@ -7,16 +7,25 @@ namespace RoundlyConsulting\Auth\Support;
 use Illuminate\Database\Eloquent\Concerns\HasUlids;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Http\Resources\Json\JsonResource;
 use RoundlyConsulting\Auth\Contracts\Account;
+use RoundlyConsulting\Auth\Contracts\AssessesLoginRisk;
+use RoundlyConsulting\Auth\Contracts\CreatesAccounts;
+use RoundlyConsulting\Auth\Contracts\ProvidesRegistrationRules;
+use RoundlyConsulting\Auth\Contracts\ResolvesAccessTokenClaims;
 use RoundlyConsulting\Auth\Enums\EmailVerificationMode;
+use RoundlyConsulting\Auth\Enums\InvalidationReason;
 use RoundlyConsulting\Auth\Enums\LoginMethod;
+use RoundlyConsulting\Auth\Enums\NotificationType;
 use RoundlyConsulting\Auth\Enums\PasskeyMode;
 use RoundlyConsulting\Auth\Enums\PasskeySecondFactor;
 use RoundlyConsulting\Auth\Enums\RegistrationMode;
+use RoundlyConsulting\Auth\Enums\RiskLevel;
 use RoundlyConsulting\Auth\Enums\TwoFactorMode;
 use RoundlyConsulting\Auth\Exceptions\AuthenticationMisconfigured;
 use RoundlyConsulting\Auth\Guards\GuardConfig;
 use RoundlyConsulting\Auth\Guards\GuardRegistry;
+use RoundlyConsulting\Auth\Notifications\AuthenticationNotification;
 use RoundlyConsulting\Jwt\Exceptions\JwtMisconfigured;
 use RoundlyConsulting\Jwt\Facades\Jwt;
 use RoundlyConsulting\PackageToolkit\Enums\KeyType;
@@ -61,6 +70,8 @@ final class ConfigValidation
         } catch (AuthenticationMisconfigured $e) {
             $problems[] = $e->getMessage();
         }
+
+        self::classProblems($guard, $prefix, $problems);
 
         self::jwtProblems($guard, $prefix, $problems);
         self::keyTypeProblems($model, $prefix, $problems);
@@ -138,11 +149,50 @@ final class ConfigValidation
             $problems[] = "{$prefix}: a factor enrolment is forced and challenge.enrolment_requires_verified_email is on, but verification.mode is off — password accounts could never satisfy it.";
         }
 
-        // Resolve every remaining enum-backed leaf so a typo fails here, not mid-login.
+        // Resolve every remaining enum-backed leaf so a typo fails here, not mid-flow —
+        // an invalidation scope read only after a password was already written, say.
         $guard->registrationMode();
         $guard->verificationChannel();
         $guard->identifierStorage();
         $guard->notificationDelivery();
+        $guard->reauthenticationMethods();
+        $guard->sensitiveActions();
+
+        foreach (InvalidationReason::cases() as $reason) {
+            $guard->invalidationScope($reason);
+        }
+
+        foreach (RiskLevel::cases() as $level) {
+            $guard->riskReaction($level);
+        }
+    }
+
+    /**
+     * Configured class-strings must be what their leaf promises; the resolvers would
+     * otherwise fall back silently (a host's registration rules skipped entirely) or
+     * fail mid-flow.
+     *
+     * @param  list<string>  $problems
+     */
+    private static function classProblems(GuardConfig $guard, string $prefix, array &$problems): void
+    {
+        $leaves = [
+            'registration.rules' => [$guard->registrationRules(), ProvidesRegistrationRules::class],
+            'registration.creator' => [$guard->accountCreator(), CreatesAccounts::class],
+            'risk.assessor' => [$guard->riskAssessor(), AssessesLoginRisk::class],
+            'tokens.claims_resolver' => [$guard->claimsResolver(), ResolvesAccessTokenClaims::class],
+            'resources.account' => [$guard->accountResource(), JsonResource::class],
+        ];
+
+        foreach (NotificationType::cases() as $type) {
+            $leaves['notifications.classes.'.$type->value] = [$guard->notificationClass($type), AuthenticationNotification::class];
+        }
+
+        foreach ($leaves as $key => [$class, $expected]) {
+            if ($class !== null && ! is_a($class, $expected, true)) {
+                $problems[] = "{$prefix}.{$key} must be a class implementing or extending {$expected}.";
+            }
+        }
     }
 
     /**

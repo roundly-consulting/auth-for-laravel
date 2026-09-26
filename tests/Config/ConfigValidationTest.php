@@ -2,6 +2,8 @@
 
 declare(strict_types=1);
 
+use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Notification;
 use RoundlyConsulting\Auth\Exceptions\AuthenticationMisconfigured;
 use RoundlyConsulting\Auth\Guards\GuardRegistry;
 use RoundlyConsulting\Auth\Support\ConfigValidation;
@@ -37,7 +39,31 @@ it('reports each misconfiguration with its exact key', function (string $guard, 
     'not a jwt guard' => ['users', ['laravel_guard' => 'web'], 'is not configured with the jwt driver'],
     'shared laravel guard' => ['clients', ['laravel_guard' => 'users'], 'laravel_guard must differ'],
     'shared model' => ['clients', ['model' => User::class], 'shares its morph class'],
+    'invalidation scope typo' => ['users', ['invalidation.password_changed' => 'other'], 'invalidation.password_changed'],
+    'risk reaction typo' => ['users', ['risk.reactions.high' => 'block'], 'risk.reactions.high'],
+    'sensitive action typo' => ['users', ['reauthentication.required_for' => ['enable_two_factor', 'disable_2fa']], 'reauthentication.required_for'],
+    'reauthentication method typo' => ['users', ['reauthentication.methods' => ['password', 'sms']], 'reauthentication.methods'],
+    'registration rules class' => ['users', ['registration.rules' => stdClass::class], 'registration.rules'],
+    'account creator class' => ['users', ['registration.creator' => stdClass::class], 'registration.creator'],
+    'risk assessor class' => ['users', ['risk.assessor' => stdClass::class], 'risk.assessor'],
+    'claims resolver class' => ['users', ['tokens.claims_resolver' => 'App\\Missing\\Resolver'], 'tokens.claims_resolver'],
+    'notification class' => ['users', ['notifications.classes.new_device' => stdClass::class], 'notifications.classes.new_device'],
+    'account resource class' => ['users', ['resources.account' => stdClass::class], 'resources.account'],
 ]);
+
+it('refuses to resolve a guard with a typo before any credential changes', function (): void {
+    Notification::fake();
+    $user = User::factory()->create();
+    $pair = issuePair($user);
+
+    $this->configureGuard('users', ['invalidation.password_changed' => 'other']);
+
+    $this->putJson('/users/auth/password', ['current_password' => 'correct-horse-battery', 'password' => 'a-brand-new-passphrase'], bearer($pair))
+        ->assertStatus(500)
+        ->assertJsonPath('code', 'misconfigured');
+
+    expect(Hash::check('correct-horse-battery', (string) $user->fresh()?->getAttribute('password')))->toBeTrue();
+});
 
 it('requires the token version resolver on the jwt guard', function (): void {
     config()->set('jwt.guard.token_version', null);

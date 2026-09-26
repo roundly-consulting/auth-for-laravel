@@ -592,7 +592,7 @@ final readonly class GuardConfig
      */
     public function reauthenticationMethods(): array
     {
-        return $this->enumList(ReauthenticationMethod::class, $this->settings['reauthentication']['methods'] ?? null);
+        return $this->enumList(ReauthenticationMethod::class, $this->settings['reauthentication']['methods'] ?? null, 'reauthentication.methods');
     }
 
     public function reauthenticationRequiresSecondFactorWhenEnrolled(): bool
@@ -607,7 +607,17 @@ final readonly class GuardConfig
 
     public function requiresReauthentication(SensitiveAction $action): bool
     {
-        return in_array($action, $this->enumList(SensitiveAction::class, $this->settings['reauthentication']['required_for'] ?? null), true);
+        return in_array($action, $this->sensitiveActions(), true);
+    }
+
+    /**
+     * The actions behind a recent re-authentication (`reauthentication.required_for`).
+     *
+     * @return list<SensitiveAction>
+     */
+    public function sensitiveActions(): array
+    {
+        return $this->enumList(SensitiveAction::class, $this->settings['reauthentication']['required_for'] ?? null, 'reauthentication.required_for');
     }
 
     // ── Activity & risk ──────────────────────────────────────────────────
@@ -841,19 +851,24 @@ final readonly class GuardConfig
     }
 
     /**
+     * An unknown entry fails loudly: silently dropping `disable_2fa` from `required_for`
+     * would switch that gate off.
+     *
      * @template TEnum of BackedEnum
      *
      * @param  class-string<TEnum>  $enum
      * @return list<TEnum>
+     *
+     * @throws AuthenticationMisconfigured
      */
-    private function enumList(string $enum, mixed $values): array
+    private function enumList(string $enum, mixed $values, string $key): array
     {
         $cases = [];
 
         foreach ($this->stringList($values) as $value) {
-            $case = $enum::tryFrom($value);
+            $case = $enum::tryFrom($value) ?? throw AuthenticationMisconfigured::because("authentication.guards.{$this->name}.{$key} contains the unknown value [{$value}].");
 
-            if ($case !== null && ! in_array($case, $cases, true)) {
+            if (! in_array($case, $cases, true)) {
                 $cases[] = $case;
             }
         }
