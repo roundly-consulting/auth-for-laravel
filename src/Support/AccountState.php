@@ -9,8 +9,8 @@ use RoundlyConsulting\Auth\Contracts\Account;
 
 /**
  * Quiet, targeted writes to an account row: a conditional/keyed `UPDATE` of exactly the
- * named columns (no model events, no `updated_at`, no unrelated dirty attribute
- * flushed), reflected back onto the in-memory instance.
+ * named columns (no model events, no unrelated dirty attribute flushed; `updated_at` is
+ * touched as by any Eloquent query update), reflected back onto the in-memory instance.
  */
 final class AccountState
 {

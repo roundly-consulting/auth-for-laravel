@@ -185,8 +185,8 @@ one table is authorization, not a guard) or an audience.
 | `model` | — (required) | `class-string<Model&Account>` |
 | `laravel_guard` | guard name | the `auth.guards` entry (a `jwt` guard) this guard authenticates with |
 | `identifier.columns` | `['email']` | columns accepted as the login identifier, tried in order |
-| `identifier.email_column` | `email` | the address column |
-| `identifier.normalize` | `lowercase` | `lowercase` or `none`; emails are stored and looked up normalised |
+| `identifier.email_column` | `email` | the address column — also where `HasAuthentication` routes mail (`routeNotificationForMail()`) |
+| `identifier.normalize` | `lowercase` | `lowercase` or `none`; emails are stored and looked up normalised (always Unicode-composed, NFC) |
 | `identifier.case_insensitive_lookup` | `false` | `lower(col) = ?` for legacy mixed-case rows (index-hostile) |
 | `login.password` / `.magic_link` / `.email_otp` / `.passkey` | `true` / `false` / `false` / `false` | login methods (env `AUTHENTICATION_LOGIN_*`) |
 | `login.reveal_account_state` | `true` | disabled/unverified codes after a verified first factor; `false` makes them `invalid_credentials` |
@@ -211,7 +211,7 @@ one table is authorization, not a guard) or an audience.
 | `tokens.include_email` | `true` | `email` / `email_verified` claims |
 | `sessions.max_active` | `null` | oldest sessions revoked above the cap |
 | `invalidation.password_changed` / `.password_reset` / `.email_changed` / `.two_factor_changed` / `.passkey_changed` | `others` / `all` / `others` / `others` / `none` | `none`, `others`, `all` (disable, logout-everywhere and incidents are always `all`) |
-| `registration.mode` | `closed` | `open`, `invite_only`, `closed` (env `AUTHENTICATION_REGISTRATION`) |
+| `registration.mode` | `closed` | `open`, `invite_only`, `closed` (env `AUTHENTICATION_REGISTRATION`); `closed` also refuses accepting invitations — use `invite_only` for invitation-only sign-up |
 | `registration.require_password` | `true` | when password login is on |
 | `registration.login_after` | `true` | sign in right after registering |
 | `registration.rules` | `null` | `ProvidesRegistrationRules` for host fields (only those keys reach the creator) |
@@ -269,7 +269,7 @@ use RoundlyConsulting\Auth\Http\Resources\ChallengeResource;
 use RoundlyConsulting\Auth\Http\Resources\TokenPairResource;
 
 $result = Authentication::guard('clients')->attempt(
-    new PasswordCredentials(identifier: $request->string('email'), password: $request->string('password')),
+    new PasswordCredentials(identifier: $request->string('email')->toString(), password: $request->string('password')->toString()),
     SessionContext::fromRequest($request),
 );
 
@@ -293,7 +293,7 @@ Every `GuardContext` method is one action call:
 | `logout($account, $current)` / `logoutSession($account, $id)` / `logoutOthers($account, $current)` / `logoutEverywhere($account)` | — / — / `int` / `int` |
 | `invalidate($account, InvalidationReason, ?$keep)` | `?TokenPair` (the re-issued pair under `others`) |
 | `register(RegistrationData)` | `RegistrationResult` |
-| `invite(InvitationData)` / `acceptInvitation(AcceptInvitationData)` | `Invitation` / `LoginResult` |
+| `invite(InvitationData)` / `acceptInvitation(AcceptInvitationData)` | `Invitation` / `RegistrationResult` (like `register()`) |
 
 Every flow is also a container-resolvable action with a single `execute()` in
 `RoundlyConsulting\Auth\Actions\*` (e.g. `ChangePassword`, `SetPassword`, `DisableAccount`,
@@ -407,16 +407,17 @@ Errors render as `{"message": "…", "code": "…", "errors": {…}}`:
 | `account_disabled` / `email_not_verified` / `enrolment_required` / `reauthentication_required` | 403 | account state / policy (`methods` on reauth) |
 | `registration_closed` / `invitation_required` / `login_denied` | 403 | registration / risk |
 | `account_locked` | 423 | a re-authenticating account is locked |
-| `two_factor_required` / `last_credential` / `two_factor_already_enabled` | 409 | refused changes |
+| `two_factor_required` / `last_credential` / `two_factor_already_enabled` / `two_factor_not_enabled` | 409 | refused changes |
 | `method_disabled` / `not_found` | 404 | feature off / unknown id |
 | `passkey_registration_failed` | 422 | a passkey did not register |
-| `password_check_unavailable` | 503 | breached-password service down with `fail_closed` |
+| a validation error on `password` | 422 | breached-password service down with `fail_closed` |
 | `misconfigured` | 500 | configuration error (detail only with `app.debug`) |
 
 ## Events
 
 All in `RoundlyConsulting\Auth\Events`, `final readonly`, carrying the guard name and never a
-secret — hook your audit log here: `LoginSucceeded`, `LoginFailed`, `LoginChallenged`,
+secret; models travel by identifier (`SerializesModels`) to queued listeners — hook your audit
+log here: `LoginSucceeded`, `LoginFailed`, `LoginChallenged`,
 `ChallengeStepCompleted`, `ChallengeFailed`, `LoginThrottled`, `MagicLinkRequested`,
 `EmailOtpRequested`, `NewDeviceDetected`, `SuspiciousLoginDetected`, `TokensIssued`,
 `TokensRefreshed`, `LoggedOut`, `AccountTokensInvalidated`, `RefreshTokenReuseReported`,
@@ -483,7 +484,7 @@ abstract class TestCase extends BaseTestCase
 
 $this->actingAsAccount($user)->getJson('/api/orders')->assertOk();        // a REAL token pair
 $this->assertLoginActivity('users', ActivityType::PasswordLogin, ActivityOutcome::Succeeded);
-$this->assertTokensInvalidated($user, InvalidationReason::PasswordChanged);
+$this->assertTokensInvalidated($user, InvalidationReason::PasswordChanged);   // moved since actingAsAccount() (or pass `since:`)
 ```
 
 `TwoFactor::fake()` and `Passkeys::fake()` from the lower packages still work, and
@@ -494,17 +495,23 @@ $this->assertTokensInvalidated($user, InvalidationReason::PasswordChanged);
 - **Enumeration** — guest endpoints answer known, unknown, disabled and unverified accounts
   identically (status and body); mail goes only to real, active accounts, after the response. A
   password check always runs, against a dummy hash of the same cost for unknown accounts.
-  Registration returns "email taken" only when it would issue tokens immediately.
+  Registration returns "email taken" only when it would issue tokens immediately; otherwise a
+  taken address pays the same password hash as a new account. Only completed logins make a
+  device "known" — a reset or sign-in link requested from a device does not.
 - **Guard isolation** — a token, link, code, invitation, challenge or passkey of one guard never
   works on another (distinct audiences, owner-type-scoped refresh tokens, guard + purpose in
   every MAC).
 - **Single use** — every claim is a conditional update; challenges advance with an optimistic
   version check and snapshot the account's token version.
-- **Invalidation** — `tv++` kills every outstanding access token; families are revoked; the
+- **Invalidation** — `tv++` kills every outstanding access token; families are revoked; pending
+  sign-in, reset, re-authentication and email-change links die with them; the
   jti denylist is belt-and-braces. The denylist lives in cache: a flush revives revoked access
   tokens until they expire — keep `access_ttl` short (≤ 15 min), `tv++` covers the rest.
 - **Forced enrolment** — a password-only attacker could enrol their own authenticator under a
-  `required` mode; enrolment is therefore limited to verified addresses and announced to them.
+  `required` mode; enrolment is therefore limited to verified addresses and announced to them,
+  and a challenge whose enrolment step went stale (the factor was set up meanwhile) is ended.
+- **Throttling** — attempts are counted atomically before a password or code is checked, so a
+  burst of concurrent guesses cannot all pass the limit.
 - **Re-authentication** — accounts with a second factor must re-authenticate with it; a password or
   email-code proof, or a login that skipped the factor, never satisfies a gate for them — also when
   the factor was enrolled after that proof (the marker records the method, the check uses the
