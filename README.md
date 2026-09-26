@@ -1,3 +1,9 @@
+<p align="center">
+  <a href="https://roundly-consulting.com/open-source">
+    <img src="art/hero.png" alt="Auth For Laravel — Roundly open source" width="100%">
+  </a>
+</p>
+
 # auth-for-laravel
 
 Headless, multi-guard account authentication for Laravel: password, magic-link, email-code
