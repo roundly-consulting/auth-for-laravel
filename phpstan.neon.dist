@@ -1,0 +1,8 @@
+parameters:
+    level: 7
+    paths:
+        - src
+        - config
+    # This package ships its own config/ dir; env() is correct there.
+    configDirectories:
+        - config
