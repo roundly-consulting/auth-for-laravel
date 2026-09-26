@@ -206,10 +206,12 @@ it('substitutes the guard into the route prefix and name and uses frontend_url',
         ->and($guard->accessTtl())->toBe(600);
 });
 
-it('falls back to a derived url template when one is blanked', function (): void {
-    expect(guardConfig(['notifications' => ['urls' => ['magic_link' => '']]])->urlTemplate(UrlKind::MagicLink))
-        ->toBe('{frontend}/auth/magic-link?guard={guard}#token={token}');
-});
+it('falls back to the shipped url template when one is blanked', function (UrlKind $kind): void {
+    /** @var array<string, string> $shipped */
+    $shipped = config('authentication.defaults.notifications.urls');
+
+    expect(guardConfig(['notifications' => ['urls' => [$kind->value => '']]])->urlTemplate($kind))->toBe($shipped[$kind->value]);
+})->with(UrlKind::cases());
 
 it('disables a notification configured as null', function (): void {
     expect(guardConfig(['notifications' => ['classes' => ['new_device' => null]]])->notificationClass(NotificationType::NewDevice))->toBeNull();

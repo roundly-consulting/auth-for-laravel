@@ -777,7 +777,16 @@ final readonly class GuardConfig
             UrlKind::Invitation => $this->settings['notifications']['urls']['invitation'] ?? null,
         };
 
-        return $this->nullableString($template) ?? '{frontend}/auth/'.str_replace('_', '-', $kind->value).'?guard={guard}#token={token}';
+        // Blanked (e.g. an empty env var): the shipped default's path, never a guessed one.
+        $path = match ($kind) {
+            UrlKind::MagicLink => 'magic-link',
+            UrlKind::VerifyEmail => 'verify-email',
+            UrlKind::ResetPassword => 'reset-password',
+            UrlKind::ConfirmEmailChange => 'confirm-email',
+            UrlKind::Invitation => 'invitation',
+        };
+
+        return $this->nullableString($template) ?? '{frontend}/auth/'.$path.'?guard={guard}#token={token}';
     }
 
     // ── Routes & resources ───────────────────────────────────────────────
