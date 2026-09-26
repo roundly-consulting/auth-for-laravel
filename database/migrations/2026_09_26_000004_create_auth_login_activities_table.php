@@ -15,6 +15,10 @@ use RoundlyConsulting\PackageToolkit\Enums\KeyType;
  */
 return new class extends Migration
 {
+    /**
+     * Composite indexes carry explicit short names: MySQL caps identifiers at 64
+     * characters, and Postgres index names are schema-wide.
+     */
     public function up(): void
     {
         Schema::create(Tables::loginActivities(), function (Blueprint $table): void {
@@ -38,10 +42,10 @@ return new class extends Migration
             $table->timestamps();
             $table->softDeletes();
 
-            $table->index(['account_type', 'account_id', 'created_at']);
-            $table->index(['account_type', 'account_id', 'device_fingerprint', 'outcome']);
-            $table->index(['guard', 'created_at']);
-            $table->index(['ip_address', 'created_at']);
+            $table->index(['account_type', 'account_id', 'created_at'], 'auth_activity_account_created_index');
+            $table->index(['account_type', 'account_id', 'device_fingerprint', 'outcome'], 'auth_activity_account_device_index');
+            $table->index(['guard', 'created_at'], 'auth_activity_guard_created_index');
+            $table->index(['ip_address', 'created_at'], 'auth_activity_ip_created_index');
         });
     }
 };
