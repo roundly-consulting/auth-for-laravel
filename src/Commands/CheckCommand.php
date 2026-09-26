@@ -43,6 +43,9 @@ final class CheckCommand extends Command
 
     public function handle(GuardRegistry $registry, Router $router): int
     {
+        // The command instance outlives a run (Artisan::call twice in one process).
+        $this->failed = false;
+
         $only = $this->argument('guard');
         $guards = $registry->all();
 

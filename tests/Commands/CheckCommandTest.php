@@ -55,3 +55,11 @@ it('finds the routes of a guard when they come from the route cache', function (
 
     $this->artisan('authentication:check', ['guard' => 'users'])->assertSuccessful();
 });
+
+it('judges every run on its own when called again in the same process', function (): void {
+    config()->set('mail.default', null);
+    $this->artisan('authentication:check')->assertFailed();
+
+    config()->set('mail.default', 'array');
+    $this->artisan('authentication:check')->assertSuccessful();
+});
