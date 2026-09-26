@@ -23,7 +23,9 @@ use RoundlyConsulting\Auth\Support\Columns;
  * }
  * ```
  *
- * `preferredLocale()` makes Laravel localise the account's notifications automatically.
+ * `preferredLocale()` makes Laravel localise the account's notifications automatically,
+ * and `routeNotificationForMail()` mails them to the guard's `identifier.email_column`
+ * (Laravel would use the `email` attribute) — a method the model defines itself wins.
  *
  * @phpstan-require-extends Model
  *
@@ -133,5 +135,14 @@ trait HasAuthentication
     public function preferredLocale(): ?string
     {
         return $this->accountLocale();
+    }
+
+    /**
+     * Where Laravel's mail channel delivers this account's notifications: the address
+     * the guard signs the account in with, which is also where its links must go.
+     */
+    public function routeNotificationForMail(mixed $notification = null): ?string
+    {
+        return $this->accountEmail();
     }
 }

@@ -122,3 +122,16 @@ it('mails an arbitrary address with a locale', function (): void {
 
     Notification::assertSentOnDemand(AccountExistsNotification::class, fn ($notification, $channels, $notifiable, $locale): bool => $locale === 'sk' && $notifiable->routes['mail'] === 'someone@example.com');
 });
+
+it('mails a notifiable account at the guard email column, not at its `email` attribute', function (): void {
+    Schema::table('users', fn (Blueprint $table) => $table->string('contact_email')->nullable());
+    $this->configureGuard('users', ['identifier.email_column' => 'contact_email', 'identifier.columns' => ['contact_email']]);
+    User::factory()->create(['email' => 'legacy-login@example.com', 'contact_email' => 'real@example.com']);
+
+    $this->postJson('/users/auth/password/forgot', ['email' => 'real@example.com'])->assertStatus(202);
+
+    $messages = app('mailer')->getSymfonyTransport()->messages();
+
+    expect($messages)->toHaveCount(1)
+        ->and(array_map(static fn ($address): string => $address->getAddress(), $messages[0]->getOriginalMessage()->getTo()))->toBe(['real@example.com']);
+});
