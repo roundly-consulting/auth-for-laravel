@@ -4,9 +4,16 @@ declare(strict_types=1);
 
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Notification;
+use RoundlyConsulting\Auth\Actions\Challenges\BeginPasskeyEnrolmentStep;
+use RoundlyConsulting\Auth\Events\PasskeyAdded;
 use RoundlyConsulting\Auth\Events\TwoFactorEnabled;
+use RoundlyConsulting\Auth\Exceptions\ChallengeInvalid;
+use RoundlyConsulting\Auth\Support\ChallengeContext;
 use RoundlyConsulting\Auth\Support\Models;
 use RoundlyConsulting\Auth\Tests\Fixtures\Models\User;
+use RoundlyConsulting\Passkeys\Facades\Passkeys;
+use RoundlyConsulting\Passkeys\Models\Passkey;
+use RoundlyConsulting\Passkeys\Testing\VirtualAuthenticator;
 
 /**
  * Every factor step and management endpoint re-checks the account's CURRENT factor state:
@@ -116,3 +123,54 @@ it('refuses to regenerate recovery codes or disable totp for an account without 
     'regenerate recovery codes' => ['POST', '/users/auth/two-factor/recovery-codes'],
     'disable' => ['DELETE', '/users/auth/two-factor'],
 ]);
+
+it('refuses a stale passkey enrolment once the owner registered a passkey', function (): void {
+    Event::fake([PasskeyAdded::class]);
+    $this->configureGuard('users', ['passkeys.second_factor' => 'required']);
+    $user = User::factory()->create();
+
+    // An attacker holding the password opens a challenge that needs enrol_passkey…
+    $attacker = openChallenge($user, 'Attacker/1.0');
+
+    // …the owner registers a passkey meanwhile (passkey_changed = none kills nothing)…
+    registerVirtualPasskey($user);
+
+    // …while the attacker's ceremony was already under way (begun just before the key landed).
+    $options = Passkeys::registrationOptions($user);
+    ChallengeContext::put(Models::challenges()->sole(), 'passkey_enrolment_ceremony', $options->ceremonyId);
+
+    // The stale challenge must not add the attacker's key.
+    $this->postJson('/users/auth/challenge/passkey/enrol', ['challenge_token' => $attacker, 'credential' => attestationPayload(VirtualAuthenticator::es256()->register($options))], ['User-Agent' => 'Attacker/1.0'])
+        ->assertStatus(422)
+        ->assertJsonPath('code', 'challenge_invalid');
+
+    expect(Passkey::query()->count())->toBe(1)
+        ->and(Models::challenges()->sole()->invalidated_reason)->toBe('factor_changed');
+    Event::assertNotDispatched(PasskeyAdded::class);
+});
+
+it('refuses to begin a stale passkey enrolment', function (): void {
+    $this->configureGuard('users', ['passkeys.second_factor' => 'required']);
+    $user = User::factory()->create();
+    $token = openChallenge($user);
+
+    registerVirtualPasskey($user);
+
+    expect(fn () => app(BeginPasskeyEnrolmentStep::class)->execute('users', $token, sessionContext()))->toThrow(ChallengeInvalid::class)
+        ->and(Models::challenges()->sole()->invalidated_at)->not->toBeNull();
+});
+
+it('re-checks the enrolment gate when the passkey is registered', function (): void {
+    $this->configureGuard('users', ['passkeys.second_factor' => 'required', 'challenge.enrolment_requires_verified_email' => false]);
+    $user = User::factory()->unverified()->create();
+    $token = openChallenge($user);
+    $options = app(BeginPasskeyEnrolmentStep::class)->execute('users', $token, sessionContext());
+
+    $this->configureGuard('users', ['challenge.enrolment_requires_verified_email' => true]);
+
+    $this->postJson('/users/auth/challenge/passkey/enrol', ['challenge_token' => $token, 'credential' => attestationPayload(VirtualAuthenticator::es256()->register($options))], ['User-Agent' => 'PestBrowser/1.0'])
+        ->assertStatus(403)
+        ->assertJsonPath('code', 'enrolment_required');
+
+    expect(Passkey::query()->count())->toBe(0);
+});

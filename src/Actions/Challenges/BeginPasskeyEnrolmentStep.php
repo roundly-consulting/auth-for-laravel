@@ -13,19 +13,23 @@ use RoundlyConsulting\Auth\Exceptions\EnrolmentRequired;
 use RoundlyConsulting\Auth\Guards\GuardRegistry;
 use RoundlyConsulting\Auth\Support\AccountModels;
 use RoundlyConsulting\Auth\Support\ChallengeContext;
+use RoundlyConsulting\Auth\Support\ReauthenticationMethods;
 use RoundlyConsulting\Passkeys\DataTransferObjects\CreationOptionsData;
 use RoundlyConsulting\Passkeys\Facades\Passkeys;
 use SensitiveParameter;
 
 /**
  * Registration options for a forced passkey enrolment inside a challenge (idempotent:
- * calling again starts a new ceremony without counting an attempt).
+ * calling again starts a new ceremony without counting an attempt). Once the account
+ * has a passkey the step is stale and the challenge ends — a fresh login asks for the
+ * passkey instead of letting whoever holds this challenge add one.
  */
 final readonly class BeginPasskeyEnrolmentStep
 {
     public function __construct(
         private GuardRegistry $guards,
         private FindActiveChallenge $findChallenge,
+        private InvalidateChallenge $invalidateChallenge,
     ) {}
 
     public function execute(string $guard, #[SensitiveParameter] string $challengeToken, SessionContext $context): CreationOptionsData
@@ -42,6 +46,10 @@ final readonly class BeginPasskeyEnrolmentStep
 
         if (! $config->allowsEnrolmentInChallenge() || ($config->enrolmentRequiresVerifiedEmail() && ! $account->hasVerifiedEmail())) {
             throw new EnrolmentRequired;
+        }
+
+        if (ReauthenticationMethods::hasPasskeys($config, $account)) {
+            $this->invalidateChallenge->execute($challenge);
         }
 
         $options = Passkeys::registrationOptions(AccountModels::passkeys($account));

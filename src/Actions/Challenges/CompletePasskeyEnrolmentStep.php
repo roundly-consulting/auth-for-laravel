@@ -18,10 +18,12 @@ use RoundlyConsulting\Auth\Enums\NotificationType;
 use RoundlyConsulting\Auth\Events\PasskeyAdded;
 use RoundlyConsulting\Auth\Exceptions\ChallengeFactorFailed;
 use RoundlyConsulting\Auth\Exceptions\ChallengeInvalid;
+use RoundlyConsulting\Auth\Exceptions\EnrolmentRequired;
 use RoundlyConsulting\Auth\Guards\GuardRegistry;
 use RoundlyConsulting\Auth\Models\LoginChallenge;
 use RoundlyConsulting\Auth\Support\AccountModels;
 use RoundlyConsulting\Auth\Support\NotificationDispatcher;
+use RoundlyConsulting\Auth\Support\ReauthenticationMethods;
 use RoundlyConsulting\Crypto\Hash\ConstantTime;
 use RoundlyConsulting\Passkeys\Exceptions\PasskeyException;
 use RoundlyConsulting\Passkeys\Facades\Passkeys;
@@ -29,7 +31,8 @@ use RoundlyConsulting\Passkeys\Facades\Passkeys;
 /**
  * Registers the passkey of a forced enrolment. The new credential also satisfies this
  * login's factor (amr `hwk`); `invalidation.passkey_changed` applies to the account's
- * other sessions, never to this challenge.
+ * other sessions, never to this challenge. The enrolment gate is re-checked, and a
+ * passkey registered meanwhile (anywhere) ends the challenge instead.
  */
 final readonly class CompletePasskeyEnrolmentStep
 {
@@ -40,6 +43,7 @@ final readonly class CompletePasskeyEnrolmentStep
         private AdvanceChallenge $advance,
         private InvalidateAccountTokens $invalidate,
         private NotificationDispatcher $notifications,
+        private InvalidateChallenge $invalidateChallenge,
     ) {}
 
     public function execute(string $guard, ChallengeFactorData $data): LoginResult
@@ -52,6 +56,14 @@ final readonly class CompletePasskeyEnrolmentStep
 
         if (! $account instanceof Account) {
             throw new ChallengeInvalid;
+        }
+
+        if (! $config->allowsEnrolmentInChallenge() || ($config->enrolmentRequiresVerifiedEmail() && ! $account->hasVerifiedEmail())) {
+            throw new EnrolmentRequired;
+        }
+
+        if (ReauthenticationMethods::hasPasskeys($config, $account)) {
+            $this->invalidateChallenge->execute($challenge);
         }
 
         $ceremony = $challenge->contextValue('passkey_enrolment_ceremony');
