@@ -54,7 +54,8 @@ use RoundlyConsulting\Passkeys\DataTransferObjects\RequestOptionsData;
 use SensitiveParameter;
 
 /**
- * The per-guard, discoverable surface: every method is one action call.
+ * The per-guard, discoverable surface: every method is one action call. A method taking
+ * an account refuses one of another guard's model ({@see AccountRepository::ensureOwns()}).
  *
  * ```php
  * Authentication::guard('clients')->attempt($credentials, SessionContext::fromRequest($request));
@@ -162,6 +163,8 @@ final readonly class GuardContext
      */
     public function issueTokens(Account $account, SessionContext $context, LoginMethod $method = LoginMethod::Host, array $authMethods = []): TokenPair
     {
+        $this->own($account);
+
         $tokens = $this->container->make(IssueTokenPair::class)->execute($this->config, $account, $method, $authMethods, $context);
 
         event(new TokensIssued($this->name(), $account, $tokens->sessionId, $tokens->accessTokenId, $method));
@@ -179,26 +182,36 @@ final readonly class GuardContext
      */
     public function sessions(Account $account, ?string $currentSessionId = null): Collection
     {
+        $this->own($account);
+
         return $this->container->make(ListSessions::class)->execute($this->name(), $account, $currentSessionId);
     }
 
     public function logout(Account $account, CurrentToken $current): void
     {
+        $this->own($account);
+
         $this->container->make(LogoutCurrentSession::class)->execute($this->name(), $account, $current);
     }
 
     public function logoutSession(Account $account, string $sessionId): void
     {
+        $this->own($account);
+
         $this->container->make(LogoutSession::class)->execute($this->name(), $account, $sessionId);
     }
 
     public function logoutOthers(Account $account, CurrentToken $current): int
     {
+        $this->own($account);
+
         return $this->container->make(LogoutOtherSessions::class)->execute($this->name(), $account, $current);
     }
 
     public function logoutEverywhere(Account $account): int
     {
+        $this->own($account);
+
         return $this->container->make(LogoutEverywhere::class)->execute($this->name(), $account);
     }
 
@@ -208,6 +221,8 @@ final readonly class GuardContext
      */
     public function invalidate(Account $account, InvalidationReason $reason, ?CurrentToken $keep = null, ?SessionContext $context = null): ?TokenPair
     {
+        $this->own($account);
+
         return $this->container->make(InvalidateAccountTokens::class)
             ->execute($this->config, $account, $reason, $keep, $context ?? new SessionContext)
             ->tokens;
@@ -217,16 +232,30 @@ final readonly class GuardContext
 
     public function disable(Account $account, ?string $reason = null): void
     {
+        $this->own($account);
+
         $this->container->make(DisableAccount::class)->execute($this->name(), $account, $reason);
     }
 
     public function enable(Account $account): void
     {
+        $this->own($account);
+
         $this->container->make(EnableAccount::class)->execute($this->name(), $account);
     }
 
     public function unlock(Account $account): void
     {
+        $this->own($account);
+
         $this->container->make(UnlockAccount::class)->execute($this->name(), $account);
+    }
+
+    /**
+     * Every account-taking method refuses an account of another guard's model.
+     */
+    private function own(Account $account): void
+    {
+        $this->accounts()->ensureOwns($account);
     }
 }

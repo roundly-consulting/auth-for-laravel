@@ -18,6 +18,7 @@ use RoundlyConsulting\Auth\Enums\LoginMethod;
 use RoundlyConsulting\Auth\Enums\OneTimeTokenPurpose;
 use RoundlyConsulting\Auth\Events\AccountTokensInvalidated;
 use RoundlyConsulting\Auth\Events\TokensIssued;
+use RoundlyConsulting\Auth\Guards\AccountRepository;
 use RoundlyConsulting\Auth\Guards\GuardConfig;
 use RoundlyConsulting\Auth\Support\AccountModels;
 use RoundlyConsulting\Auth\Support\AccountState;
@@ -57,6 +58,8 @@ final readonly class InvalidateAccountTokens
         SessionContext $context,
         ?int $exceptChallengeId = null,
     ): InvalidationResult {
+        (new AccountRepository($guard))->ensureOwns($account);
+
         $scope = $guard->invalidationScope($reason);
 
         if ($scope === InvalidationScope::None) {

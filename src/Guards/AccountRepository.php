@@ -9,6 +9,8 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Database\Eloquent\SoftDeletingScope;
 use RoundlyConsulting\Auth\Contracts\Account;
+use RoundlyConsulting\Auth\Exceptions\AuthenticationMisconfigured;
+use RoundlyConsulting\Auth\Support\AccountModels;
 use RoundlyConsulting\PackageToolkit\Support\RawExpression;
 
 /**
@@ -22,6 +24,23 @@ final readonly class AccountRepository
     public function morphClass(): string
     {
         return $this->newModel()->getMorphClass();
+    }
+
+    /**
+     * Refuse an account of another guard's model. The morph class is the isolation
+     * boundary (refresh families, challenges, one-time tokens, activity): acting on a
+     * foreign account through this guard would mint tokens whose `sub` names an account
+     * of this guard with the same key.
+     *
+     * @throws AuthenticationMisconfigured
+     */
+    public function ensureOwns(Account $account): void
+    {
+        $morphClass = AccountModels::of($account)->getMorphClass();
+
+        if ($morphClass !== $this->morphClass()) {
+            throw AuthenticationMisconfigured::because("The account [{$morphClass}] belongs to another guard than [{$this->guard->name()}].");
+        }
     }
 
     public function newModel(): Model&Account

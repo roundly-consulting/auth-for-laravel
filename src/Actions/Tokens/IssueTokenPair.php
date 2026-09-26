@@ -12,6 +12,7 @@ use RoundlyConsulting\Auth\DataTransferObjects\SessionContext;
 use RoundlyConsulting\Auth\DataTransferObjects\TokenPair;
 use RoundlyConsulting\Auth\Enums\AuthMethodReference;
 use RoundlyConsulting\Auth\Enums\LoginMethod;
+use RoundlyConsulting\Auth\Guards\AccountRepository;
 use RoundlyConsulting\Auth\Guards\GuardConfig;
 use RoundlyConsulting\Auth\Support\AccountModels;
 use RoundlyConsulting\Jwt\Facades\Jwt;
@@ -43,6 +44,8 @@ final readonly class IssueTokenPair
         SessionContext $context,
         ?CarbonImmutable $authTime = null,
     ): TokenPair {
+        (new AccountRepository($guard))->ensureOwns($account);
+
         $authTime ??= CarbonImmutable::now();
         $sessionId = (string) Str::uuid();
 
