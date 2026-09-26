@@ -166,7 +166,7 @@ return [
             'enabled' => true,
             'ttl' => 3_600,
             'notify_old' => true,
-            'require_reauthentication' => true,
+            'require_reauthentication' => true,  // false switches the gate off; else reauthentication.required_for decides (change_email)
         ],
 
         'magic_link' => ['ttl' => 900, 'same_device' => false],
@@ -219,6 +219,8 @@ return [
             'methods' => ['password', 'totp', 'recovery_code', 'passkey', 'email_otp'],
             'require_second_factor_when_enrolled' => true,  // 2FA/passkey accounts must reauth with totp|recovery_code|passkey
             'fresh_login_counts' => true,                   // auth_time within timeout satisfies the check
+            // Sensitive actions gated by a recent reauthentication; drop an entry to drop its gate
+            // (list: replaced, not merged). set_password = an account without a password setting one.
             'required_for' => ['enable_two_factor', 'disable_two_factor', 'regenerate_recovery_codes',
                 'register_passkey', 'remove_passkey', 'change_email', 'set_password', 'logout_everywhere'],
         ],

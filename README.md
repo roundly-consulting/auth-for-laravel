@@ -229,7 +229,7 @@ one table is authorization, not a guard) or an audience.
 | `verification.ttl` / `.code_length` / `.max_attempts` | 1 day / 6 / 5 | verification secrets |
 | `verification.resend_decay` | `60` | per-account resend cooldown |
 | `verification.verify_on_email_login` | `true` | a magic-link / email-code login verifies the address |
-| `email_change.enabled` / `.ttl` / `.notify_old` / `.require_reauthentication` | `true` / 1 h / `true` / `true` | verified email change |
+| `email_change.enabled` / `.ttl` / `.notify_old` / `.require_reauthentication` | `true` / 1 h / `true` / `true` | verified email change (`.require_reauthentication = false` drops its gate; otherwise `required_for` decides) |
 | `magic_link.ttl` / `.same_device` | 15 min / `false` | magic links (same-device binds to the requesting device) |
 | `email_otp.ttl` / `.length` / `.max_attempts` | 10 min / 6 / 5 | email codes (also re-authentication codes) |
 | `passwords.reset.enabled` / `.ttl` / `.login_after` | `true` / 1 h / `false` | password reset |
@@ -245,7 +245,7 @@ one table is authorization, not a guard) or an audience.
 | `reauthentication.methods` | all five | allowed methods |
 | `reauthentication.require_second_factor_when_enrolled` | `true` | accounts with a second factor must use it |
 | `reauthentication.fresh_login_counts` | `true` | a login within the window counts |
-| `reauthentication.required_for` | eight actions | `SensitiveAction` values that need a recent re-authentication |
+| `reauthentication.required_for` | all eight actions | `SensitiveAction` values that need a recent re-authentication; remove one to drop its gate (`set_password` = a passwordless account setting a first password) |
 | `activity.enabled` / `.store_identifier` / `.retention_days` | `true` / `plain` / `90` | login-activity log (`plain`, `hash`, `none`) |
 | `activity.new_device.enabled` / `.header` / `.skip_first_login` | `true` / `X-Device-Id` / `true` | new-device detection |
 | `risk.assessor` / `.reactions.elevated` / `.reactions.high` / `.deny_response` | `null` / `notify` / `require_second_factor` / `uniform` | risk hooks |
