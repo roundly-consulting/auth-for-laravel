@@ -17,13 +17,13 @@ final class PruneCommand extends Command
     {
         $days = $this->option('days');
 
-        if ($days !== null && (! is_string($days) || ! ctype_digit($days))) {
+        if (is_string($days) && ! ctype_digit($days)) {
             $this->components->error('--days must be a whole number.');
 
             return self::FAILURE;
         }
 
-        $report = $prune->execute($days === null ? null : (int) $days);
+        $report = $prune->execute(is_string($days) ? (int) $days : null);
 
         $this->components->twoColumnDetail('Challenges', (string) $report->challenges);
         $this->components->twoColumnDetail('One-time tokens', (string) $report->oneTimeTokens);
