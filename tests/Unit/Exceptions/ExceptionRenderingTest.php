@@ -28,6 +28,7 @@ dataset('exceptions', [
     [Exceptions\TwoFactorRequired::class, 409, 'two_factor_required', null],
     [Exceptions\LastCredential::class, 409, 'last_credential', null],
     [Exceptions\TwoFactorAlreadyEnabled::class, 409, 'two_factor_already_enabled', null],
+    [Exceptions\TwoFactorNotEnabled::class, 409, 'two_factor_not_enabled', null],
     [Exceptions\PasskeyRegistrationFailed::class, 422, 'passkey_registration_failed', 'credential'],
     [Exceptions\SessionNotFound::class, 404, 'not_found', null],
     [Exceptions\PasskeyNotFound::class, 404, 'not_found', null],

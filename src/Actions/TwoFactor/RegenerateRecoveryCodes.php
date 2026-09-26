@@ -13,6 +13,7 @@ use RoundlyConsulting\Auth\Enums\InvalidationReason;
 use RoundlyConsulting\Auth\Enums\TwoFactorMode;
 use RoundlyConsulting\Auth\Events\RecoveryCodesRegenerated;
 use RoundlyConsulting\Auth\Exceptions\LoginMethodDisabled;
+use RoundlyConsulting\Auth\Exceptions\TwoFactorNotEnabled;
 use RoundlyConsulting\Auth\Guards\GuardRegistry;
 use RoundlyConsulting\Auth\Support\AccountModels;
 use RoundlyConsulting\TwoFactor\Actions\RegenerateRecoveryCodes as RegenerateRecoveryCodesAction;
@@ -20,6 +21,7 @@ use RoundlyConsulting\TwoFactor\Actions\RegenerateRecoveryCodes as RegenerateRec
 /**
  * Replaces the recovery codes (plaintext returned once), applies
  * `invalidation.two_factor_changed`, and returns the pair re-issued to the caller.
+ * Refused (409) for an account without TOTP — before any write or invalidation.
  */
 final readonly class RegenerateRecoveryCodes
 {
@@ -37,7 +39,13 @@ final readonly class RegenerateRecoveryCodes
             throw new LoginMethodDisabled;
         }
 
-        $codes = $this->regenerate->execute(AccountModels::twoFactor($account));
+        $model = AccountModels::twoFactor($account);
+
+        if (! $model->hasTwoFactorEnabled()) {
+            throw new TwoFactorNotEnabled;
+        }
+
+        $codes = $this->regenerate->execute($model);
 
         event(new RecoveryCodesRegenerated($guard, $account));
 

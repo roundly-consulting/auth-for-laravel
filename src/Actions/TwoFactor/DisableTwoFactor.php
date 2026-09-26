@@ -15,6 +15,7 @@ use RoundlyConsulting\Auth\Enums\NotificationType;
 use RoundlyConsulting\Auth\Enums\TwoFactorMode;
 use RoundlyConsulting\Auth\Events\TwoFactorDisabled;
 use RoundlyConsulting\Auth\Exceptions\LoginMethodDisabled;
+use RoundlyConsulting\Auth\Exceptions\TwoFactorNotEnabled;
 use RoundlyConsulting\Auth\Exceptions\TwoFactorRequired;
 use RoundlyConsulting\Auth\Guards\GuardRegistry;
 use RoundlyConsulting\Auth\Support\AccountModels;
@@ -22,7 +23,8 @@ use RoundlyConsulting\Auth\Support\NotificationDispatcher;
 use RoundlyConsulting\TwoFactor\Actions\DisableTwoFactor as DisableTwoFactorAction;
 
 /**
- * Disables TOTP — refused (409) while the guard requires it. Applies
+ * Disables TOTP — refused (409) while the guard requires it, or when the account has
+ * none enabled (nothing is written, invalidated or announced). Applies
  * `invalidation.two_factor_changed` and returns the pair re-issued to the caller.
  */
 final readonly class DisableTwoFactor
@@ -44,7 +46,13 @@ final readonly class DisableTwoFactor
             TwoFactorMode::Optional => null,
         };
 
-        $this->disable->execute(AccountModels::twoFactor($account));
+        $model = AccountModels::twoFactor($account);
+
+        if (! $model->hasTwoFactorEnabled()) {
+            throw new TwoFactorNotEnabled;
+        }
+
+        $this->disable->execute($model);
 
         event(new TwoFactorDisabled($guard, $account));
         $this->notifications->send($config, NotificationType::TwoFactorDisabled, $account, new NotificationData($guard));

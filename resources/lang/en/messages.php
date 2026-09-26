@@ -24,6 +24,7 @@ return [
         'two_factor_required' => 'Two-factor authentication is required and cannot be disabled.',
         'last_credential' => 'This is your last way to sign in and cannot be removed.',
         'two_factor_already_enabled' => 'Two-factor authentication is already enabled.',
+        'two_factor_not_enabled' => 'Two-factor authentication is not enabled.',
         'passkey_registration_failed' => 'The passkey could not be registered.',
         'not_found' => 'Not found.',
         'login_denied' => 'This sign-in was blocked for your security.',

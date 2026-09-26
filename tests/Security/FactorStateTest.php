@@ -99,3 +99,20 @@ it('refuses an account-level confirmation once totp is enabled, leaving every se
     Event::assertNotDispatched(TwoFactorEnabled::class);
     Notification::assertNothingSent();
 });
+
+it('refuses to regenerate recovery codes or disable totp for an account without it', function (string $method, string $uri): void {
+    $user = User::factory()->create();
+    $other = issuePair($user);
+
+    $this->json($method, $uri, [], bearer(issuePair($user)))
+        ->assertStatus(409)
+        ->assertJsonPath('code', 'two_factor_not_enabled');
+
+    $this->getJson('/users/auth/me', bearer($other))->assertOk();
+    expect($user->fresh()?->getAttribute('two_factor_recovery_codes'))->toBeNull()
+        ->and($user->fresh()?->tokenVersion())->toBe(0);
+    Notification::assertNothingSent();
+})->with([
+    'regenerate recovery codes' => ['POST', '/users/auth/two-factor/recovery-codes'],
+    'disable' => ['DELETE', '/users/auth/two-factor'],
+]);
