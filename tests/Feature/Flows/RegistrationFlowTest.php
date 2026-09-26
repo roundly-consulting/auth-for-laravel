@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Notification;
+use RoundlyConsulting\Auth\DataTransferObjects\PasswordCredentials;
 use RoundlyConsulting\Auth\DataTransferObjects\RegistrationData;
 use RoundlyConsulting\Auth\Enums\RegistrationStatus;
 use RoundlyConsulting\Auth\Events\AccountRegistered;
@@ -135,4 +136,14 @@ it('keeps host attributes ruled by dotted and wildcard keys, and nothing unruled
     );
 
     expect($clean)->toBe(['name' => 'N', 'profile' => ['city' => 'Bratislava'], 'tags' => ['a', 'b']]);
+});
+
+it('treats the composed and decomposed spellings of an address as one account', function (): void {
+    $this->configureGuard('users', ['registration.login_after' => false]);
+    User::factory()->create(['email' => "jos\u{00E9}@example.com"]);
+
+    $this->postJson('/users/auth/register', ['email' => "jose\u{0301}@example.com", 'password' => 'a-long-enough-passphrase', 'attributes' => ['name' => 'Jose']])->assertStatus(202);
+
+    expect(User::query()->count())->toBe(1)
+        ->and(Authentication::guard('users')->attempt(new PasswordCredentials("jose\u{0301}@example.com", 'correct-horse-battery'), sessionContext())->isAuthenticated())->toBeTrue();
 });

@@ -165,3 +165,13 @@ it('keeps a throttled request out of the counts', function (): void {
     // So the account bucket (3) still has one attempt left from another ip.
     expect(Authentication::guard('users')->attempt(new PasswordCredentials($user->email, 'correct-horse-battery'), sessionContext(ip: '2.2.2.2'))->isAuthenticated())->toBeTrue();
 });
+
+it('counts the composed and decomposed spellings of an identifier in one bucket', function (): void {
+    $user = User::factory()->create(['email' => "jos\u{00E9}@example.com"]);
+
+    foreach (range(1, 5) as $attempt) {
+        failLogin("jose\u{0301}@example.com");
+    }
+
+    expect(fn () => Authentication::guard('users')->attempt(new PasswordCredentials($user->email, 'correct-horse-battery'), sessionContext()))->toThrow(TooManyAttempts::class);
+});

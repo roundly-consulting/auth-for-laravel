@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace RoundlyConsulting\Auth\Support;
 
 use RoundlyConsulting\Auth\Enums\ThrottleKind;
+use RoundlyConsulting\Auth\Guards\AccountRepository;
 use RoundlyConsulting\Auth\Guards\GuardConfig;
 use SensitiveParameter;
 
@@ -18,7 +19,7 @@ final readonly class ThrottleKey
 
     public function for(GuardConfig $guard, ThrottleKind $kind, #[SensitiveParameter] ?string $identifier, ?string $ip): string
     {
-        $id = $identifier === null || $identifier === '' ? '-' : $this->hasher->identifier($guard->name(), mb_strtolower(trim($identifier)));
+        $id = $identifier === null || $identifier === '' ? '-' : $this->hasher->identifier($guard->name(), mb_strtolower(AccountRepository::compose(trim($identifier))));
         $ip ??= '-';
 
         $discriminator = match ($kind) {

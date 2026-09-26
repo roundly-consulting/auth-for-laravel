@@ -169,7 +169,8 @@
         "roundly-consulting/passkeys-for-laravel": "@dev",
         "roundly-consulting/qr-for-laravel": "@dev",
         "roundly-consulting/refresh-tokens-for-laravel": "@dev",
-        "roundly-consulting/two-factor-for-laravel": "@dev"
+        "roundly-consulting/two-factor-for-laravel": "@dev",
+        "symfony/polyfill-intl-normalizer": "^1.31"
     },
     "require-dev": {
         "larastan/larastan": "^3.0",

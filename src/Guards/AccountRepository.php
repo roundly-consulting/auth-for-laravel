@@ -8,6 +8,7 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Database\Eloquent\SoftDeletingScope;
+use Normalizer;
 use RoundlyConsulting\Auth\Contracts\Account;
 use RoundlyConsulting\Auth\Exceptions\AuthenticationMisconfigured;
 use RoundlyConsulting\Auth\Support\AccountModels;
@@ -107,11 +108,26 @@ final readonly class AccountRepository
         return $this->normalize($email);
     }
 
+    /**
+     * Trimmed, Unicode-composed (NFC) — `josé` typed as `e` + a combining accent is the
+     * same address as the precomposed `é`, one account and one throttle bucket — and
+     * lowercased unless the guard keeps identifiers as typed.
+     */
     public function normalize(string $identifier): string
     {
-        $identifier = trim($identifier);
+        $identifier = self::compose(trim($identifier));
 
         return $this->guard->lowercasesIdentifiers() ? mb_strtolower($identifier) : $identifier;
+    }
+
+    /**
+     * Canonical composition (NFC); invalid UTF-8 is left as it is.
+     */
+    public static function compose(string $value): string
+    {
+        $composed = Normalizer::normalize($value, Normalizer::FORM_C);
+
+        return is_string($composed) ? $composed : $value;
     }
 
     /**
