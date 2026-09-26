@@ -22,6 +22,7 @@ use RoundlyConsulting\Auth\Support\Throttle;
 use RoundlyConsulting\Jwt\Facades\Jwt;
 use RoundlyConsulting\RefreshTokens\DataTransferObjects\IssueContext;
 use RoundlyConsulting\RefreshTokens\Enums\RevocationReason;
+use RoundlyConsulting\RefreshTokens\Exceptions\InvalidTokenFamilyException;
 use RoundlyConsulting\RefreshTokens\Facades\RefreshToken;
 use SensitiveParameter;
 
@@ -33,6 +34,11 @@ use SensitiveParameter;
  * `rotate()`: the replacement's access reference must be the jti minted AFTER the
  * redeem. `amr`/`auth_time`/device data are inherited from the family's newest row.
  * Only failures are recorded as activity (volume).
+ *
+ * The family can die between the redeem and the issue — reuse detection, a logout,
+ * a credential change or a disable landing concurrently. refresh-tokens then refuses to
+ * extend it (or hands back an already-revoked row); either way the access token just
+ * minted is denied and the answer is a plain 401, never a 500 or a live session.
  */
 final readonly class RefreshTokenPair
 {
@@ -73,16 +79,19 @@ final readonly class RefreshTokenPair
             $authTime,
         ));
 
-        $replacement = RefreshToken::issue($redeemed->user, new IssueContext(
-            ipAddress: $context->ipAddress,
-            userAgent: $context->userAgent,
-            accessReference: $access->jti,
-            familyId: $redeemed->familyId,
-            ttl: $config->refreshTtl(),
-        ));
+        try {
+            $replacement = RefreshToken::issue($redeemed->user, new IssueContext(
+                ipAddress: $context->ipAddress,
+                userAgent: $context->userAgent,
+                accessReference: $access->jti,
+                familyId: $redeemed->familyId,
+                ttl: $config->refreshTtl(),
+            ));
+        } catch (InvalidTokenFamilyException) {
+            $replacement = null;
+        }
 
-        // Reuse detection may have killed the family around the insert.
-        if ($replacement->token->revoked_at !== null) {
+        if ($replacement === null || $replacement->token->revoked_at !== null) {
             Jwt::denylist()->deny($access->jti, $access->expiresAt);
             $this->fail($guard, $context, $owner, 'revoked');
         }

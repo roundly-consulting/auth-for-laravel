@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use Illuminate\Database\UniqueConstraintViolationException;
+use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Notification;
 use Illuminate\Validation\ValidationException;
 use RoundlyConsulting\Auth\Actions\OneTimeTokens\ConsumeOneTimeToken;
@@ -19,6 +20,10 @@ use RoundlyConsulting\Auth\Guards\GuardConfig;
 use RoundlyConsulting\Auth\Models\OneTimeToken;
 use RoundlyConsulting\Auth\Notifications\MagicLinkNotification;
 use RoundlyConsulting\Auth\Tests\Fixtures\Models\User;
+use RoundlyConsulting\Jwt\Events\UserTokenIssued;
+use RoundlyConsulting\Jwt\Facades\Jwt;
+use RoundlyConsulting\RefreshTokens\Events\RefreshTokenRedeemed;
+use RoundlyConsulting\RefreshTokens\Facades\RefreshToken;
 
 /**
  * Interleaved stale reads: the loser of each race sees the winner's write and gets the
@@ -69,3 +74,61 @@ it('never lets the unique index be bypassed', function (): void {
 
     User::factory()->create(['email' => 'dup@example.com']);
 })->throws(UniqueConstraintViolationException::class);
+
+/**
+ * Runs `$interleave` once, right after the refresh under test redeemed its token and
+ * before it issues the replacement; returns the jtis minted meanwhile.
+ *
+ * @return ArrayObject<int, string>
+ */
+function interleaveRefresh(Closure $interleave): ArrayObject
+{
+    $minted = new ArrayObject;
+    $fired = false;
+
+    Event::listen(RefreshTokenRedeemed::class, function () use ($interleave, &$fired): void {
+        if (! $fired) {
+            $fired = true;
+            $interleave();
+        }
+    });
+    Event::listen(UserTokenIssued::class, static function (UserTokenIssued $event) use ($minted): void {
+        $minted[] = $event->jti;
+    });
+
+    return $minted;
+}
+
+it('answers 401 when a refresh loses the race to reuse detection', function (): void {
+    Notification::fake();
+    $user = User::factory()->create();
+    $first = issuePair($user);
+    $second = Authentication::guard('users')->refresh($first->refreshToken, sessionContext())->refreshToken;
+
+    // A thief replays the already-rotated first token while the owner's refresh is under way.
+    $minted = interleaveRefresh(static fn () => RefreshToken::redeem($first->refreshToken));
+
+    test()->postJson('/users/auth/refresh', ['refresh_token' => $second], ['User-Agent' => 'PestBrowser/1.0'])
+        ->assertStatus(401)
+        ->assertJsonPath('code', 'refresh_invalid');
+
+    expect($minted)->toHaveCount(1)
+        ->and(Jwt::denylist()->has($minted[0]))->toBeTrue()
+        ->and(RefreshToken::listFor($user))->toBeEmpty();
+});
+
+it('answers 401 when a logout everywhere lands mid-refresh, leaving no live session', function (): void {
+    Notification::fake();
+    $user = User::factory()->create();
+    $pair = issuePair($user);
+
+    $minted = interleaveRefresh(static fn () => Authentication::guard('users')->logoutEverywhere($user->fresh() ?? $user));
+
+    test()->postJson('/users/auth/refresh', ['refresh_token' => $pair->refreshToken], ['User-Agent' => 'PestBrowser/1.0'])
+        ->assertStatus(401)
+        ->assertJsonPath('code', 'refresh_invalid');
+
+    expect($minted)->toHaveCount(1)
+        ->and(Jwt::denylist()->has($minted[0]))->toBeTrue()
+        ->and(RefreshToken::listFor($user))->toBeEmpty();
+});
