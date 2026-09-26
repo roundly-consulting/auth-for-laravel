@@ -45,12 +45,11 @@ final readonly class VerifyEmailOtp
         }
 
         $kinds = [ThrottleKind::Login, ThrottleKind::LoginIp, ThrottleKind::LoginAccount];
-        $this->throttle->ensure($config, $kinds, $email, $context, ActivityType::EmailOtpLogin);
+        $this->throttle->attempt($config, $kinds, $email, $context, ActivityType::EmailOtpLogin);
 
         try {
             $redeemed = $this->verify->execute($guard, OneTimeTokenPurpose::EmailOtp, $email, $code);
         } catch (InvalidCode $e) {
-            $this->throttle->hit($config, $kinds, $email, $context->ipAddress);
             $this->recordActivity->execute(new LoginActivityData(
                 guard: $guard,
                 type: ActivityType::EmailOtpLogin,
@@ -62,6 +61,8 @@ final readonly class VerifyEmailOtp
 
             throw $e;
         }
+
+        $this->throttle->release($config, $kinds, $email, $context->ipAddress);
 
         return $this->completeFirstFactor->execute($config, $redeemed->account, LoginMethod::EmailOtp, $context, [AuthMethodReference::Otp]);
     }

@@ -2,15 +2,26 @@
 
 declare(strict_types=1);
 
+use Illuminate\Hashing\HashManager;
 use Illuminate\Support\Facades\Event;
+use Illuminate\Support\Facades\Hash;
+use Illuminate\Validation\ValidationException;
+use RoundlyConsulting\Auth\Actions\Account\Reauthenticate;
+use RoundlyConsulting\Auth\Actions\Passwords\ChangePassword;
+use RoundlyConsulting\Auth\DataTransferObjects\ChangePasswordData;
+use RoundlyConsulting\Auth\DataTransferObjects\CurrentToken;
 use RoundlyConsulting\Auth\DataTransferObjects\PasswordCredentials;
+use RoundlyConsulting\Auth\DataTransferObjects\ReauthenticationData;
+use RoundlyConsulting\Auth\Enums\ReauthenticationMethod;
 use RoundlyConsulting\Auth\Enums\ThrottleKind;
 use RoundlyConsulting\Auth\Events\LoginThrottled;
+use RoundlyConsulting\Auth\Exceptions\AuthException;
 use RoundlyConsulting\Auth\Exceptions\InvalidCredentials;
 use RoundlyConsulting\Auth\Exceptions\TooManyAttempts;
 use RoundlyConsulting\Auth\Facades\Authentication;
 use RoundlyConsulting\Auth\Models\LoginActivity;
 use RoundlyConsulting\Auth\Tests\Fixtures\Models\User;
+use RoundlyConsulting\Auth\Tests\Fixtures\ReentrantHasher;
 
 function failLogin(string $identifier, string $ip = '10.0.0.1'): void
 {
@@ -88,4 +99,69 @@ it('never counts a success toward the limit', function (): void {
     foreach (range(1, 8) as $attempt) {
         expect(Authentication::guard('users')->attempt(new PasswordCredentials($user->email, 'correct-horse-battery'), sessionContext())->isAuthenticated())->toBeTrue();
     }
+});
+
+/**
+ * @param  Closure(int): void  $guess
+ */
+function concurrentGuesses(Closure $guess, int $burst = 20): ReentrantHasher
+{
+    $hasher = new ReentrantHasher(app(HashManager::class)->driver('bcrypt'), $guess, $burst);
+    Hash::swap($hasher);
+
+    return $hasher;
+}
+
+it('counts concurrent password guesses before any of them is hashed', function (): void {
+    $this->configureGuard('users', ['throttle.login.max' => 5, 'throttle.login_account.max' => 5, 'throttle.login_ip.max' => 5]);
+    $user = User::factory()->create();
+
+    $guess = static function (int $n) use ($user): void {
+        try {
+            Authentication::guard('users')->attempt(new PasswordCredentials($user->email, "guess-{$n}"), sessionContext());
+        } catch (AuthException) {
+            // wrong, or throttled
+        }
+    };
+    $hasher = concurrentGuesses($guess);
+
+    $guess(0);
+
+    expect($hasher->checks)->toBe(5);
+});
+
+it('counts concurrent re-authentication and current-password guesses before hashing', function (string $action): void {
+    $user = User::factory()->create();
+    $current = CurrentToken::fromClaims(claimsOf(issuePair($user)));
+
+    $guess = static function (int $n) use ($action, $user, $current): void {
+        try {
+            match ($action) {
+                'reauthenticate' => app(Reauthenticate::class)->execute('users', $user, new ReauthenticationData(ReauthenticationMethod::Password, $current, sessionContext(), password: "guess-{$n}")),
+                'change password' => app(ChangePassword::class)->execute('users', $user, new ChangePasswordData("guess-{$n}", 'a-brand-new-passphrase', $current, sessionContext())),
+            };
+        } catch (AuthException|ValidationException) {
+            // wrong, or throttled
+        }
+    };
+    $hasher = concurrentGuesses($guess);
+
+    $guess(0);
+
+    // reauthentication.max = 5 per session.
+    expect($hasher->checks)->toBe(5);
+})->with(['reauthenticate', 'change password']);
+
+it('keeps a throttled request out of the counts', function (): void {
+    $this->configureGuard('users', ['throttle.login.max' => 2, 'throttle.login_account.max' => 3]);
+    $user = User::factory()->create();
+
+    failLogin($user->email, '1.1.1.1');
+    failLogin($user->email, '1.1.1.1');
+
+    // The identifier+ip bucket is full: refused without counting in the account bucket.
+    expect(fn () => Authentication::guard('users')->attempt(new PasswordCredentials($user->email, 'wrong-password'), sessionContext(ip: '1.1.1.1')))->toThrow(TooManyAttempts::class);
+
+    // So the account bucket (3) still has one attempt left from another ip.
+    expect(Authentication::guard('users')->attempt(new PasswordCredentials($user->email, 'correct-horse-battery'), sessionContext(ip: '2.2.2.2'))->isAuthenticated())->toBeTrue();
 });

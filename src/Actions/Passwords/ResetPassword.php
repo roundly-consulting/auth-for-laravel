@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace RoundlyConsulting\Auth\Actions\Passwords;
 
 use Carbon\CarbonImmutable;
+use Illuminate\Validation\ValidationException;
 use RoundlyConsulting\Auth\Actions\Activity\RecordLoginActivity;
 use RoundlyConsulting\Auth\Actions\Login\CompleteFirstFactor;
 use RoundlyConsulting\Auth\Actions\OneTimeTokens\ConsumeOneTimeToken;
@@ -63,7 +64,7 @@ final readonly class ResetPassword
             throw new LoginMethodDisabled;
         }
 
-        $this->throttle->ensure($config, [ThrottleKind::LoginIp], null, $data->context, ActivityType::PasswordReset);
+        $this->throttle->attempt($config, [ThrottleKind::LoginIp], null, $data->context, ActivityType::PasswordReset);
 
         $pending = Models::oneTimeTokens()
             ->forPurpose($guard, OneTimeTokenPurpose::PasswordReset)
@@ -75,13 +76,22 @@ final readonly class ResetPassword
             $this->fail($guard, $data);
         }
 
-        $this->policy->execute($config, $data->password, null, $pending->email);
+        try {
+            $this->policy->execute($config, $data->password, null, $pending->email);
+        } catch (ValidationException $e) {
+            // A policy failure is not a token guess.
+            $this->throttle->release($config, [ThrottleKind::LoginIp], null, $data->context->ipAddress);
+
+            throw $e;
+        }
 
         try {
             $account = $this->consume->execute($guard, OneTimeTokenPurpose::PasswordReset, $data->token, $data->context)->account;
         } catch (InvalidOneTimeToken) {
             $this->fail($guard, $data);
         }
+
+        $this->throttle->release($config, [ThrottleKind::LoginIp], null, $data->context->ipAddress);
 
         PasswordWriter::write($account, $data->password);
 
@@ -115,9 +125,6 @@ final readonly class ResetPassword
 
     private function fail(string $guard, PasswordResetData $data): never
     {
-        $config = $this->guards->get($guard);
-        $this->throttle->hit($config, [ThrottleKind::LoginIp], null, $data->context->ipAddress);
-
         $this->recordActivity->execute(new LoginActivityData(
             guard: $guard,
             type: ActivityType::PasswordReset,

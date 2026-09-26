@@ -27,7 +27,8 @@ use RoundlyConsulting\Auth\Support\Throttle;
 
 /**
  * Email/identifier + password. Throttled (identifier+IP, IP, identifier) BEFORE any
- * hashing; the password is always checked — against a dummy hash for unknown or
+ * hashing — the attempt is taken first and given back only when the password proves
+ * valid, so concurrent guesses are counted while they hash; the password is always checked — against a dummy hash for unknown or
  * passwordless accounts — so neither the response nor its timing reveals whether the
  * account exists. A hard-locked account answers every attempt with `too_many_attempts`.
  */
@@ -52,12 +53,13 @@ final readonly class AttemptPasswordLogin
 
         $kinds = [ThrottleKind::Login, ThrottleKind::LoginIp, ThrottleKind::LoginAccount];
 
-        $this->throttle->ensure($config, $kinds, $credentials->identifier, $context, ActivityType::PasswordLogin);
+        $this->throttle->attempt($config, $kinds, $credentials->identifier, $context, ActivityType::PasswordLogin);
 
         $account = (new AccountRepository($config))->findForLogin($credentials->identifier);
 
         if ($account !== null && $account->isLocked()) {
             $this->verifyPassword->execute(null, $credentials->password);
+            $this->throttle->release($config, $kinds, $credentials->identifier, $context->ipAddress);
             $this->fail($guard, $account, $credentials, $context, ActivityOutcome::Locked);
 
             throw TooManyAttempts::retryAfter(Lockout::secondsRemaining($account));
@@ -66,8 +68,6 @@ final readonly class AttemptPasswordLogin
         $valid = $this->verifyPassword->execute($account, $credentials->password);
 
         if ($account === null || ! $valid) {
-            $this->throttle->hit($config, $kinds, $credentials->identifier, $context->ipAddress);
-
             if ($account !== null) {
                 $this->lockout->recordFailure($config, $account);
             }
@@ -76,6 +76,9 @@ final readonly class AttemptPasswordLogin
 
             throw new InvalidCredentials;
         }
+
+        // Successes are not counted.
+        $this->throttle->release($config, $kinds, $credentials->identifier, $context->ipAddress);
 
         return $this->completeFirstFactor->execute($config, $account, LoginMethod::Password, $context, [AuthMethodReference::Pwd], $credentials);
     }

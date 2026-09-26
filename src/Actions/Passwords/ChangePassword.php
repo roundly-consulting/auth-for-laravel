@@ -54,15 +54,16 @@ final readonly class ChangePassword
         }
 
         $sessionKey = $data->current->sessionKey();
-        $this->throttle->ensure($config, [ThrottleKind::Reauthentication], $sessionKey, $data->context, ActivityType::Reauthentication);
+        $this->throttle->attempt($config, [ThrottleKind::Reauthentication], $sessionKey, $data->context, ActivityType::Reauthentication);
+
+        // Taken before the hash check; given back unless the current password was wrong.
+        if ($account->hasPassword() && ! $this->verifyPassword->execute($account, (string) $data->currentPassword)) {
+            throw ValidationException::withMessages(['current_password' => __('authentication::validation.password.current_incorrect')]);
+        }
+
+        $this->throttle->release($config, [ThrottleKind::Reauthentication], $sessionKey, $data->context->ipAddress);
 
         if ($account->hasPassword()) {
-            if (! $this->verifyPassword->execute($account, (string) $data->currentPassword)) {
-                $this->throttle->hit($config, [ThrottleKind::Reauthentication], $sessionKey, $data->context->ipAddress);
-
-                throw ValidationException::withMessages(['current_password' => __('authentication::validation.password.current_incorrect')]);
-            }
-
             if ($this->verifyPassword->execute($account, $data->newPassword)) {
                 throw ValidationException::withMessages(['password' => __('authentication::validation.password.reused')]);
             }

@@ -62,28 +62,39 @@ final readonly class Reauthenticate
         $config = $this->guards->get($guard);
         $sessionKey = $data->current->sessionKey();
 
-        $this->throttle->ensure($config, [ThrottleKind::Reauthentication], $sessionKey, $data->context, ActivityType::Reauthentication);
+        $this->throttle->attempt($config, [ThrottleKind::Reauthentication], $sessionKey, $data->context, ActivityType::Reauthentication);
 
-        if ($account->isLocked()) {
-            throw AccountLocked::retryAfter(Lockout::secondsRemaining($account));
-        }
-
-        if (! in_array($data->method, ReauthenticationMethods::available($config, $account), true)) {
-            throw new FactorNotAllowed;
-        }
+        // The attempt stays counted only for a wrong proof; any other refusal gives it back.
+        $wrong = false;
 
         try {
-            $verified = $this->verify($config, $account, $data);
-        } catch (InvalidCode $e) {
-            $this->fail($config, $account, $data, $sessionKey);
+            if ($account->isLocked()) {
+                throw AccountLocked::retryAfter(Lockout::secondsRemaining($account));
+            }
 
-            throw $e;
-        }
+            if (! in_array($data->method, ReauthenticationMethods::available($config, $account), true)) {
+                throw new FactorNotAllowed;
+            }
 
-        if (! $verified) {
-            $this->fail($config, $account, $data, $sessionKey);
+            try {
+                $verified = $this->verify($config, $account, $data);
+            } catch (InvalidCode $e) {
+                $wrong = true;
+                $this->fail($config, $account, $data);
 
-            throw $data->method === ReauthenticationMethod::Password ? new InvalidCredentials : new InvalidCode;
+                throw $e;
+            }
+
+            if (! $verified) {
+                $wrong = true;
+                $this->fail($config, $account, $data);
+
+                throw $data->method === ReauthenticationMethod::Password ? new InvalidCredentials : new InvalidCode;
+            }
+        } finally {
+            if (! $wrong) {
+                $this->throttle->release($config, [ThrottleKind::Reauthentication], $sessionKey, $data->context->ipAddress);
+            }
         }
 
         $now = CarbonImmutable::now();
@@ -144,10 +155,8 @@ final readonly class Reauthenticate
         return true;
     }
 
-    private function fail(GuardConfig $guard, Account $account, ReauthenticationData $data, string $sessionKey): void
+    private function fail(GuardConfig $guard, Account $account, ReauthenticationData $data): void
     {
-        $this->throttle->hit($guard, [ThrottleKind::Reauthentication], $sessionKey, $data->context->ipAddress);
-
         $this->recordActivity->execute(new LoginActivityData(
             guard: $guard->name(),
             type: ActivityType::Reauthentication,

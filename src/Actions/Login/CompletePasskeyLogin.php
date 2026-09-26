@@ -49,7 +49,7 @@ final readonly class CompletePasskeyLogin
             throw new LoginMethodDisabled;
         }
 
-        $this->throttle->ensure($config, [ThrottleKind::LoginIp], null, $context, ActivityType::PasskeyLogin);
+        $this->throttle->attempt($config, [ThrottleKind::LoginIp], null, $context, ActivityType::PasskeyLogin);
 
         $accounts = new AccountRepository($config);
         $ceremony = $response->ceremonyId === null ? null : $this->cache->pull(BeginPasskeyLogin::key($guard, $response->ceremonyId));
@@ -70,6 +70,8 @@ final readonly class CompletePasskeyLogin
             $this->fail($config->name(), $context);
         }
 
+        $this->throttle->release($config, [ThrottleKind::LoginIp], null, $context->ipAddress);
+
         $amr = [AuthMethodReference::Hwk, AuthMethodReference::User];
 
         if ($ceremony === 'uv') {
@@ -81,10 +83,6 @@ final readonly class CompletePasskeyLogin
 
     private function fail(string $guard, SessionContext $context): never
     {
-        $config = $this->guards->get($guard);
-
-        $this->throttle->hit($config, [ThrottleKind::LoginIp], null, $context->ipAddress);
-
         $this->recordActivity->execute(new LoginActivityData(
             guard: $guard,
             type: ActivityType::PasskeyLogin,

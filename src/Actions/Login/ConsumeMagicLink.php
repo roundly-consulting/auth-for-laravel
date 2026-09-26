@@ -43,12 +43,11 @@ final readonly class ConsumeMagicLink
             throw new LoginMethodDisabled;
         }
 
-        $this->throttle->ensure($config, [ThrottleKind::LoginIp], null, $context, ActivityType::MagicLinkLogin);
+        $this->throttle->attempt($config, [ThrottleKind::LoginIp], null, $context, ActivityType::MagicLinkLogin);
 
         try {
             $redeemed = $this->consume->execute($guard, OneTimeTokenPurpose::MagicLink, $token, $context);
         } catch (InvalidOneTimeToken $e) {
-            $this->throttle->hit($config, [ThrottleKind::LoginIp], null, $context->ipAddress);
             $this->recordActivity->execute(new LoginActivityData(
                 guard: $guard,
                 type: ActivityType::MagicLinkLogin,
@@ -59,6 +58,8 @@ final readonly class ConsumeMagicLink
 
             throw $e;
         }
+
+        $this->throttle->release($config, [ThrottleKind::LoginIp], null, $context->ipAddress);
 
         return $this->completeFirstFactor->execute($config, $redeemed->account, LoginMethod::MagicLink, $context, [AuthMethodReference::Email]);
     }
