@@ -6,7 +6,13 @@ namespace RoundlyConsulting\Auth\Guards;
 
 use Illuminate\Contracts\Container\Container;
 use Illuminate\Support\Collection;
+use RoundlyConsulting\Auth\Actions\Challenges\CompletePasskeyEnrolmentStep;
+use RoundlyConsulting\Auth\Actions\Challenges\CompletePasskeyStep;
+use RoundlyConsulting\Auth\Actions\Challenges\CompleteTwoFactorStep;
+use RoundlyConsulting\Auth\Actions\Challenges\ConfirmTwoFactorEnrolmentStep;
 use RoundlyConsulting\Auth\Actions\Login\AttemptPasswordLogin;
+use RoundlyConsulting\Auth\Actions\Login\BeginPasskeyLogin;
+use RoundlyConsulting\Auth\Actions\Login\CompletePasskeyLogin;
 use RoundlyConsulting\Auth\Actions\Login\ConsumeMagicLink;
 use RoundlyConsulting\Auth\Actions\Login\RequestEmailOtp;
 use RoundlyConsulting\Auth\Actions\Login\RequestMagicLink;
@@ -20,6 +26,7 @@ use RoundlyConsulting\Auth\Actions\Sessions\LogoutSession;
 use RoundlyConsulting\Auth\Actions\Tokens\IssueTokenPair;
 use RoundlyConsulting\Auth\Actions\Tokens\RefreshTokenPair;
 use RoundlyConsulting\Auth\Contracts\Account;
+use RoundlyConsulting\Auth\DataTransferObjects\ChallengeFactorData;
 use RoundlyConsulting\Auth\DataTransferObjects\CurrentToken;
 use RoundlyConsulting\Auth\DataTransferObjects\LoginResult;
 use RoundlyConsulting\Auth\DataTransferObjects\PasswordCredentials;
@@ -27,9 +34,12 @@ use RoundlyConsulting\Auth\DataTransferObjects\SessionContext;
 use RoundlyConsulting\Auth\DataTransferObjects\SessionData;
 use RoundlyConsulting\Auth\DataTransferObjects\TokenPair;
 use RoundlyConsulting\Auth\Enums\AuthMethodReference;
+use RoundlyConsulting\Auth\Enums\FactorMethod;
 use RoundlyConsulting\Auth\Enums\InvalidationReason;
 use RoundlyConsulting\Auth\Enums\LoginMethod;
 use RoundlyConsulting\Auth\Events\TokensIssued;
+use RoundlyConsulting\Passkeys\DataTransferObjects\AuthenticationResponseData;
+use RoundlyConsulting\Passkeys\DataTransferObjects\RequestOptionsData;
 use SensitiveParameter;
 
 /**
@@ -86,6 +96,32 @@ final readonly class GuardContext
     public function verifyEmailOtp(string $email, #[SensitiveParameter] string $code, SessionContext $context): LoginResult
     {
         return $this->container->make(VerifyEmailOtp::class)->execute($this->name(), $email, $code, $context);
+    }
+
+    public function passkeyLoginOptions(SessionContext $context): RequestOptionsData
+    {
+        return $this->container->make(BeginPasskeyLogin::class)->execute($this->name(), $context);
+    }
+
+    public function loginWithPasskey(AuthenticationResponseData $response, SessionContext $context): LoginResult
+    {
+        return $this->container->make(CompletePasskeyLogin::class)->execute($this->name(), $response, $context);
+    }
+
+    /**
+     * Continue a pending challenge with a TOTP / recovery code, an enrolment
+     * confirmation, a passkey assertion or a passkey registration.
+     */
+    public function completeChallenge(ChallengeFactorData $data): LoginResult
+    {
+        $action = match ($data->method) {
+            FactorMethod::Totp, FactorMethod::RecoveryCode => CompleteTwoFactorStep::class,
+            FactorMethod::TotpEnrolment => ConfirmTwoFactorEnrolmentStep::class,
+            FactorMethod::Passkey => CompletePasskeyStep::class,
+            FactorMethod::PasskeyEnrolment => CompletePasskeyEnrolmentStep::class,
+        };
+
+        return $this->container->make($action)->execute($this->name(), $data);
     }
 
     // ── Tokens & sessions ────────────────────────────────────────────────

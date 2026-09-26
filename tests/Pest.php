@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Notification;
@@ -16,9 +17,17 @@ use RoundlyConsulting\Auth\Guards\GuardConfig;
 use RoundlyConsulting\Auth\Notifications\AuthenticationNotification;
 use RoundlyConsulting\Auth\Tests\Fixtures\Models\User;
 use RoundlyConsulting\Auth\Tests\TestCase;
+use RoundlyConsulting\Crypto\Codec\Base64Url;
 use RoundlyConsulting\Jwt\Facades\Jwt;
 use RoundlyConsulting\Jwt\Jose\Claims;
+use RoundlyConsulting\Passkeys\Contracts\HasPasskeys;
+use RoundlyConsulting\Passkeys\DataTransferObjects\AuthenticationResponseData;
+use RoundlyConsulting\Passkeys\DataTransferObjects\RegistrationResponseData;
+use RoundlyConsulting\Passkeys\DataTransferObjects\RequestOptionsData;
+use RoundlyConsulting\Passkeys\Enums\UserVerification;
+use RoundlyConsulting\Passkeys\Facades\Passkeys;
 use RoundlyConsulting\Passkeys\Models\Passkey;
+use RoundlyConsulting\Passkeys\Testing\VirtualAuthenticator;
 use RoundlyConsulting\TwoFactor\Facades\TwoFactor;
 
 uses(TestCase::class)->in(__DIR__);
@@ -82,7 +91,7 @@ function enableTotp(Model $account): string
 
 function totpCode(string $secret, int $offset = 0): string
 {
-    return TwoFactor::currentCode($secret, time() + $offset);
+    return TwoFactor::currentCode($secret, CarbonImmutable::now()->getTimestamp() + $offset);
 }
 
 function addPasskey(Model $account): Passkey
@@ -136,4 +145,75 @@ function tokenFromUrl(?string $url): string
     expect($url)->toBeString()->toContain('#token=');
 
     return rawurldecode((string) substr((string) strstr((string) $url, '#token='), 7));
+}
+
+/**
+ * Register a real credential for an account through a virtual authenticator.
+ */
+function registerVirtualPasskey(Model&HasPasskeys $account): VirtualAuthenticator
+{
+    $authenticator = VirtualAuthenticator::es256();
+
+    Passkeys::register($account, $authenticator->register(Passkeys::registrationOptions($account)));
+
+    return $authenticator;
+}
+
+/**
+ * The browser JSON of an assertion (base64url members), as a client would POST it.
+ *
+ * @return array<string, mixed>
+ */
+function assertionPayload(AuthenticationResponseData $response): array
+{
+    $b64 = static fn (string $bytes): string => Base64Url::encode($bytes);
+
+    return [
+        'id' => $b64($response->rawId),
+        'rawId' => $b64($response->rawId),
+        'type' => 'public-key',
+        'response' => [
+            'clientDataJSON' => $b64($response->clientDataJson),
+            'authenticatorData' => $b64($response->authenticatorData),
+            'signature' => $b64($response->signature),
+            'userHandle' => $response->userHandle === null ? null : $b64($response->userHandle),
+        ],
+        'ceremonyId' => $response->ceremonyId,
+    ];
+}
+
+/**
+ * @return array<string, mixed>
+ */
+function attestationPayload(RegistrationResponseData $response): array
+{
+    $b64 = static fn (string $bytes): string => Base64Url::encode($bytes);
+
+    return [
+        'id' => $b64($response->rawId),
+        'rawId' => $b64($response->rawId),
+        'type' => 'public-key',
+        'response' => [
+            'clientDataJSON' => $b64($response->clientDataJson),
+            'attestationObject' => $b64($response->attestationObject),
+            'transports' => $response->transports,
+        ],
+        'ceremonyId' => $response->ceremonyId,
+    ];
+}
+
+/**
+ * Request options rebuilt from the JSON an options endpoint returned.
+ *
+ * @param  array<string, mixed>  $json
+ */
+function requestOptionsFrom(array $json): RequestOptionsData
+{
+    return new RequestOptionsData(
+        ceremonyId: $json['ceremonyId'],
+        rpId: $json['publicKey']['rpId'],
+        challenge: $json['publicKey']['challenge'],
+        timeoutMs: $json['publicKey']['timeout'],
+        userVerification: UserVerification::from($json['publicKey']['userVerification']),
+    );
 }

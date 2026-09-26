@@ -7,21 +7,46 @@ namespace RoundlyConsulting\Auth\Http;
 use Illuminate\Routing\Router;
 use RoundlyConsulting\Auth\AuthenticationManager;
 use RoundlyConsulting\Auth\Enums\LoginMethod;
+use RoundlyConsulting\Auth\Enums\PasskeyMode;
+use RoundlyConsulting\Auth\Enums\ReauthenticationMethod;
+use RoundlyConsulting\Auth\Enums\TwoFactorMode;
 use RoundlyConsulting\Auth\Guards\GuardConfig;
 use RoundlyConsulting\Auth\Http\Controllers\Account\LoginActivityController;
 use RoundlyConsulting\Auth\Http\Controllers\Account\MeController;
+use RoundlyConsulting\Auth\Http\Controllers\Account\ReauthenticateController;
+use RoundlyConsulting\Auth\Http\Controllers\Account\ReauthenticationPasskeyOptionsController;
+use RoundlyConsulting\Auth\Http\Controllers\Account\SendReauthenticationCodeController;
 use RoundlyConsulting\Auth\Http\Controllers\Account\UpdateLocaleController;
+use RoundlyConsulting\Auth\Http\Controllers\Challenge\ConfirmTwoFactorEnrolmentController;
+use RoundlyConsulting\Auth\Http\Controllers\Challenge\PasskeyController;
+use RoundlyConsulting\Auth\Http\Controllers\Challenge\PasskeyEnrolmentController;
+use RoundlyConsulting\Auth\Http\Controllers\Challenge\PasskeyEnrolmentOptionsController;
+use RoundlyConsulting\Auth\Http\Controllers\Challenge\PasskeyOptionsController;
+use RoundlyConsulting\Auth\Http\Controllers\Challenge\StartTwoFactorEnrolmentController;
+use RoundlyConsulting\Auth\Http\Controllers\Challenge\TwoFactorController;
 use RoundlyConsulting\Auth\Http\Controllers\Login\ConsumeMagicLinkController;
+use RoundlyConsulting\Auth\Http\Controllers\Login\PasskeyLoginController;
+use RoundlyConsulting\Auth\Http\Controllers\Login\PasskeyLoginOptionsController;
 use RoundlyConsulting\Auth\Http\Controllers\Login\PasswordLoginController;
 use RoundlyConsulting\Auth\Http\Controllers\Login\RequestEmailOtpController;
 use RoundlyConsulting\Auth\Http\Controllers\Login\RequestMagicLinkController;
 use RoundlyConsulting\Auth\Http\Controllers\Login\VerifyEmailOtpController;
+use RoundlyConsulting\Auth\Http\Controllers\Passkeys\ListPasskeysController;
+use RoundlyConsulting\Auth\Http\Controllers\Passkeys\RegisterPasskeyController;
+use RoundlyConsulting\Auth\Http\Controllers\Passkeys\RegistrationOptionsController;
+use RoundlyConsulting\Auth\Http\Controllers\Passkeys\RemovePasskeyController;
+use RoundlyConsulting\Auth\Http\Controllers\Passkeys\RenamePasskeyController;
 use RoundlyConsulting\Auth\Http\Controllers\Sessions\ListSessionsController;
 use RoundlyConsulting\Auth\Http\Controllers\Sessions\LogoutController;
 use RoundlyConsulting\Auth\Http\Controllers\Sessions\LogoutEverywhereController;
 use RoundlyConsulting\Auth\Http\Controllers\Sessions\LogoutOthersController;
 use RoundlyConsulting\Auth\Http\Controllers\Sessions\RevokeSessionController;
 use RoundlyConsulting\Auth\Http\Controllers\Tokens\RefreshController;
+use RoundlyConsulting\Auth\Http\Controllers\TwoFactor\ConfirmController;
+use RoundlyConsulting\Auth\Http\Controllers\TwoFactor\DisableController;
+use RoundlyConsulting\Auth\Http\Controllers\TwoFactor\EnableController;
+use RoundlyConsulting\Auth\Http\Controllers\TwoFactor\RegenerateRecoveryCodesController;
+use RoundlyConsulting\Auth\Http\Controllers\TwoFactor\StatusController;
 
 /**
  * Registers a guard's opt-in JSON endpoints (`Authentication::routes('users')`, or
@@ -173,6 +198,10 @@ final class RouteRegistrar
      */
     private function all(): array
     {
+        $twoFactor = $this->guard->twoFactorMode() !== TwoFactorMode::Off;
+        $passkeys = $this->guard->passkeyMode() !== PasskeyMode::Off;
+        $enrolment = $this->guard->allowsEnrolmentInChallenge();
+
         return [
             // Login
             new RouteDefinition('login', 'POST', 'login', 'login', PasswordLoginController::class, enabled: $this->guard->loginMethodEnabled(LoginMethod::Password)),
@@ -180,6 +209,17 @@ final class RouteRegistrar
             new RouteDefinition('login', 'POST', 'login/magic-link/consume', 'login.magic-link.consume', ConsumeMagicLinkController::class, enabled: $this->guard->loginMethodEnabled(LoginMethod::MagicLink)),
             new RouteDefinition('login', 'POST', 'login/otp', 'login.otp', RequestEmailOtpController::class, enabled: $this->guard->loginMethodEnabled(LoginMethod::EmailOtp)),
             new RouteDefinition('login', 'POST', 'login/otp/verify', 'login.otp.verify', VerifyEmailOtpController::class, enabled: $this->guard->loginMethodEnabled(LoginMethod::EmailOtp)),
+            new RouteDefinition('login', 'POST', 'login/passkey/options', 'login.passkey.options', PasskeyLoginOptionsController::class, enabled: $this->guard->loginMethodEnabled(LoginMethod::Passkey)),
+            new RouteDefinition('login', 'POST', 'login/passkey', 'login.passkey', PasskeyLoginController::class, enabled: $this->guard->loginMethodEnabled(LoginMethod::Passkey)),
+
+            // Challenge
+            new RouteDefinition('challenge', 'POST', 'challenge/two-factor', 'challenge.two-factor', TwoFactorController::class, enabled: $twoFactor),
+            new RouteDefinition('challenge', 'POST', 'challenge/two-factor/enrol', 'challenge.two-factor.enrol', StartTwoFactorEnrolmentController::class, enabled: $twoFactor && $enrolment),
+            new RouteDefinition('challenge', 'POST', 'challenge/two-factor/enrol/confirm', 'challenge.two-factor.enrol.confirm', ConfirmTwoFactorEnrolmentController::class, enabled: $twoFactor && $enrolment),
+            new RouteDefinition('challenge', 'POST', 'challenge/passkey/options', 'challenge.passkey.options', PasskeyOptionsController::class, enabled: $passkeys),
+            new RouteDefinition('challenge', 'POST', 'challenge/passkey', 'challenge.passkey', PasskeyController::class, enabled: $passkeys),
+            new RouteDefinition('challenge', 'POST', 'challenge/passkey/enrol/options', 'challenge.passkey.enrol.options', PasskeyEnrolmentOptionsController::class, enabled: $passkeys && $enrolment),
+            new RouteDefinition('challenge', 'POST', 'challenge/passkey/enrol', 'challenge.passkey.enrol', PasskeyEnrolmentController::class, enabled: $passkeys && $enrolment),
 
             // Tokens
             new RouteDefinition('tokens', 'POST', 'refresh', 'refresh', RefreshController::class),
@@ -187,6 +227,9 @@ final class RouteRegistrar
             // Account
             new RouteDefinition('account', 'GET', 'me', 'me', MeController::class, authenticated: true),
             new RouteDefinition('account', 'PATCH', 'locale', 'locale', UpdateLocaleController::class, authenticated: true),
+            new RouteDefinition('account', 'POST', 'reauthenticate', 'reauthenticate', ReauthenticateController::class, authenticated: true),
+            new RouteDefinition('account', 'POST', 'reauthenticate/passkey/options', 'reauthenticate.passkey.options', ReauthenticationPasskeyOptionsController::class, authenticated: true, enabled: $passkeys),
+            new RouteDefinition('account', 'POST', 'reauthenticate/otp', 'reauthenticate.otp', SendReauthenticationCodeController::class, authenticated: true, enabled: in_array(ReauthenticationMethod::EmailOtp, $this->guard->reauthenticationMethods(), true)),
             new RouteDefinition('account', 'GET', 'activity', 'activity', LoginActivityController::class, authenticated: true, enabled: $this->guard->activityEnabled()),
 
             // Sessions
@@ -195,6 +238,20 @@ final class RouteRegistrar
             new RouteDefinition('sessions', 'POST', 'logout/everywhere', 'logout.everywhere', LogoutEverywhereController::class, authenticated: true),
             new RouteDefinition('sessions', 'GET', 'sessions', 'sessions', ListSessionsController::class, authenticated: true),
             new RouteDefinition('sessions', 'DELETE', 'sessions/{session}', 'sessions.destroy', RevokeSessionController::class, authenticated: true),
+
+            // Two-factor management
+            new RouteDefinition('two-factor', 'GET', 'two-factor', 'two-factor.show', StatusController::class, authenticated: true, enabled: $twoFactor),
+            new RouteDefinition('two-factor', 'POST', 'two-factor', 'two-factor.enable', EnableController::class, authenticated: true, enabled: $twoFactor),
+            new RouteDefinition('two-factor', 'POST', 'two-factor/confirm', 'two-factor.confirm', ConfirmController::class, authenticated: true, enabled: $twoFactor),
+            new RouteDefinition('two-factor', 'DELETE', 'two-factor', 'two-factor.disable', DisableController::class, authenticated: true, enabled: $this->guard->twoFactorMode() === TwoFactorMode::Optional),
+            new RouteDefinition('two-factor', 'POST', 'two-factor/recovery-codes', 'two-factor.recovery-codes', RegenerateRecoveryCodesController::class, authenticated: true, enabled: $twoFactor),
+
+            // Passkey management
+            new RouteDefinition('passkeys', 'GET', 'passkeys', 'passkeys.index', ListPasskeysController::class, authenticated: true, enabled: $passkeys),
+            new RouteDefinition('passkeys', 'POST', 'passkeys/options', 'passkeys.options', RegistrationOptionsController::class, authenticated: true, enabled: $passkeys),
+            new RouteDefinition('passkeys', 'POST', 'passkeys', 'passkeys.store', RegisterPasskeyController::class, authenticated: true, enabled: $passkeys),
+            new RouteDefinition('passkeys', 'PATCH', 'passkeys/{passkey}', 'passkeys.update', RenamePasskeyController::class, authenticated: true, enabled: $passkeys),
+            new RouteDefinition('passkeys', 'DELETE', 'passkeys/{passkey}', 'passkeys.destroy', RemovePasskeyController::class, authenticated: true, enabled: $passkeys),
         ];
     }
 }
