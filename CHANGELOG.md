@@ -1,19 +1,23 @@
 # Changelog
 
-All notable changes to this package will be documented in this file.
+All notable changes to `auth-for-laravel` will be documented in this file.
 
 ## Unreleased
 
-- Initial scaffold from `package-template-for-laravel`.
-- Fixed `bin/rename-package.sh` on GNU sed: the hardcoded BSD `sed -i ''` form made the
-  script exit 2 on the first file, so the template could not rename a package on Linux or
-  in CI at all. The sed flavour is now detected, and paths are iterated NUL-delimited.
-- Pinned the rename script with `tests/Feature/RenamePackageScriptTest.php`, which runs it
-  against a throwaway copy of the tree — the bug above cannot return silently.
-- `bin/rename-package.sh` now deletes itself and its self-test as its last act, staging both
-  as deletions. The script is the one file its own rewrite cannot reach — its substitution
-  patterns are the tokens — so a package that kept it kept `PackageTemplate` /
-  `package-template` / `PACKAGE_TEMPLATE` in the tree while the README called keeping it
-  harmless. The README and the script's printed steps now say so, and the self-test greps
-  every file type instead of the script's own `--include` list, which is the check a
-  scaffolded package is actually accepted against.
+### Added
+
+- Multi-guard configuration (`authentication.defaults` + per-guard overrides, lists replace)
+  with validation at resolution and the `authentication:check` doctor.
+- Password, magic-link, email-code and passwordless passkey login.
+- The login challenge engine: TOTP / recovery-code and passkey second factors, forced TOTP and
+  passkey enrolment, device binding, attempt limits, supersession and single-use finalization.
+- Access tokens (jwt-for-laravel, per-guard audience, `sid` / `amr` / `auth_time`) and rotating
+  refresh tokens with device sessions; logout current / one / others / everywhere; the
+  invalidation policy with re-issued pairs for the acting device.
+- Registration (open / invite-only / closed) and invitations; email verification (link or code)
+  and verified email change; forgot / reset / change / set password with a policy and an
+  optional k-anonymity breached-password check.
+- Re-authentication ("sudo mode") with the strength rule for accounts with a second factor.
+- Login activity, throttling, opt-in lockout, new-device detection and risk hooks.
+- 42 events, 18 localizable notifications (after-response or encrypted-queue delivery),
+  opt-in JSON routes, six middleware, five commands and host testing helpers.
