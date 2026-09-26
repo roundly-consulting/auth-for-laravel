@@ -25,7 +25,7 @@ final readonly class SensitiveActionGate
     public function check(GuardConfig $guard, SensitiveAction $action, CurrentToken $current, Account $account): void
     {
         if ($guard->requiresReauthentication($action)) {
-            $this->ensureRecent->execute($guard->name(), $current, null, $account);
+            $this->ensureRecent->execute($guard->name(), $current, $account);
         }
     }
 }

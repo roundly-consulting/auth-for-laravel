@@ -11,6 +11,7 @@ use RoundlyConsulting\Auth\Actions\Passwords\VerifyPassword;
 use RoundlyConsulting\Auth\Contracts\Account;
 use RoundlyConsulting\Auth\DataTransferObjects\LoginActivityData;
 use RoundlyConsulting\Auth\DataTransferObjects\ReauthenticationData;
+use RoundlyConsulting\Auth\DataTransferObjects\ReauthenticationProof;
 use RoundlyConsulting\Auth\Enums\ActivityOutcome;
 use RoundlyConsulting\Auth\Enums\ActivityType;
 use RoundlyConsulting\Auth\Enums\OneTimeTokenPurpose;
@@ -40,7 +41,8 @@ use SensitiveParameter;
 
 /**
  * "Sudo mode": the signed-in account re-proves itself, and its session (`sid`) counts as
- * recently authenticated for `reauthentication.timeout`. An account with a second factor
+ * recently authenticated for `reauthentication.timeout` — the marker records the method,
+ * so a second factor enrolled later still demands a second-factor proof. An account with a second factor
  * must use it (password and email codes are refused) — a stolen session plus a leaked
  * password must not be able to disable the factor that protects the account.
  */
@@ -85,7 +87,7 @@ final readonly class Reauthenticate
         }
 
         $now = CarbonImmutable::now();
-        $this->marker->put($guard, $sessionKey, $now, $config->reauthenticationTimeout());
+        $this->marker->put($guard, $sessionKey, new ReauthenticationProof($data->method, $now), $config->reauthenticationTimeout());
         $this->throttle->clear($config, ThrottleKind::Reauthentication, $sessionKey, null);
 
         $this->recordActivity->execute(new LoginActivityData(

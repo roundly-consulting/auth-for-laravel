@@ -43,6 +43,18 @@ final class ReauthenticationMethods
         ));
     }
 
+    /**
+     * Whether a proof of this account (re-authentication or fresh login) must include its
+     * second factor: it has TOTP or a passkey now and the guard keeps
+     * `require_second_factor_when_enrolled` on. Evaluated at check time, so a factor
+     * enrolled after a password proof invalidates that proof.
+     */
+    public static function requireSecondFactor(GuardConfig $guard, Account $account): bool
+    {
+        return $guard->reauthenticationRequiresSecondFactorWhenEnrolled()
+            && (self::hasTotp($guard, $account) || self::hasPasskeys($guard, $account));
+    }
+
     public static function hasTotp(GuardConfig $guard, Account $account): bool
     {
         return $guard->twoFactorMode() !== TwoFactorMode::Off

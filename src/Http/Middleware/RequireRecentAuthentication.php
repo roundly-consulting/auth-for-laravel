@@ -13,7 +13,8 @@ use Symfony\Component\HttpFoundation\Response;
 
 /**
  * `authentication.reauthenticated[:seconds[,guard]]` — 403 `reauthentication_required`
- * unless the calling session re-authenticated within the window.
+ * unless the calling session re-authenticated within the window with a proof the
+ * account's current factors accept (see {@see EnsureRecentlyAuthenticated}).
  */
 final readonly class RequireRecentAuthentication
 {
@@ -29,8 +30,8 @@ final readonly class RequireRecentAuthentication
         $this->ensureRecent->execute(
             $config->name(),
             CurrentToken::fromRequest($request, $config),
+            RequestGuard::requireAccount($request, $config),
             $seconds !== null && ctype_digit($seconds) ? (int) $seconds : null,
-            RequestGuard::account($request, $config),
         );
 
         return $next($request);

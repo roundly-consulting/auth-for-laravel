@@ -7,25 +7,35 @@ namespace RoundlyConsulting\Auth\Support;
 use Carbon\CarbonImmutable;
 use Illuminate\Contracts\Cache\Factory as CacheFactory;
 use Illuminate\Contracts\Cache\Repository;
+use RoundlyConsulting\Auth\DataTransferObjects\ReauthenticationProof;
+use RoundlyConsulting\Auth\Enums\ReauthenticationMethod;
 
 /**
  * The "recently re-authenticated" marker of one session (`sid`), kept in the
- * `authentication.reauthentication_store` cache store.
+ * `authentication.reauthentication_store` cache store. It records the method as well as
+ * the time, so the check can require a second-factor proof from an account that has
+ * (or has since enrolled) one.
  */
 final readonly class ReauthenticationMarker
 {
     public function __construct(private CacheFactory $cache) {}
 
-    public function put(string $guard, string $sessionKey, CarbonImmutable $at, int $ttl): void
+    public function put(string $guard, string $sessionKey, ReauthenticationProof $proof, int $ttl): void
     {
-        $this->store()->put($this->key($guard, $sessionKey), $at->getTimestamp(), $ttl);
+        $this->store()->put($this->key($guard, $sessionKey), ['method' => $proof->method->value, 'at' => $proof->at->getTimestamp()], $ttl);
     }
 
-    public function at(string $guard, string $sessionKey): ?CarbonImmutable
+    /**
+     * The session's last proof, or null — also for a marker that does not name its method.
+     */
+    public function proof(string $guard, string $sessionKey): ?ReauthenticationProof
     {
-        $timestamp = $this->store()->get($this->key($guard, $sessionKey));
+        $stored = $this->store()->get($this->key($guard, $sessionKey));
+        $method = is_array($stored) && is_string($stored['method'] ?? null) ? ReauthenticationMethod::tryFrom($stored['method']) : null;
 
-        return is_int($timestamp) ? CarbonImmutable::createFromTimestamp($timestamp) : null;
+        return $method !== null && is_int($stored['at'] ?? null)
+            ? new ReauthenticationProof($method, CarbonImmutable::createFromTimestamp($stored['at']))
+            : null;
     }
 
     public function forget(string $guard, string $sessionKey): void

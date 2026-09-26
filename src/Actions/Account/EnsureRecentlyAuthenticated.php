@@ -15,8 +15,12 @@ use RoundlyConsulting\Auth\Support\ReauthenticationMethods;
 /**
  * Passes when the calling session re-authenticated within the window — or, with
  * `fresh_login_counts`, when the token's `auth_time` itself is that recent (a user who
- * just logged in is not asked again). Otherwise 403 `reauthentication_required` with
- * the methods this account may use.
+ * just logged in is not asked again). A re-authentication must meet the account's
+ * CURRENT requirement: an account with TOTP or a passkey (under
+ * `require_second_factor_when_enrolled`) needs a second-factor proof — a password or
+ * email-code re-authentication does not count, even if it happened before the factor was
+ * enrolled. Otherwise 403
+ * `reauthentication_required` with the methods this account may use.
  */
 final readonly class EnsureRecentlyAuthenticated
 {
@@ -28,21 +32,24 @@ final readonly class EnsureRecentlyAuthenticated
     /**
      * @throws ReauthenticationRequired
      */
-    public function execute(string $guard, CurrentToken $current, ?int $seconds = null, ?Account $account = null): void
+    public function execute(string $guard, CurrentToken $current, Account $account, ?int $seconds = null): void
     {
         $config = $this->guards->get($guard);
         $window = CarbonImmutable::now()->subSeconds($seconds ?? $config->reauthenticationTimeout());
+        $secondFactor = ReauthenticationMethods::requireSecondFactor($config, $account);
 
         if ($config->freshLoginCountsAsReauthentication() && $current->authTime !== null && $current->authTime->greaterThanOrEqualTo($window)) {
             return;
         }
 
-        $at = $this->marker->at($guard, $current->sessionKey());
+        $proof = $this->marker->proof($guard, $current->sessionKey());
 
-        if ($at !== null && $at->greaterThanOrEqualTo($window)) {
+        if ($proof !== null
+            && $proof->at->greaterThanOrEqualTo($window)
+            && (! $secondFactor || $proof->method->isSecondFactor())) {
             return;
         }
 
-        throw ReauthenticationRequired::using($account === null ? $config->reauthenticationMethods() : ReauthenticationMethods::available($config, $account));
+        throw ReauthenticationRequired::using(ReauthenticationMethods::available($config, $account));
     }
 }
