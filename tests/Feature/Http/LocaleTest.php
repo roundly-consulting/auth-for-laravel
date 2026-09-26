@@ -23,6 +23,32 @@ it('updates the locale and timezone', function (): void {
     Event::assertDispatched(LocaleUpdated::class);
 });
 
+it('changes only the fields the client sent, and clears a field sent as null', function (): void {
+    Event::fake([LocaleUpdated::class]);
+    $user = User::factory()->create(['locale' => 'en', 'timezone' => 'Europe/Bratislava']);
+    $headers = bearer(issuePair($user));
+
+    $this->patchJson('/users/auth/locale', ['locale' => 'sk'], $headers)
+        ->assertOk()
+        ->assertExactJson(['locale' => 'sk', 'timezone' => 'Europe/Bratislava']);
+
+    $this->patchJson('/users/auth/locale', ['timezone' => 'Europe/Prague'], $headers)
+        ->assertOk()
+        ->assertExactJson(['locale' => 'sk', 'timezone' => 'Europe/Prague']);
+
+    $this->patchJson('/users/auth/locale', [], $headers)
+        ->assertOk()
+        ->assertExactJson(['locale' => 'sk', 'timezone' => 'Europe/Prague']);
+
+    $this->patchJson('/users/auth/locale', ['timezone' => null], $headers)
+        ->assertOk()
+        ->assertExactJson(['locale' => 'sk', 'timezone' => null]);
+
+    expect($user->fresh()?->accountLocale())->toBe('sk')
+        ->and($user->fresh()?->accountTimezone())->toBeNull();
+    Event::assertDispatched(LocaleUpdated::class, fn (LocaleUpdated $event): bool => $event->locale === 'sk' && $event->timezone === 'Europe/Prague');
+});
+
 it('rejects unsupported locales and unknown timezones', function (): void {
     $this->patchJson('/users/auth/locale', ['locale' => 'fr', 'timezone' => 'Mars/Olympus'], bearer(issuePair(User::factory()->create())))
         ->assertStatus(422)

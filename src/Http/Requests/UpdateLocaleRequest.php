@@ -22,6 +22,11 @@ final class UpdateLocaleRequest extends AuthenticationRequest
 
     public function toData(): LocaleData
     {
-        return new LocaleData($this->validatedNullableString('locale'), $this->validatedNullableString('timezone'));
+        return new LocaleData(
+            locale: $this->validatedNullableString('locale'),
+            timezone: $this->validatedNullableString('timezone'),
+            updatesLocale: $this->has('locale'),
+            updatesTimezone: $this->has('timezone'),
+        );
     }
 }

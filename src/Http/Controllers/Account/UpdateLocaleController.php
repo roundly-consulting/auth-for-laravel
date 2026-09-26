@@ -14,8 +14,7 @@ final class UpdateLocaleController
     public function __invoke(UpdateLocaleRequest $request, UpdateLocale $update): JsonResponse
     {
         $guard = $request->guardConfig();
-        $data = $request->toData();
-        $account = $update->execute($guard->name(), RequestGuard::requireAccount($request, $guard), $data->locale, $data->timezone);
+        $account = $update->execute($guard->name(), RequestGuard::requireAccount($request, $guard), $request->toData());
 
         return new JsonResponse(['locale' => $account->accountLocale(), 'timezone' => $account->accountTimezone()]);
     }
