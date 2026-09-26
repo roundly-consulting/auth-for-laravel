@@ -15,7 +15,8 @@ use SensitiveParameter;
 /**
  * Validates a new account's email, password and the host's extra attributes, and
  * returns ONLY the attributes the host's rules name — nothing unvalidated ever reaches
- * the account creator (the models use `$guarded = []`).
+ * the account creator (the models use `$guarded = []`). Dotted and wildcard rules
+ * (`profile.city`, `tags.*`) keep exactly the nested values they validated.
  */
 final readonly class RegistrationValidator
 {
@@ -40,7 +41,6 @@ final readonly class RegistrationValidator
                     'string',
                     new PasswordPolicy($guard, $email),
                 ],
-                'attributes' => ['array'],
                 ...array_combine(
                     array_map(static fn (string $key): string => 'attributes.'.$key, array_keys($hostRules)),
                     array_values($hostRules),
@@ -48,10 +48,11 @@ final readonly class RegistrationValidator
             ],
         );
 
+        // Only ruled keys come back from validated() — top-level, dotted or wildcard;
+        // with no host rules there is no `attributes` key at all.
         $validated = $validator->validate();
-        $clean = is_array($validated['attributes'] ?? null) ? $validated['attributes'] : [];
 
-        return array_intersect_key($clean, $hostRules);
+        return is_array($validated['attributes'] ?? null) ? $validated['attributes'] : [];
     }
 
     /**

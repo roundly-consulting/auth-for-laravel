@@ -10,9 +10,12 @@ use RoundlyConsulting\Auth\Events\AccountRegistered;
 use RoundlyConsulting\Auth\Exceptions\InvitationRequired;
 use RoundlyConsulting\Auth\Exceptions\RegistrationClosed;
 use RoundlyConsulting\Auth\Facades\Authentication;
+use RoundlyConsulting\Auth\Guards\GuardRegistry;
 use RoundlyConsulting\Auth\Notifications\AccountExistsNotification;
 use RoundlyConsulting\Auth\Notifications\VerifyEmailNotification;
+use RoundlyConsulting\Auth\Support\RegistrationValidator;
 use RoundlyConsulting\Auth\Tests\Fixtures\Models\User;
+use RoundlyConsulting\Auth\Tests\Fixtures\Support\NestedProfileRules;
 use RoundlyConsulting\Auth\Tests\Fixtures\Support\ProfileRules;
 
 beforeEach(function (): void {
@@ -119,4 +122,17 @@ it('throttles registrations per ip', function (): void {
 
     $this->postJson('/users/auth/register', registration())->assertOk();
     $this->postJson('/users/auth/register', registration(['email' => 'other@example.com']))->assertStatus(429);
+});
+
+it('keeps host attributes ruled by dotted and wildcard keys, and nothing unruled', function (): void {
+    $this->configureGuard('users', ['registration.rules' => NestedProfileRules::class]);
+
+    $clean = app(RegistrationValidator::class)->validate(
+        app(GuardRegistry::class)->get('users'),
+        'n@example.com',
+        'a-long-enough-passphrase',
+        ['name' => 'N', 'profile' => ['city' => 'Bratislava', 'is_admin' => true], 'tags' => ['a', 'b'], 'is_admin' => true],
+    );
+
+    expect($clean)->toBe(['name' => 'N', 'profile' => ['city' => 'Bratislava'], 'tags' => ['a', 'b']]);
 });
