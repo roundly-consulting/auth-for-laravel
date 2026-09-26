@@ -24,7 +24,7 @@ use RoundlyConsulting\Auth\Tests\Fixtures\Models\User;
 
 beforeEach(function (): void {
     Notification::fake();
-    $this->configureGuard('users', ['invitations.preview_payload_keys' => ['team']]);
+    $this->configureGuard('users', ['invitations.preview_payload_keys' => ['team'], 'locale.supported' => ['en', 'sk']]);
 });
 
 function invite(string $email = 'invitee@example.com', array $payload = ['role' => 'vet', 'team' => 'Clinic']): string
@@ -212,4 +212,19 @@ it('creates no account through an invitation while registration is closed', func
 
     expect(User::query()->count())->toBe(0)
         ->and(Invitation::query()->sole()->accepted_at)->toBeNull();
+});
+
+it('refuses an invitation locale the guard does not support', function (): void {
+    expect(fn () => Authentication::guard('users')->invite(new InvitationData('x@example.com', [], locale: 'zz-ZZ')))->toThrow(ValidationException::class)
+        ->and(fn () => Authentication::guard('users')->invite(new InvitationData('y@example.com', [], locale: 'sk/../x')))->toThrow(ValidationException::class);
+
+    $admin = User::factory()->create();
+    Gate::define('authentication.invitations.manage', fn (User $user): bool => $user->is($admin));
+
+    $this->postJson('/users/auth/invitations', ['email' => 'z@example.com', 'locale' => 'zz'], bearer(issuePair($admin)))
+        ->assertStatus(422)
+        ->assertJsonValidationErrors(['locale']);
+
+    expect(Invitation::query()->count())->toBe(0);
+    Notification::assertNothingSent();
 });

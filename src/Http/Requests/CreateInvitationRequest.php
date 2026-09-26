@@ -6,6 +6,7 @@ namespace RoundlyConsulting\Auth\Http\Requests;
 
 use Illuminate\Database\Eloquent\Model;
 use RoundlyConsulting\Auth\DataTransferObjects\InvitationData;
+use RoundlyConsulting\Auth\Rules\SupportedLocale;
 
 final class CreateInvitationRequest extends AuthenticationRequest
 {
@@ -17,7 +18,7 @@ final class CreateInvitationRequest extends AuthenticationRequest
         return [
             'email' => ['required', 'string', 'email', 'max:255'],
             'payload' => ['nullable', 'array'],
-            'locale' => ['nullable', 'string', 'max:12'],
+            'locale' => ['nullable', 'string', new SupportedLocale($this->guardConfig())],
             'ttl' => ['nullable', 'integer', 'min:60', 'max:31536000'],
             'send' => ['nullable', 'boolean'],
         ];

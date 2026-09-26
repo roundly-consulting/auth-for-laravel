@@ -14,13 +14,15 @@ use RoundlyConsulting\Auth\Exceptions\LoginMethodDisabled;
 use RoundlyConsulting\Auth\Guards\AccountRepository;
 use RoundlyConsulting\Auth\Guards\GuardRegistry;
 use RoundlyConsulting\Auth\Models\Invitation;
+use RoundlyConsulting\Auth\Rules\SupportedLocale;
 use RoundlyConsulting\Auth\Support\Models;
 
 /**
  * Creates an invitation (and sends it unless told not to). An earlier pending
  * invitation for the same address is revoked (`replace_pending`); an address that
  * already has an account is refused unless `allow_existing_email` (admin-facing, so the
- * error is fine to show).
+ * error is fine to show). The locale must be one of the guard's `locale.supported` — it
+ * becomes the new account's locale on accept.
  */
 final readonly class CreateInvitation
 {
@@ -41,7 +43,10 @@ final readonly class CreateInvitation
         $email = $accounts->normalizeEmail($data->email);
         $now = CarbonImmutable::now();
 
-        Validator::make(['email' => $email], ['email' => ['required', 'email', 'max:255']])->validate();
+        Validator::make(
+            ['email' => $email, 'locale' => $data->locale],
+            ['email' => ['required', 'email', 'max:255'], 'locale' => ['nullable', new SupportedLocale($config)]],
+        )->validate();
 
         if (! $config->invitationAllowsExistingEmail() && $accounts->emailTaken($email)) {
             throw ValidationException::withMessages(['email' => __('authentication::validation.email_taken')]);
