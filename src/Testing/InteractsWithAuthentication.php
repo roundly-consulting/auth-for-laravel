@@ -30,6 +30,14 @@ trait InteractsWithAuthentication
     protected ?TokenPair $authenticationTokens = null;
 
     /**
+     * Each account's token version when {@see self::actingAsAccount()} signed it in — the
+     * baseline {@see self::assertTokensInvalidated()} compares against.
+     *
+     * @var array<string, int>
+     */
+    protected array $authenticationTokenVersions = [];
+
+    /**
      * Provided by Laravel's (and Testbench's) HTTP testing concern.
      *
      * @return $this
@@ -42,6 +50,8 @@ trait InteractsWithAuthentication
     public function actingAsAccount(Account $account, ?string $guard = null, array $authMethods = [AuthMethodReference::Pwd]): static
     {
         $config = app(GuardRegistry::class)->get($guard);
+
+        $this->authenticationTokenVersions[$this->authenticationAccountKey($account)] = $this->freshAccount($account)->tokenVersion();
 
         $this->authenticationTokens = app(IssueTokenPair::class)->execute(
             $config,
@@ -65,22 +75,51 @@ trait InteractsWithAuthentication
     }
 
     /**
-     * The account's tokens were invalidated per the guard's scope for the reason: its
-     * token version moved, and under `all` no session survived.
+     * The account's tokens were invalidated per the guard's scope for the reason, since
+     * `$since` (default: the version when {@see self::actingAsAccount()} signed it in):
+     * its token version moved — and under `all` no session survived — or, for a reason
+     * whose scope is `none`, it did not move.
      */
-    public function assertTokensInvalidated(Account $account, InvalidationReason $reason, ?string $guard = null): static
+    public function assertTokensInvalidated(Account $account, InvalidationReason $reason, ?string $guard = null, ?int $since = null): static
     {
-        $model = AccountModels::of($account);
-        $fresh = $model->newQuery()->whereKey($model->getKey())->first();
+        $baseline = $since ?? $this->authenticationTokenVersions[$this->authenticationAccountKey($account)] ?? null;
+
+        if ($baseline === null) {
+            Assert::fail('No token-version baseline for the account: call actingAsAccount() before the change, or pass `since:`.');
+        }
+
+        $version = $this->freshAccount($account)->tokenVersion();
         $scope = app(GuardRegistry::class)->get($guard)->invalidationScope($reason);
 
-        Assert::assertInstanceOf(Account::class, $fresh);
-        Assert::assertGreaterThan(0, $fresh->tokenVersion(), 'The account token version never moved.');
+        if ($scope === InvalidationScope::None) {
+            Assert::assertSame($baseline, $version, "The account token version moved although [{$reason->value}] has scope [none].");
+
+            return $this;
+        }
+
+        Assert::assertGreaterThan($baseline, $version, "The account token version did not move since {$baseline}.");
 
         if ($scope === InvalidationScope::All) {
-            Assert::assertCount(0, RefreshToken::listFor($model), 'Sessions survived an invalidation with scope [all].');
+            Assert::assertCount(0, RefreshToken::listFor(AccountModels::of($account)), 'Sessions survived an invalidation with scope [all].');
         }
 
         return $this;
+    }
+
+    private function freshAccount(Account $account): Account
+    {
+        $model = AccountModels::of($account);
+        $fresh = $model->newQuery()->whereKey($model->getKey())->first();
+
+        Assert::assertInstanceOf(Account::class, $fresh);
+
+        return $fresh;
+    }
+
+    private function authenticationAccountKey(Account $account): string
+    {
+        $model = AccountModels::of($account);
+
+        return $model->getMorphClass().':'.$model->getKey();
     }
 }

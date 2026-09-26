@@ -27,7 +27,7 @@ it('disables an account, ending every session, and enables it again', function (
     $this->getJson('/users/auth/me', bearer($pair))->assertUnauthorized();
     expect($user->fresh()?->isDisabled())->toBeTrue()
         ->and($user->fresh()?->getAttribute('disabled_reason'))->toBe('fraud review');
-    $this->assertTokensInvalidated($user, InvalidationReason::AccountDisabled);
+    $this->assertTokensInvalidated($user, InvalidationReason::AccountDisabled, since: 0);
 
     Authentication::guard('users')->enable($user);
     expect($user->fresh()?->isDisabled())->toBeFalse();
