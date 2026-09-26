@@ -34,7 +34,7 @@ it('reports each misconfiguration with its exact key', function (string $guard, 
     'invite only without invitations' => ['clients', ['registration.mode' => 'invite_only'], 'invitations.enabled'],
     'forced enrolment without verification' => ['users', ['two_factor.mode' => 'required', 'verification.mode' => 'off'], 'verification.mode is off'],
     'invalid enum' => ['users', ['verification.channel' => 'pigeon'], 'verification.channel'],
-    'not a jwt guard' => ['users', ['laravel_guard' => 'web'], 'is not an auth.guards entry using the `jwt` driver'],
+    'not a jwt guard' => ['users', ['laravel_guard' => 'web'], 'is not configured with the jwt driver'],
     'shared laravel guard' => ['clients', ['laravel_guard' => 'users'], 'laravel_guard must differ'],
     'shared model' => ['clients', ['model' => User::class], 'shares its morph class'],
 ]);
@@ -52,6 +52,17 @@ it('requires the denylist check on the jwt guard', function (mixed $value): void
 
     app(GuardRegistry::class)->get('users');
 })->throws(AuthenticationMisconfigured::class, 'check_denylist')->with([false, 'false']);
+
+it('names the jwt reason when the jwt guard cannot be resolved', function (): void {
+    config()->set('auth.guards.users.token_version', ['not', 'callable']);
+    app(GuardRegistry::class)->flush();
+
+    $registry = app(GuardRegistry::class);
+
+    expect(implode("\n", ConfigValidation::problems($registry->all()['users'], $registry)))
+        ->toContain('token_version of jwt guard [users] must be an invokable class-string or a closure')
+        ->not->toContain('is not configured with the jwt driver');
+});
 
 it('requires distinct audiences once there are several guards', function (): void {
     config()->set('auth.guards.clients.audience', 'app-users');

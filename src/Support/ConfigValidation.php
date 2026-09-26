@@ -152,8 +152,9 @@ final class ConfigValidation
     {
         try {
             $settings = Jwt::guardSettings($guard->laravelGuard());
-        } catch (JwtMisconfigured) {
-            $problems[] = "{$prefix}.laravel_guard [{$guard->laravelGuard()}] is not an auth.guards entry using the `jwt` driver.";
+        } catch (JwtMisconfigured $e) {
+            // Not a jwt guard, or one jwt cannot build (e.g. an uncallable token_version).
+            $problems[] = "{$prefix}.laravel_guard [{$guard->laravelGuard()}]: {$e->getMessage()}";
 
             return;
         }
