@@ -2,9 +2,12 @@
 
 declare(strict_types=1);
 
+use Carbon\CarbonImmutable;
 use Illuminate\Auth\AuthenticationException;
+use Illuminate\Container\Container;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Facade;
 use RoundlyConsulting\Auth\AuthenticationManager;
 use RoundlyConsulting\Auth\DataTransferObjects\CurrentToken;
 use RoundlyConsulting\Auth\DataTransferObjects\SessionContext;
@@ -19,6 +22,8 @@ use RoundlyConsulting\Auth\Http\RequestGuard;
 use RoundlyConsulting\Auth\Support\AccountModels;
 use RoundlyConsulting\Auth\Tests\Fixtures\Models\PlainAccount;
 use RoundlyConsulting\Auth\Tests\Fixtures\Models\User;
+use RoundlyConsulting\Jwt\Facades\Jwt;
+use RoundlyConsulting\RefreshTokens\Contracts\AccessTokenRevoker;
 use Symfony\Component\HttpFoundation\Response;
 
 it('lists guards and exposes the current guard of a package route', function (): void {
@@ -87,4 +92,42 @@ it('narrows only real models with the right contracts', function (): void {
 
     expect(fn () => AccountModels::twoFactor($plain))->toThrow(AuthenticationMisconfigured::class)
         ->and(fn () => AccountModels::passkeys($plain))->toThrow(AuthenticationMisconfigured::class);
+});
+
+it('reads the current request of the active container (Octane runs each request in a clone)', function (): void {
+    // Resolved while booting the base application (the provider does so for routes.enabled).
+    $this->app->make(AuthenticationManager::class);
+
+    $sandbox = clone $this->app;
+    Container::setInstance($sandbox);
+    Facade::clearResolvedInstances();
+    Facade::setFacadeApplication($sandbox);
+
+    $request = Request::create('/clients/auth/me');
+    $request->attributes->set(RequestGuard::ATTRIBUTE, 'clients');
+    $sandbox->instance('request', $request);
+
+    try {
+        expect(Authentication::currentGuard()?->name())->toBe('clients');
+    } finally {
+        Container::setInstance($this->app);
+        Facade::clearResolvedInstances();
+        Facade::setFacadeApplication($this->app);
+    }
+});
+
+it('denies revoked access tokens by the guards of the current scope', function (): void {
+    CarbonImmutable::setTestNow('2026-09-26 10:00:00');
+    $revoker = app(AccessTokenRevoker::class);
+    app(GuardRegistry::class)->all();
+
+    // A later request / job scope with a longer access TTL (Octane, queue workers).
+    config()->set('authentication.guards.users.tokens.access_ttl', 7200);
+    $this->app->forgetScopedInstances();
+
+    $revoker->revoke('a-live-jti');
+    CarbonImmutable::setTestNow('2026-09-26 11:00:00');
+
+    expect(Jwt::denylist()->has('a-live-jti'))->toBeTrue();
+    CarbonImmutable::setTestNow();
 });

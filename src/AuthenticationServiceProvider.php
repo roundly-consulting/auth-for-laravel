@@ -76,7 +76,7 @@ final class AuthenticationServiceProvider extends PackageServiceProvider
         // request or job.
         $this->app->scoped(GuardRegistry::class);
         $this->app->singleton(SecretHasher::class);
-        $this->app->singleton(AuthenticationManager::class, static fn (Application $app): AuthenticationManager => new AuthenticationManager($app));
+        $this->app->singleton(AuthenticationManager::class);
 
         $this->app->bindIf(FingerprintsDevices::class, DeviceFingerprinter::class);
         $this->app->bindIf(NegotiatesLocale::class, AcceptLanguage::class);

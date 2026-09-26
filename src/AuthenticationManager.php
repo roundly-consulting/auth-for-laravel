@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace RoundlyConsulting\Auth;
 
-use Illuminate\Contracts\Container\Container;
+use Illuminate\Container\Container;
 use Illuminate\Routing\Router;
 use RoundlyConsulting\Auth\Exceptions\AuthenticationMisconfigured;
 use RoundlyConsulting\Auth\Guards\GuardContext;
@@ -15,20 +15,22 @@ use RoundlyConsulting\Auth\Http\RouteRegistrar;
 /**
  * The entry point behind the {@see Facades\Authentication} facade: per-guard contexts
  * and the opt-in route registrar.
+ *
+ * A singleton that holds no container: it resolves the ACTIVE one on every call, so
+ * under Octane (each request runs in a clone of the booted app) it reads the current
+ * request and hands guard contexts the request's container, not the boot-time one.
  */
 final class AuthenticationManager
 {
     /** @var array<string, true> */
     private array $routedGuards = [];
 
-    public function __construct(private readonly Container $app) {}
-
     /**
      * The discoverable per-guard surface (null → `authentication.default`).
      */
     public function guard(?string $name = null): GuardContext
     {
-        return new GuardContext($this->registry()->get($name), $this->app);
+        return new GuardContext($this->registry()->get($name), $this->app());
     }
 
     /**
@@ -50,7 +52,7 @@ final class AuthenticationManager
             throw AuthenticationMisconfigured::routesAlreadyRegistered($config->name());
         }
 
-        return new RouteRegistrar($this->app->make(Router::class), $config, $this);
+        return new RouteRegistrar($this->app()->make(Router::class), $config, $this);
     }
 
     /**
@@ -58,11 +60,13 @@ final class AuthenticationManager
      */
     public function currentGuard(): ?GuardContext
     {
-        if (! $this->app->bound('request')) {
+        $app = $this->app();
+
+        if (! $app->bound('request')) {
             return null;
         }
 
-        $guard = $this->app->make('request')->attributes->get(RequestGuard::ATTRIBUTE);
+        $guard = $app->make('request')->attributes->get(RequestGuard::ATTRIBUTE);
 
         return is_string($guard) ? $this->guard($guard) : null;
     }
@@ -86,6 +90,11 @@ final class AuthenticationManager
 
     private function registry(): GuardRegistry
     {
-        return $this->app->make(GuardRegistry::class);
+        return $this->app()->make(GuardRegistry::class);
+    }
+
+    private function app(): Container
+    {
+        return Container::getInstance();
     }
 }
