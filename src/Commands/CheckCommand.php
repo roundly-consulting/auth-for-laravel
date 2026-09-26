@@ -5,8 +5,8 @@ declare(strict_types=1);
 namespace RoundlyConsulting\Auth\Commands;
 
 use Illuminate\Console\Command;
+use Illuminate\Routing\Router;
 use Illuminate\Support\Facades\Schema;
-use RoundlyConsulting\Auth\AuthenticationManager;
 use RoundlyConsulting\Auth\Enums\EmailVerificationMode;
 use RoundlyConsulting\Auth\Enums\NotificationDelivery;
 use RoundlyConsulting\Auth\Enums\PasskeyMode;
@@ -14,6 +14,7 @@ use RoundlyConsulting\Auth\Enums\TwoFactorMode;
 use RoundlyConsulting\Auth\Enums\UrlKind;
 use RoundlyConsulting\Auth\Guards\GuardConfig;
 use RoundlyConsulting\Auth\Guards\GuardRegistry;
+use RoundlyConsulting\Auth\Http\RequestGuard;
 use RoundlyConsulting\Auth\Support\AboutSection;
 use RoundlyConsulting\Auth\Support\Columns;
 use RoundlyConsulting\Auth\Support\ConfigValidation;
@@ -40,7 +41,7 @@ final class CheckCommand extends Command
 
     private bool $failed = false;
 
-    public function handle(GuardRegistry $registry, AuthenticationManager $manager): int
+    public function handle(GuardRegistry $registry, Router $router): int
     {
         $only = $this->argument('guard');
         $guards = $registry->all();
@@ -64,7 +65,7 @@ final class CheckCommand extends Command
             }
 
             if ($this->errors === []) {
-                $this->checkWiring($guard, $manager);
+                $this->checkWiring($guard, $router);
             }
 
             $this->report($name);
@@ -75,7 +76,7 @@ final class CheckCommand extends Command
         return $this->failed ? self::FAILURE : self::SUCCESS;
     }
 
-    private function checkWiring(GuardConfig $guard, AuthenticationManager $manager): void
+    private function checkWiring(GuardConfig $guard, Router $router): void
     {
         $laravelGuard = $guard->laravelGuard();
         $provider = config("auth.guards.{$laravelGuard}.provider");
@@ -97,9 +98,24 @@ final class CheckCommand extends Command
             $this->warnings[] = 'notifications.delivery is queue but queue.default is sync.';
         }
 
-        if ($guard->routesEnabled() && ! $manager->routesRegistered($guard->name())) {
+        if ($guard->routesEnabled() && ! $this->serves($router, $guard)) {
             $this->errors[] = 'routes.enabled is on but the routes are not registered (cached routes from before?).';
         }
+    }
+
+    /**
+     * Whether the router holds a package route for the guard — read from the router
+     * itself, so routes loaded from the route cache count (no registrar ran then).
+     */
+    private function serves(Router $router, GuardConfig $guard): bool
+    {
+        foreach ($router->getRoutes()->getRoutes() as $route) {
+            if (($route->defaults[RequestGuard::ATTRIBUTE] ?? null) === $guard->name()) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private function checkColumns(GuardConfig $guard): void

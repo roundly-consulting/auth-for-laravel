@@ -2,7 +2,9 @@
 
 declare(strict_types=1);
 
+use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Facades\Schema;
+use RoundlyConsulting\Auth\AuthenticationManager;
 use RoundlyConsulting\Auth\Guards\GuardRegistry;
 use RoundlyConsulting\Auth\Tests\Fixtures\Models\PlainAccount;
 use RoundlyConsulting\RefreshTokens\Contracts\AccessTokenRevoker;
@@ -43,4 +45,13 @@ it('reports warnings without failing', function (): void {
     $this->configureGuard('users', ['notifications.delivery' => 'queue']);
 
     $this->artisan('authentication:check')->expectsOutputToContain('queue.default is sync')->assertSuccessful();
+});
+
+it('finds the routes of a guard when they come from the route cache', function (): void {
+    // After `route:cache` the provider skips registration: the routes are in the router
+    // (loaded from the cache file), but no registrar ever ran in this process.
+    expect(Route::has('authentication.users.login'))->toBeTrue();
+    $this->app->forgetInstance(AuthenticationManager::class);
+
+    $this->artisan('authentication:check', ['guard' => 'users'])->assertSuccessful();
 });
