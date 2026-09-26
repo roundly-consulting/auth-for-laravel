@@ -80,3 +80,22 @@ it('re-checks the enrolment gate when the enrolment is confirmed', function (): 
 
     expect($user->fresh()?->hasTwoFactorEnabled())->toBeFalse();
 });
+
+it('refuses an account-level confirmation once totp is enabled, leaving every session alone', function (): void {
+    Event::fake([TwoFactorEnabled::class]);
+    $user = User::factory()->create();
+    $secret = enableTotp($user);
+    $other = issuePair($user);
+    $stolen = issuePair($user);
+
+    foreach (['000000', totpCode($secret)] as $code) {
+        $this->postJson('/users/auth/two-factor/confirm', ['code' => $code], bearer($stolen))
+            ->assertStatus(422)
+            ->assertJsonPath('code', 'invalid_code');
+    }
+
+    $this->getJson('/users/auth/me', bearer($other))->assertOk();
+    expect($user->fresh()?->tokenVersion())->toBe(0);
+    Event::assertNotDispatched(TwoFactorEnabled::class);
+    Notification::assertNothingSent();
+});

@@ -28,6 +28,10 @@ use SensitiveParameter;
  * Confirms a pending TOTP enrolment, then applies `invalidation.two_factor_changed`.
  * Returns the pair re-issued to the calling device under `others` (the default) — the
  * client must swap to it, its current access token dies with the change.
+ *
+ * Only a PENDING enrolment can be confirmed: with TOTP already on there is nothing to
+ * confirm, and the answer is the same `invalid_code` as a wrong code — before any write,
+ * invalidation or notification.
  */
 final readonly class ConfirmTwoFactorEnrolment
 {
@@ -46,8 +50,14 @@ final readonly class ConfirmTwoFactorEnrolment
             throw new LoginMethodDisabled;
         }
 
+        $model = AccountModels::twoFactor($account);
+
+        if ($model->hasTwoFactorEnabled()) {
+            throw new InvalidCode;
+        }
+
         try {
-            $this->confirmEnrolment->execute(AccountModels::twoFactor($account), $code);
+            $this->confirmEnrolment->execute($model, $code);
         } catch (InvalidTwoFactorCodeException|TwoFactorNotPendingException $e) {
             throw new InvalidCode($e);
         }
