@@ -6,9 +6,11 @@ namespace RoundlyConsulting\Auth\Http;
 
 use Illuminate\Routing\Router;
 use RoundlyConsulting\Auth\AuthenticationManager;
+use RoundlyConsulting\Auth\Enums\EmailVerificationMode;
 use RoundlyConsulting\Auth\Enums\LoginMethod;
 use RoundlyConsulting\Auth\Enums\PasskeyMode;
 use RoundlyConsulting\Auth\Enums\ReauthenticationMethod;
+use RoundlyConsulting\Auth\Enums\RegistrationMode;
 use RoundlyConsulting\Auth\Enums\TwoFactorMode;
 use RoundlyConsulting\Auth\Guards\GuardConfig;
 use RoundlyConsulting\Auth\Http\Controllers\Account\LoginActivityController;
@@ -24,6 +26,17 @@ use RoundlyConsulting\Auth\Http\Controllers\Challenge\PasskeyEnrolmentOptionsCon
 use RoundlyConsulting\Auth\Http\Controllers\Challenge\PasskeyOptionsController;
 use RoundlyConsulting\Auth\Http\Controllers\Challenge\StartTwoFactorEnrolmentController;
 use RoundlyConsulting\Auth\Http\Controllers\Challenge\TwoFactorController;
+use RoundlyConsulting\Auth\Http\Controllers\Email\ConfirmEmailChangeController;
+use RoundlyConsulting\Auth\Http\Controllers\Email\RequestEmailChangeController;
+use RoundlyConsulting\Auth\Http\Controllers\Email\ResendVerificationController;
+use RoundlyConsulting\Auth\Http\Controllers\Email\SendVerificationController;
+use RoundlyConsulting\Auth\Http\Controllers\Email\VerifyEmailController;
+use RoundlyConsulting\Auth\Http\Controllers\Invitations\AcceptInvitationController;
+use RoundlyConsulting\Auth\Http\Controllers\Invitations\CreateInvitationController;
+use RoundlyConsulting\Auth\Http\Controllers\Invitations\ListInvitationsController;
+use RoundlyConsulting\Auth\Http\Controllers\Invitations\PreviewInvitationController;
+use RoundlyConsulting\Auth\Http\Controllers\Invitations\ResendInvitationController;
+use RoundlyConsulting\Auth\Http\Controllers\Invitations\RevokeInvitationController;
 use RoundlyConsulting\Auth\Http\Controllers\Login\ConsumeMagicLinkController;
 use RoundlyConsulting\Auth\Http\Controllers\Login\PasskeyLoginController;
 use RoundlyConsulting\Auth\Http\Controllers\Login\PasskeyLoginOptionsController;
@@ -36,6 +49,10 @@ use RoundlyConsulting\Auth\Http\Controllers\Passkeys\RegisterPasskeyController;
 use RoundlyConsulting\Auth\Http\Controllers\Passkeys\RegistrationOptionsController;
 use RoundlyConsulting\Auth\Http\Controllers\Passkeys\RemovePasskeyController;
 use RoundlyConsulting\Auth\Http\Controllers\Passkeys\RenamePasskeyController;
+use RoundlyConsulting\Auth\Http\Controllers\Passwords\ChangePasswordController;
+use RoundlyConsulting\Auth\Http\Controllers\Passwords\ForgotPasswordController;
+use RoundlyConsulting\Auth\Http\Controllers\Passwords\ResetPasswordController;
+use RoundlyConsulting\Auth\Http\Controllers\Registration\RegisterController;
 use RoundlyConsulting\Auth\Http\Controllers\Sessions\ListSessionsController;
 use RoundlyConsulting\Auth\Http\Controllers\Sessions\LogoutController;
 use RoundlyConsulting\Auth\Http\Controllers\Sessions\LogoutEverywhereController;
@@ -201,6 +218,10 @@ final class RouteRegistrar
         $twoFactor = $this->guard->twoFactorMode() !== TwoFactorMode::Off;
         $passkeys = $this->guard->passkeyMode() !== PasskeyMode::Off;
         $enrolment = $this->guard->allowsEnrolmentInChallenge();
+        $invitations = $this->guard->invitationsEnabled();
+        $manage = $invitations && $this->guard->invitationManagementRoutes();
+        $can = ['can:'.$this->guard->invitationAbility()];
+        $verification = $this->guard->verificationMode() !== EmailVerificationMode::Off;
 
         return [
             // Login
@@ -224,6 +245,23 @@ final class RouteRegistrar
             // Tokens
             new RouteDefinition('tokens', 'POST', 'refresh', 'refresh', RefreshController::class),
 
+            // Registration & invitations
+            new RouteDefinition('registration', 'POST', 'register', 'register', RegisterController::class, enabled: $this->guard->registrationMode() !== RegistrationMode::Closed),
+            new RouteDefinition('invitations', 'POST', 'invitations/preview', 'invitations.preview', PreviewInvitationController::class, enabled: $invitations),
+            new RouteDefinition('invitations', 'POST', 'invitations/accept', 'invitations.accept', AcceptInvitationController::class, enabled: $invitations),
+
+            // Passwords
+            new RouteDefinition('passwords', 'POST', 'password/forgot', 'password.forgot', ForgotPasswordController::class, enabled: $this->guard->passwordResetEnabled()),
+            new RouteDefinition('passwords', 'POST', 'password/reset', 'password.reset', ResetPasswordController::class, enabled: $this->guard->passwordResetEnabled()),
+            new RouteDefinition('passwords', 'PUT', 'password', 'password.update', ChangePasswordController::class, authenticated: true, enabled: $this->guard->passwordChangeEnabled()),
+
+            // Email
+            new RouteDefinition('email', 'POST', 'email/verify', 'email.verify', VerifyEmailController::class, enabled: $verification),
+            new RouteDefinition('email', 'POST', 'email/verification/resend', 'email.resend', ResendVerificationController::class, enabled: $verification),
+            new RouteDefinition('email', 'POST', 'email/verification', 'email.send', SendVerificationController::class, authenticated: true, enabled: $verification),
+            new RouteDefinition('email', 'POST', 'email/change', 'email.change', RequestEmailChangeController::class, authenticated: true, enabled: $this->guard->emailChangeEnabled()),
+            new RouteDefinition('email', 'POST', 'email/change/confirm', 'email.change.confirm', ConfirmEmailChangeController::class, enabled: $this->guard->emailChangeEnabled()),
+
             // Account
             new RouteDefinition('account', 'GET', 'me', 'me', MeController::class, authenticated: true),
             new RouteDefinition('account', 'PATCH', 'locale', 'locale', UpdateLocaleController::class, authenticated: true),
@@ -245,6 +283,12 @@ final class RouteRegistrar
             new RouteDefinition('two-factor', 'POST', 'two-factor/confirm', 'two-factor.confirm', ConfirmController::class, authenticated: true, enabled: $twoFactor),
             new RouteDefinition('two-factor', 'DELETE', 'two-factor', 'two-factor.disable', DisableController::class, authenticated: true, enabled: $this->guard->twoFactorMode() === TwoFactorMode::Optional),
             new RouteDefinition('two-factor', 'POST', 'two-factor/recovery-codes', 'two-factor.recovery-codes', RegenerateRecoveryCodesController::class, authenticated: true, enabled: $twoFactor),
+
+            // Invitation management (admin)
+            new RouteDefinition('invitations.manage', 'GET', 'invitations', 'invitations.index', ListInvitationsController::class, authenticated: true, enabled: $manage, middleware: $can),
+            new RouteDefinition('invitations.manage', 'POST', 'invitations', 'invitations.store', CreateInvitationController::class, authenticated: true, enabled: $manage, middleware: $can),
+            new RouteDefinition('invitations.manage', 'POST', 'invitations/{invitation}/resend', 'invitations.resend', ResendInvitationController::class, authenticated: true, enabled: $manage, middleware: $can),
+            new RouteDefinition('invitations.manage', 'DELETE', 'invitations/{invitation}', 'invitations.destroy', RevokeInvitationController::class, authenticated: true, enabled: $manage, middleware: $can),
 
             // Passkey management
             new RouteDefinition('passkeys', 'GET', 'passkeys', 'passkeys.index', ListPasskeysController::class, authenticated: true, enabled: $passkeys),

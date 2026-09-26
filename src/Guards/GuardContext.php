@@ -10,6 +10,8 @@ use RoundlyConsulting\Auth\Actions\Challenges\CompletePasskeyEnrolmentStep;
 use RoundlyConsulting\Auth\Actions\Challenges\CompletePasskeyStep;
 use RoundlyConsulting\Auth\Actions\Challenges\CompleteTwoFactorStep;
 use RoundlyConsulting\Auth\Actions\Challenges\ConfirmTwoFactorEnrolmentStep;
+use RoundlyConsulting\Auth\Actions\Invitations\AcceptInvitation;
+use RoundlyConsulting\Auth\Actions\Invitations\CreateInvitation;
 use RoundlyConsulting\Auth\Actions\Login\AttemptPasswordLogin;
 use RoundlyConsulting\Auth\Actions\Login\BeginPasskeyLogin;
 use RoundlyConsulting\Auth\Actions\Login\CompletePasskeyLogin;
@@ -17,6 +19,7 @@ use RoundlyConsulting\Auth\Actions\Login\ConsumeMagicLink;
 use RoundlyConsulting\Auth\Actions\Login\RequestEmailOtp;
 use RoundlyConsulting\Auth\Actions\Login\RequestMagicLink;
 use RoundlyConsulting\Auth\Actions\Login\VerifyEmailOtp;
+use RoundlyConsulting\Auth\Actions\Registration\RegisterAccount;
 use RoundlyConsulting\Auth\Actions\Sessions\InvalidateAccountTokens;
 use RoundlyConsulting\Auth\Actions\Sessions\ListSessions;
 use RoundlyConsulting\Auth\Actions\Sessions\LogoutCurrentSession;
@@ -26,10 +29,14 @@ use RoundlyConsulting\Auth\Actions\Sessions\LogoutSession;
 use RoundlyConsulting\Auth\Actions\Tokens\IssueTokenPair;
 use RoundlyConsulting\Auth\Actions\Tokens\RefreshTokenPair;
 use RoundlyConsulting\Auth\Contracts\Account;
+use RoundlyConsulting\Auth\DataTransferObjects\AcceptInvitationData;
 use RoundlyConsulting\Auth\DataTransferObjects\ChallengeFactorData;
 use RoundlyConsulting\Auth\DataTransferObjects\CurrentToken;
+use RoundlyConsulting\Auth\DataTransferObjects\InvitationData;
 use RoundlyConsulting\Auth\DataTransferObjects\LoginResult;
 use RoundlyConsulting\Auth\DataTransferObjects\PasswordCredentials;
+use RoundlyConsulting\Auth\DataTransferObjects\RegistrationData;
+use RoundlyConsulting\Auth\DataTransferObjects\RegistrationResult;
 use RoundlyConsulting\Auth\DataTransferObjects\SessionContext;
 use RoundlyConsulting\Auth\DataTransferObjects\SessionData;
 use RoundlyConsulting\Auth\DataTransferObjects\TokenPair;
@@ -38,6 +45,7 @@ use RoundlyConsulting\Auth\Enums\FactorMethod;
 use RoundlyConsulting\Auth\Enums\InvalidationReason;
 use RoundlyConsulting\Auth\Enums\LoginMethod;
 use RoundlyConsulting\Auth\Events\TokensIssued;
+use RoundlyConsulting\Auth\Models\Invitation;
 use RoundlyConsulting\Passkeys\DataTransferObjects\AuthenticationResponseData;
 use RoundlyConsulting\Passkeys\DataTransferObjects\RequestOptionsData;
 use SensitiveParameter;
@@ -122,6 +130,23 @@ final readonly class GuardContext
         };
 
         return $this->container->make($action)->execute($this->name(), $data);
+    }
+
+    // ── Registration & invitations ───────────────────────────────────────
+
+    public function register(RegistrationData $data): RegistrationResult
+    {
+        return $this->container->make(RegisterAccount::class)->execute($this->name(), $data);
+    }
+
+    public function invite(InvitationData $data): Invitation
+    {
+        return $this->container->make(CreateInvitation::class)->execute($this->name(), $data);
+    }
+
+    public function acceptInvitation(AcceptInvitationData $data): LoginResult
+    {
+        return $this->container->make(AcceptInvitation::class)->execute($this->name(), $data);
     }
 
     // ── Tokens & sessions ────────────────────────────────────────────────

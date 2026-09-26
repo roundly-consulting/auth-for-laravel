@@ -1,0 +1,176 @@
+<?php
+
+declare(strict_types=1);
+
+use Carbon\CarbonImmutable;
+use Illuminate\Support\Facades\Event;
+use Illuminate\Support\Facades\Gate;
+use Illuminate\Support\Facades\Notification;
+use Illuminate\Validation\ValidationException;
+use RoundlyConsulting\Auth\Actions\Invitations\ResendInvitation;
+use RoundlyConsulting\Auth\Actions\Invitations\RevokeInvitation;
+use RoundlyConsulting\Auth\Actions\Invitations\SendInvitation;
+use RoundlyConsulting\Auth\DataTransferObjects\AcceptInvitationData;
+use RoundlyConsulting\Auth\DataTransferObjects\InvitationData;
+use RoundlyConsulting\Auth\Events\InvitationAccepted;
+use RoundlyConsulting\Auth\Exceptions\InvalidInvitation;
+use RoundlyConsulting\Auth\Exceptions\TooManyAttempts;
+use RoundlyConsulting\Auth\Facades\Authentication;
+use RoundlyConsulting\Auth\Models\Invitation;
+use RoundlyConsulting\Auth\Notifications\AccountExistsNotification;
+use RoundlyConsulting\Auth\Notifications\InvitationNotification;
+use RoundlyConsulting\Auth\Tests\Fixtures\Models\User;
+
+beforeEach(function (): void {
+    Notification::fake();
+    $this->configureGuard('users', ['invitations.preview_payload_keys' => ['team']]);
+});
+
+function invite(string $email = 'invitee@example.com', array $payload = ['role' => 'vet', 'team' => 'Clinic']): string
+{
+    Authentication::guard('users')->invite(new InvitationData($email, $payload, locale: 'sk'));
+
+    $url = null;
+
+    Notification::assertSentOnDemand(InvitationNotification::class, function (InvitationNotification $notification) use (&$url): bool {
+        $url = $notification->data->url;
+
+        return true;
+    });
+
+    return tokenFromUrl($url);
+}
+
+it('previews and accepts an invitation, creating a verified account', function (): void {
+    Event::fake([InvitationAccepted::class]);
+    $token = invite();
+
+    $this->postJson('/users/auth/invitations/preview', ['token' => $token])
+        ->assertOk()
+        ->assertExactJson(['email' => 'invitee@example.com', 'guard' => 'users', 'expires_at' => Invitation::query()->sole()->expires_at->toIso8601ZuluString(), 'payload' => ['team' => 'Clinic']]);
+
+    $this->postJson('/users/auth/invitations/accept', ['token' => $token, 'password' => 'a-long-enough-passphrase'], ['User-Agent' => 'PestBrowser/1.0'])
+        ->assertOk()
+        ->assertJsonPath('status', 'authenticated');
+
+    $user = User::query()->sole();
+
+    expect($user->hasVerifiedEmail())->toBeTrue()
+        ->and($user->accountLocale())->toBe('sk')
+        ->and(Invitation::query()->sole()->account_id)->toBe($user->getKey());
+    Event::assertDispatched(InvitationAccepted::class, fn (InvitationAccepted $event): bool => $event->invitation->payload === ['role' => 'vet', 'team' => 'Clinic']);
+});
+
+it('is single use', function (): void {
+    $token = invite();
+    Authentication::guard('users')->acceptInvitation(new AcceptInvitationData($token, 'a-long-enough-passphrase', sessionContext()));
+
+    Authentication::guard('users')->acceptInvitation(new AcceptInvitationData($token, 'a-long-enough-passphrase', sessionContext()));
+})->throws(InvalidInvitation::class);
+
+it('expires, and dies when revoked or re-sent', function (): void {
+    $token = invite();
+    $invitation = Invitation::query()->sole();
+
+    $link = app(SendInvitation::class)->execute($invitation, notify: false);
+    expect(fn () => Authentication::guard('users')->acceptInvitation(new AcceptInvitationData($token, 'a-long-enough-passphrase', sessionContext())))->toThrow(InvalidInvitation::class);
+
+    app(RevokeInvitation::class)->execute($invitation);
+    expect(fn () => Authentication::guard('users')->acceptInvitation(new AcceptInvitationData($link->token, 'a-long-enough-passphrase', sessionContext())))->toThrow(InvalidInvitation::class);
+
+    $fresh = invite('late@example.com');
+    $this->travel(8)->days();
+    expect(fn () => Authentication::guard('users')->acceptInvitation(new AcceptInvitationData($fresh, 'a-long-enough-passphrase', sessionContext())))->toThrow(InvalidInvitation::class);
+});
+
+it('replaces a pending invitation for the same address', function (): void {
+    $first = invite();
+    invite();
+
+    expect(Invitation::query()->whereNotNull('revoked_at')->count())->toBe(1);
+    $this->postJson('/users/auth/invitations/preview', ['token' => $first])->assertStatus(422)->assertJsonPath('code', 'invalid_invitation');
+});
+
+it('keeps the address locked, or stores another one unverified when unlocked', function (): void {
+    $token = invite();
+    Authentication::guard('users')->acceptInvitation(new AcceptInvitationData($token, 'a-long-enough-passphrase', sessionContext(), email: 'other@example.com'));
+    expect(User::query()->sole()->email)->toBe('invitee@example.com');
+
+    $this->configureGuard('users', ['invitations.lock_email' => false]);
+    $token = invite('second@example.com');
+    $result = Authentication::guard('users')->acceptInvitation(new AcceptInvitationData($token, 'a-long-enough-passphrase', sessionContext(), email: 'Chosen@Example.com'));
+
+    $user = User::query()->where('email', 'chosen@example.com')->sole();
+    expect($user->hasVerifiedEmail())->toBeFalse()
+        ->and(claimsOf($result->tokens)->authMethods())->toBe([]);
+});
+
+it('refuses an existing address with a uniform error and a notice', function (): void {
+    $this->configureGuard('users', ['invitations.allow_existing_email' => true]);
+    $token = invite('taken@example.com');
+    User::factory()->create(['email' => 'taken@example.com']);
+
+    expect(fn () => Authentication::guard('users')->acceptInvitation(new AcceptInvitationData($token, 'a-long-enough-passphrase', sessionContext())))->toThrow(InvalidInvitation::class)
+        ->and(Invitation::query()->sole()->accepted_at)->toBeNull();
+
+    Notification::assertSentOnDemand(AccountExistsNotification::class);
+});
+
+it('refuses to invite an existing address unless allowed', function (): void {
+    User::factory()->create(['email' => 'taken@example.com']);
+
+    expect(fn () => Authentication::guard('users')->invite(new InvitationData('taken@example.com')))->toThrow(ValidationException::class);
+});
+
+it('enforces the resend cooldown and the send cap', function (): void {
+    $this->configureGuard('users', ['invitations.max_sends' => 2, 'invitations.resend_cooldown' => 60]);
+    CarbonImmutable::setTestNow('2026-09-26 10:00:00');
+    invite();
+    $invitation = Invitation::query()->sole();
+
+    expect(fn () => app(ResendInvitation::class)->execute($invitation))->toThrow(TooManyAttempts::class);
+
+    CarbonImmutable::setTestNow('2026-09-26 10:01:00');
+    $link = app(ResendInvitation::class)->execute($invitation->fresh());
+    expect($link->url)->toContain('#token=');
+
+    CarbonImmutable::setTestNow('2026-09-26 10:05:00');
+    expect(fn () => app(ResendInvitation::class)->execute($invitation->fresh()))->toThrow(TooManyAttempts::class);
+    CarbonImmutable::setTestNow();
+});
+
+it('manages invitations over http behind the gate', function (): void {
+    $admin = User::factory()->create();
+    $pair = issuePair($admin);
+
+    $this->getJson('/users/auth/invitations', bearer($pair))->assertForbidden();
+
+    Gate::define('authentication.invitations.manage', fn (User $user): bool => $user->is($admin));
+
+    $id = $this->postJson('/users/auth/invitations', ['email' => 'new@example.com', 'payload' => ['role' => 'staff']], bearer($pair))
+        ->assertCreated()
+        ->assertJsonPath('data.status', 'pending')
+        ->assertJsonPath('data.send_count', 1)
+        ->json('data.id');
+
+    expect(Invitation::query()->sole()->inviter_id)->toBe($admin->getKey());
+
+    $this->getJson('/users/auth/invitations?status=pending', bearer($pair))->assertOk()->assertJsonCount(1, 'data');
+    $this->travel(2)->minutes();
+    $this->postJson("/users/auth/invitations/{$id}/resend", [], bearer($pair))->assertOk()->assertJsonStructure(['status', 'url']);
+    $this->deleteJson("/users/auth/invitations/{$id}", [], bearer($pair))->assertNoContent();
+    $this->deleteJson('/users/auth/invitations/999', [], bearer($pair))->assertNotFound();
+    $this->deleteJson('/users/auth/invitations/abc', [], bearer($pair))->assertNotFound();
+    $this->postJson("/users/auth/invitations/{$id}/resend", [], bearer($pair))->assertStatus(422);
+});
+
+it('lets two concurrent accepts create exactly one account', function (): void {
+    $token = invite();
+    $invitation = Invitation::query()->sole();
+
+    // The loser's view: the claim already happened.
+    Invitation::query()->whereKey($invitation->getKey())->update(['accepted_at' => now()]);
+
+    expect(fn () => Authentication::guard('users')->acceptInvitation(new AcceptInvitationData($token, 'a-long-enough-passphrase', sessionContext())))->toThrow(InvalidInvitation::class)
+        ->and(User::query()->count())->toBe(0);
+});
