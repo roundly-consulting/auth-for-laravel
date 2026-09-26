@@ -63,3 +63,26 @@ it('judges every run on its own when called again in the same process', function
     config()->set('mail.default', 'array');
     $this->artisan('authentication:check')->assertSuccessful();
 });
+
+it('checks the lower packages\' configured column names', function (): void {
+    Schema::table('users', function ($table): void {
+        $table->renameColumn('passkey_user_handle', 'webauthn_handle');
+        $table->renameColumn('two_factor_secret', 'totp_secret');
+    });
+    config()->set('passkeys.user.handle_column', 'webauthn_handle');
+    config()->set('two-factor.columns.secret', 'totp_secret');
+
+    $this->artisan('authentication:check', ['guard' => 'users'])->assertSuccessful();
+});
+
+it('requires the replay-guard column only when two-factor stores the timestep there', function (): void {
+    Schema::table('users', fn ($table) => $table->dropColumn('two_factor_last_used_timestep'));
+
+    $this->artisan('authentication:check', ['guard' => 'users'])
+        ->expectsOutputToContain('missing columns: two_factor_last_used_timestep')
+        ->assertFailed();
+
+    config()->set('two-factor.replay_guard', 'cache');
+
+    $this->artisan('authentication:check', ['guard' => 'users'])->assertSuccessful();
+});

@@ -19,6 +19,8 @@ use RoundlyConsulting\Auth\Support\AboutSection;
 use RoundlyConsulting\Auth\Support\Columns;
 use RoundlyConsulting\Auth\Support\ConfigValidation;
 use RoundlyConsulting\Auth\Support\JwtAccessTokenRevoker;
+use RoundlyConsulting\Passkeys\Support\UserHandleColumn;
+use RoundlyConsulting\TwoFactor\Enums\ReplayGuardMode;
 use Throwable;
 
 /**
@@ -137,11 +139,11 @@ final class CheckCommand extends Command
         }
 
         if ($guard->twoFactorMode() !== TwoFactorMode::Off) {
-            $columns = [...$columns, 'two_factor_secret', 'two_factor_recovery_codes', 'two_factor_confirmed_at'];
+            $columns = [...$columns, ...$this->twoFactorColumns()];
         }
 
         if ($guard->passkeyMode() !== PasskeyMode::Off) {
-            $columns[] = 'passkey_user_handle';
+            $columns[] = UserHandleColumn::name();
         }
 
         try {
@@ -155,6 +157,30 @@ final class CheckCommand extends Command
         if ($missing !== []) {
             $this->errors[] = "Table [{$table}] is missing columns: ".implode(', ', $missing).'.';
         }
+    }
+
+    /**
+     * The two-factor columns under the names two-factor-for-laravel is configured with —
+     * the replay timestep only when its replay guard stores it in a column.
+     *
+     * @return list<string>
+     */
+    private function twoFactorColumns(): array
+    {
+        $names = ['secret' => 'two_factor_secret', 'recovery_codes' => 'two_factor_recovery_codes', 'confirmed_at' => 'two_factor_confirmed_at'];
+
+        if (ReplayGuardMode::tryFrom((string) config('two-factor.replay_guard')) === ReplayGuardMode::Column) {
+            $names['last_used_timestep'] = 'two_factor_last_used_timestep';
+        }
+
+        $columns = [];
+
+        foreach ($names as $key => $default) {
+            $column = config('two-factor.columns.'.$key);
+            $columns[] = is_string($column) && $column !== '' ? $column : $default;
+        }
+
+        return $columns;
     }
 
     private function checkGlobal(): void
