@@ -13,6 +13,7 @@ use RoundlyConsulting\Auth\Notifications\ConfirmEmailChangeNotification;
 use RoundlyConsulting\Auth\Notifications\EmailChangedNotification;
 use RoundlyConsulting\Auth\Notifications\EmailChangeRequestedNotification;
 use RoundlyConsulting\Auth\Notifications\MagicLinkNotification;
+use RoundlyConsulting\Auth\Notifications\ResetPasswordNotification;
 use RoundlyConsulting\Auth\Tests\Fixtures\Models\User;
 
 beforeEach(function (): void {
@@ -105,4 +106,42 @@ it('requires a recent authentication', function (): void {
 
     $this->postJson('/users/auth/email/change', ['email' => 'new@example.com'], bearer($pair))->assertForbidden()->assertJsonPath('code', 'reauthentication_required');
     CarbonImmutable::setTestNow();
+});
+
+/**
+ * A pending change started from a stolen session is the takeover path: the owner's
+ * reaction (reset, logout everywhere, a disable) must kill the link as well.
+ */
+it('kills a pending change when the account is invalidated', function (Closure $react): void {
+    $user = User::factory()->create(['email' => 'victim@example.com']);
+    $this->postJson('/users/auth/email/change', ['email' => 'attacker@evil.test'], bearer(issuePair($user)))->assertStatus(202);
+    $link = confirmationToken();
+
+    $react($user);
+
+    $this->postJson('/users/auth/email/change/confirm', ['token' => $link])
+        ->assertStatus(422)
+        ->assertJsonPath('code', 'invalid_token');
+    expect($user->fresh()?->email)->toBe('victim@example.com');
+})->with([
+    'password reset' => [function (User $user): void {
+        test()->postJson('/users/auth/password/forgot', ['email' => 'victim@example.com'])->assertStatus(202);
+        $reset = tokenFromUrl(sentNotification($user, ResetPasswordNotification::class)->data->url);
+        test()->postJson('/users/auth/password/reset', ['token' => $reset, 'password' => 'a-brand-new-passphrase'])->assertOk();
+    }],
+    'password change' => [fn (User $user) => test()->putJson('/users/auth/password', ['current_password' => 'correct-horse-battery', 'password' => 'a-brand-new-passphrase'], bearer(issuePair($user)))->assertOk()],
+    'logout everywhere' => [fn (User $user) => Authentication::guard('users')->logoutEverywhere($user)],
+    'disable' => [fn (User $user) => Authentication::guard('users')->disable($user, 'incident')],
+]);
+
+it('refuses to confirm a change for a disabled account', function (): void {
+    $user = User::factory()->create(['email' => 'victim@example.com']);
+    $this->postJson('/users/auth/email/change', ['email' => 'attacker@evil.test'], bearer(issuePair($user)))->assertStatus(202);
+    $link = confirmationToken();
+
+    // Disabled by host code that bypasses the package (no invalidation ran).
+    $user->forceFill(['disabled_at' => CarbonImmutable::now()])->save();
+
+    $this->postJson('/users/auth/email/change/confirm', ['token' => $link])->assertStatus(422);
+    expect($user->fresh()?->email)->toBe('victim@example.com');
 });

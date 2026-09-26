@@ -30,9 +30,9 @@ use SensitiveParameter;
  * Confirms an email change from the link mailed to the NEW address (guest-callable —
  * it is opened from a mail client). The address is re-checked in a transaction (another
  * account may have claimed it meanwhile) and the account's email must still be the one
- * the change started from. Every other outstanding link of the account dies (they went
- * to the old address), the account's tokens are invalidated, and the old address is
- * told.
+ * the change started from, and the account must not be disabled. Every other outstanding
+ * link of the account dies (they went to the old address), the account's tokens are
+ * invalidated, and the old address is told.
  */
 final readonly class ConfirmEmailChange
 {
@@ -54,6 +54,12 @@ final readonly class ConfirmEmailChange
 
         $redeemed = $this->consume->execute($guard, OneTimeTokenPurpose::EmailChange, $token, $context);
         $account = $redeemed->account;
+
+        // A disabled account changes nothing (invalidation kills its links; host code
+        // that disables around the package must not leave one working).
+        if ($account->isDisabled()) {
+            throw new InvalidOneTimeToken;
+        }
         $accounts = new AccountRepository($config);
         $new = $redeemed->record->email;
         $old = (string) $account->accountEmail();

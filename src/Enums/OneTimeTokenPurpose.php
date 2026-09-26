@@ -21,12 +21,16 @@ enum OneTimeTokenPurpose: string
     case Reauthentication = 'reauthentication';
 
     /**
-     * The purposes invalidated together whenever an account's tokens are invalidated.
+     * The purposes invalidated together whenever an account's tokens are invalidated:
+     * everything that signs in, re-proves the account or takes it over. A pending email
+     * change is one of them — started from a stolen session, it would otherwise survive
+     * the owner's password reset or logout and move the account to the thief's address.
+     * (A verification link is bound to the current address and changes nothing else.)
      *
      * @return list<self>
      */
-    public static function loginPurposes(): array
+    public static function credentialPurposes(): array
     {
-        return [self::MagicLink, self::EmailOtp, self::PasswordReset, self::Reauthentication];
+        return [self::MagicLink, self::EmailOtp, self::PasswordReset, self::Reauthentication, self::EmailChange];
     }
 }

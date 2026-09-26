@@ -30,8 +30,9 @@ use RoundlyConsulting\RefreshTokens\Facades\RefreshToken;
  * The invalidation policy applied after every credential change or incident, per the
  * guard's `invalidation.<reason>` scope:
  *
- *  - `none`   — nothing (login one-time tokens still die for resets, disables and
- *               email changes);
+ *  - `none`   — nothing (credential one-time tokens — sign-in links and codes,
+ *               resets, re-authentication codes, pending email changes — still die
+ *               for resets, disables and email changes);
  *  - `others` — `tv++`, every family revoked, then a fresh pair issued for the kept
  *               (calling) device with the same `amr`/`auth_time` — returned, because
  *               otherwise the device making the change is logged out by its own bump.
@@ -39,7 +40,7 @@ use RoundlyConsulting\RefreshTokens\Facades\RefreshToken;
  *  - `all`    — `tv++` and every family revoked.
  *
  * Any scope but `none` also kills the account's pending challenges (except the one
- * whose enrolment step triggered this) and its login one-time tokens. The DB writes run
+ * whose enrolment step triggered this) and its credential one-time tokens. The DB writes run
  * in one transaction; the denylist writes are cache-backed and not transactional — a
  * rollback leaves an over-denied jti, which is harmless.
  */
@@ -64,7 +65,7 @@ final readonly class InvalidateAccountTokens
 
         if ($scope === InvalidationScope::None) {
             if ($reason->alwaysInvalidatesOneTimeTokens()) {
-                $this->invalidateOneTimeTokens->execute($guard->name(), $account, ...OneTimeTokenPurpose::loginPurposes());
+                $this->invalidateOneTimeTokens->execute($guard->name(), $account, ...OneTimeTokenPurpose::credentialPurposes());
             }
 
             return new InvalidationResult($scope);
@@ -89,7 +90,7 @@ final readonly class InvalidateAccountTokens
                 ->when($exceptChallengeId !== null, static fn ($query) => $query->whereKeyNot($exceptChallengeId))
                 ->update(['invalidated_at' => CarbonImmutable::now(), 'invalidated_reason' => 'superseded']);
 
-            $this->invalidateOneTimeTokens->execute($guard->name(), $account, ...OneTimeTokenPurpose::loginPurposes());
+            $this->invalidateOneTimeTokens->execute($guard->name(), $account, ...OneTimeTokenPurpose::credentialPurposes());
 
             return $revoked;
         });
