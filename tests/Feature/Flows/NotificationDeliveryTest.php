@@ -31,6 +31,22 @@ it('delivers after the response by default', function (): void {
     Bus::assertDispatchedAfterResponse(DeliverAuthenticationNotification::class, fn (DeliverAuthenticationNotification $job): bool => $job->notification instanceof MagicLinkNotification);
 });
 
+it('delivers inline inside a queue worker, which never ends a response', function (string $worker): void {
+    Notification::fake();
+    $this->configureGuard('users', ['notifications.delivery' => 'after_response']);
+    $user = User::factory()->create();
+    $argv = $_SERVER['argv'];
+    $_SERVER['argv'] = ['artisan', $worker];
+
+    try {
+        Authentication::guard('users')->requestMagicLink($user->email, sessionContext());
+    } finally {
+        $_SERVER['argv'] = $argv;
+    }
+
+    Notification::assertSentTo($user, MagicLinkNotification::class);
+})->with(['queue:work', 'horizon:work']);
+
 it('queues on the configured connection and queue', function (): void {
     Bus::fake();
     $this->configureGuard('users', ['notifications.delivery' => 'queue', 'notifications.connection' => 'redis', 'notifications.queue' => 'mail']);

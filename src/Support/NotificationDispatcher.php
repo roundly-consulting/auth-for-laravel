@@ -20,7 +20,9 @@ use RoundlyConsulting\Auth\Notifications\AuthenticationNotification;
  * Sends a notification the way the guard is configured to:
  *
  *  - `after_response` (default) — behind the response, so a known account's response
- *    is not measurably slower than an unknown one's (timing enumeration);
+ *    is not measurably slower than an unknown one's (timing enumeration). Inside a
+ *    queue worker there is no response to wait for — and the worker's "after" is its
+ *    exit — so it is sent inline there;
  *  - `queue` — through the encrypted job on `notifications.connection/queue`;
  *  - `sync` — inline (development only).
  *
@@ -74,7 +76,13 @@ final class NotificationDispatcher
             $notification->locale($locale);
         }
 
-        match ($guard->notificationDelivery()) {
+        $delivery = $guard->notificationDelivery();
+
+        if ($delivery === NotificationDelivery::AfterResponse && $this->insideQueueWorker()) {
+            $delivery = NotificationDelivery::Sync;
+        }
+
+        match ($delivery) {
             NotificationDelivery::Sync => Notification::sendNow($notifiable, $notification),
             NotificationDelivery::AfterResponse => Bus::dispatchAfterResponse(new DeliverAuthenticationNotification($notifiable, $notification)),
             NotificationDelivery::Queue => Bus::dispatch(
@@ -83,5 +91,14 @@ final class NotificationDispatcher
                     ->onQueue($guard->notificationQueue()),
             ),
         };
+    }
+
+    /**
+     * A long-running worker process (`queue:listen` runs its jobs through `queue:work`):
+     * callbacks deferred "after the response" would only run when it exits.
+     */
+    private function insideQueueWorker(): bool
+    {
+        return app()->runningConsoleCommand('queue:work', 'horizon:work');
     }
 }
