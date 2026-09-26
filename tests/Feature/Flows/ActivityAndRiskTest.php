@@ -52,6 +52,22 @@ it('does not treat the very first login as a new device, but a second device is'
     expect(LoginActivity::query()->where('is_new_device', true)->count())->toBe(1);
 });
 
+it('does not let an unauthenticated request make an attacker device known', function (string $request): void {
+    Event::fake([NewDeviceDetected::class]);
+    Notification::fake();
+    $user = User::factory()->create(['email' => 'victim@example.com']);
+    login($user, 'Laptop', 'owner-laptop');
+
+    // Anyone who knows the address can make the package record a "succeeded" request…
+    $this->postJson('/users/auth/'.$request, ['email' => 'victim@example.com'], ['X-Device-Id' => 'attacker-box', 'User-Agent' => 'EvilBrowser/1.0'])->assertStatus(202);
+
+    // …which must not make the next sign-in from that device (with a stolen password) a known one.
+    login($user, 'EvilBrowser/1.0', 'attacker-box');
+
+    Event::assertDispatched(NewDeviceDetected::class);
+    Notification::assertSentTo($user, NewDeviceLoginNotification::class);
+})->with(['password/forgot', 'login/magic-link', 'login/otp']);
+
 it('prefers the device header over the user agent', function (): void {
     Event::fake([NewDeviceDetected::class]);
     $user = User::factory()->create();

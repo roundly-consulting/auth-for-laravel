@@ -16,6 +16,11 @@ use RoundlyConsulting\Auth\Support\Models;
 /**
  * A device is known when a successful login with its fingerprint exists inside the
  * retention window. The very first successful login is not "new" (`skip_first_login`).
+ *
+ * Only rows that carry a session count — completed logins and in-session
+ * re-authentications. Unauthenticated requests are recorded as "succeeded" too (a reset
+ * or sign-in link sent to a known address), and anyone who knows the address can make
+ * one from any device.
  */
 final readonly class DetectNewDevice
 {
@@ -39,6 +44,7 @@ final readonly class DetectNewDevice
             ->where('account_type', $model->getMorphClass())
             ->where('account_id', $model->getKey())
             ->where('outcome', ActivityOutcome::Succeeded->value)
+            ->whereNotNull('session_id')
             ->where('created_at', '>=', CarbonImmutable::now()->subDays($guard->activityRetentionDays()));
 
         if ((clone $successes)->where('device_fingerprint', $fingerprint)->exists()) {
