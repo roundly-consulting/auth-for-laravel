@@ -55,19 +55,6 @@ between steps, what is invalidated when, and what the client sees.
 
 ## Installation
 
-The package and its roundly dependencies are private and not on Packagist yet. Until they are,
-add a path + VCS repository pair for **every** roundly package in the graph — Composer does not
-inherit repositories from a dependency:
-
-```jsonc
-"repositories": [
-    { "type": "path", "url": "../crypto-for-laravel*", "options": { "symlink": true } },
-    { "type": "vcs", "url": "https://github.com/roundly-consulting/crypto-for-laravel", "no-api": true },
-    // … the same pair for enums, jwt, money, package-toolkit, passkeys, qr,
-    //   refresh-tokens, two-factor and auth
-]
-```
-
 ```bash
 composer require roundly-consulting/auth-for-laravel
 php artisan authentication:install
