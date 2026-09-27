@@ -1,10 +1,7 @@
-name: Fix PHP code style issues
+name: Check PHP code style
 
 on:
   workflow_dispatch:
-
-permissions:
-  contents: write
 
 jobs:
   php-code-styling:
@@ -13,13 +10,8 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
-        with:
-          ref: ${{ github.head_ref }}
 
-      - name: Fix PHP code style issues
+      - name: Check PHP code style (Pint)
         uses: aglipanci/laravel-pint-action@2.6
-
-      - name: Commit changes
-        uses: stefanzweifel/git-auto-commit-action@v7
         with:
-          commit_message: "style(pint): fix code style"
+          args: --test
