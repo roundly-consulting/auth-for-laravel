@@ -12,7 +12,7 @@ use RoundlyConsulting\Auth\Guards\GuardRegistry;
 use RoundlyConsulting\Auth\Support\AccountModels;
 use RoundlyConsulting\Jwt\Facades\Jwt;
 use RoundlyConsulting\RefreshTokens\Enums\RevocationReason;
-use RoundlyConsulting\RefreshTokens\Facades\RefreshToken;
+use RoundlyConsulting\RefreshTokens\Facades\RefreshTokens;
 
 /**
  * Ends the calling session: its access token is denied until expiry and its refresh
@@ -30,7 +30,7 @@ final readonly class LogoutCurrentSession
 
         $revoked = $current->sessionId === null
             ? false
-            : RefreshToken::revokeSession(AccountModels::of($account), $current->sessionId, RevocationReason::Logout);
+            : RefreshTokens::sessions(AccountModels::of($account))->revoke($current->sessionId, RevocationReason::Logout);
 
         event(new LoggedOut($guard, $account, LogoutScope::Current, $revoked ? 1 : 0));
     }

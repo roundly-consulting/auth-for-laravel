@@ -11,7 +11,7 @@ use RoundlyConsulting\Auth\Contracts\Account;
 use RoundlyConsulting\Auth\DataTransferObjects\SessionData;
 use RoundlyConsulting\Auth\Guards\GuardRegistry;
 use RoundlyConsulting\Auth\Support\AccountModels;
-use RoundlyConsulting\RefreshTokens\Facades\RefreshToken;
+use RoundlyConsulting\RefreshTokens\Facades\RefreshTokens;
 use RoundlyConsulting\RefreshTokens\Models\RefreshToken as RefreshTokenModel;
 
 /**
@@ -29,7 +29,7 @@ final readonly class ListSessions
     {
         $this->guards->get($guard);
 
-        return RefreshToken::listFor(AccountModels::of($account))
+        return RefreshTokens::sessions(AccountModels::of($account))->all()
             ->map(static function (RefreshTokenModel $row) use ($currentSessionId): SessionData {
                 $meta = $row->meta ?? [];
                 $deviceType = $row->device_type;

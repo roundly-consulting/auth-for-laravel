@@ -53,7 +53,7 @@ final readonly class CompleteTwoFactorStep
         }
 
         try {
-            $result = TwoFactor::attempt(AccountModels::twoFactor($account), (string) $data->code);
+            $result = TwoFactor::for(AccountModels::twoFactor($account))->attempt((string) $data->code);
         } catch (TwoFactorRateLimitedException $e) {
             throw TooManyAttempts::retryAfter($e->secondsUntilAvailable, $e);
         }

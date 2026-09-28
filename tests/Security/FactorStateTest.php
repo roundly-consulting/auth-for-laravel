@@ -136,7 +136,7 @@ it('refuses a stale passkey enrolment once the owner registered a passkey', func
     registerVirtualPasskey($user);
 
     // …while the attacker's ceremony was already under way (begun just before the key landed).
-    $options = Passkeys::registrationOptions($user);
+    $options = Passkeys::for($user)->registrationOptions();
     ChallengeContext::put(Models::challenges()->sole(), 'passkey_enrolment_ceremony', $options->ceremonyId);
 
     // The stale challenge must not add the attacker's key.

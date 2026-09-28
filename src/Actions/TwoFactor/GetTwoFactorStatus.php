@@ -8,6 +8,7 @@ use RoundlyConsulting\Auth\Contracts\Account;
 use RoundlyConsulting\Auth\DataTransferObjects\TwoFactorStatusData;
 use RoundlyConsulting\Auth\Guards\GuardRegistry;
 use RoundlyConsulting\Auth\Support\AccountModels;
+use RoundlyConsulting\TwoFactor\Facades\TwoFactor;
 
 final readonly class GetTwoFactorStatus
 {
@@ -16,12 +17,12 @@ final readonly class GetTwoFactorStatus
     public function execute(string $guard, Account $account): TwoFactorStatusData
     {
         $config = $this->guards->get($guard);
-        $model = AccountModels::twoFactor($account);
+        $status = TwoFactor::for(AccountModels::twoFactor($account))->status();
 
         return new TwoFactorStatusData(
-            enabled: $model->hasTwoFactorEnabled(),
-            pending: $model->hasPendingTwoFactor(),
-            recoveryCodesRemaining: count($model->twoFactorRecoveryCodes()),
+            enabled: $status->enabled,
+            pending: $status->pending,
+            recoveryCodesRemaining: $status->recoveryCodesRemaining,
             mode: $config->twoFactorMode(),
         );
     }

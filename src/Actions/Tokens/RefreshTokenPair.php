@@ -23,7 +23,7 @@ use RoundlyConsulting\Jwt\Facades\Jwt;
 use RoundlyConsulting\RefreshTokens\DataTransferObjects\IssueContext;
 use RoundlyConsulting\RefreshTokens\Enums\RevocationReason;
 use RoundlyConsulting\RefreshTokens\Exceptions\InvalidTokenFamilyException;
-use RoundlyConsulting\RefreshTokens\Facades\RefreshToken;
+use RoundlyConsulting\RefreshTokens\Facades\RefreshTokens;
 use SensitiveParameter;
 
 /**
@@ -56,7 +56,7 @@ final readonly class RefreshTokenPair
 
         $this->throttle->attempt($config, [ThrottleKind::Refresh], null, $context, ActivityType::Refresh);
 
-        $redeemed = RefreshToken::redeem($refreshToken, $accounts->morphClass());
+        $redeemed = RefreshTokens::redeem($refreshToken, $accounts->morphClass());
         $owner = $redeemed?->user;
 
         if ($redeemed === null || ! $owner instanceof Account) {
@@ -64,7 +64,7 @@ final readonly class RefreshTokenPair
         }
 
         if ($owner->isDisabled()) {
-            RefreshToken::revokeSession($redeemed->user, $redeemed->familyId, RevocationReason::AccountDisabled);
+            RefreshTokens::sessions($redeemed->user)->revoke($redeemed->familyId, RevocationReason::AccountDisabled);
             $this->fail($guard, $context, $owner, 'disabled');
         }
 
@@ -82,7 +82,7 @@ final readonly class RefreshTokenPair
         ));
 
         try {
-            $replacement = RefreshToken::issue($redeemed->user, new IssueContext(
+            $replacement = RefreshTokens::issue($redeemed->user, new IssueContext(
                 ipAddress: $context->ipAddress,
                 userAgent: $context->userAgent,
                 accessReference: $access->jti,

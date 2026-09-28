@@ -20,7 +20,7 @@ use RoundlyConsulting\Auth\Exceptions\TwoFactorRequired;
 use RoundlyConsulting\Auth\Guards\GuardRegistry;
 use RoundlyConsulting\Auth\Support\AccountModels;
 use RoundlyConsulting\Auth\Support\NotificationDispatcher;
-use RoundlyConsulting\TwoFactor\Actions\DisableTwoFactor as DisableTwoFactorAction;
+use RoundlyConsulting\TwoFactor\Facades\TwoFactor;
 
 /**
  * Disables TOTP — refused (409) while the guard requires it, or when the account has
@@ -31,7 +31,6 @@ final readonly class DisableTwoFactor
 {
     public function __construct(
         private GuardRegistry $guards,
-        private DisableTwoFactorAction $disable,
         private InvalidateAccountTokens $invalidate,
         private NotificationDispatcher $notifications,
     ) {}
@@ -52,7 +51,7 @@ final readonly class DisableTwoFactor
             throw new TwoFactorNotEnabled;
         }
 
-        $this->disable->execute($model);
+        TwoFactor::for($model)->disable();
 
         event(new TwoFactorDisabled($guard, $account));
         $this->notifications->send($config, NotificationType::TwoFactorDisabled, $account, new NotificationData($guard));

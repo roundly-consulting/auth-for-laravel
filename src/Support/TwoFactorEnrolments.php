@@ -9,8 +9,8 @@ use RoundlyConsulting\Auth\Contracts\RendersQrCode;
 use RoundlyConsulting\Auth\DataTransferObjects\TwoFactorSetupData;
 use RoundlyConsulting\Auth\Exceptions\TwoFactorAlreadyEnabled;
 use RoundlyConsulting\Auth\Guards\GuardConfig;
-use RoundlyConsulting\TwoFactor\Actions\StartEnrolment;
 use RoundlyConsulting\TwoFactor\Exceptions\TwoFactorAlreadyEnabledException;
+use RoundlyConsulting\TwoFactor\Facades\TwoFactor;
 
 /**
  * Starts (or restarts) a TOTP enrolment through two-factor-for-laravel with the
@@ -20,7 +20,6 @@ use RoundlyConsulting\TwoFactor\Exceptions\TwoFactorAlreadyEnabledException;
 final readonly class TwoFactorEnrolments
 {
     public function __construct(
-        private StartEnrolment $startEnrolment,
         private RendersQrCode $qr,
     ) {}
 
@@ -30,7 +29,7 @@ final readonly class TwoFactorEnrolments
     public function start(GuardConfig $guard, Account $account): TwoFactorSetupData
     {
         try {
-            $setup = $this->startEnrolment->execute(AccountModels::twoFactor($account), null, $guard->twoFactorIssuer());
+            $setup = TwoFactor::for(AccountModels::twoFactor($account))->start(null, $guard->twoFactorIssuer());
         } catch (TwoFactorAlreadyEnabledException $e) {
             throw new TwoFactorAlreadyEnabled($e);
         }

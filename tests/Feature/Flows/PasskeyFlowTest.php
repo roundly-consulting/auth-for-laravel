@@ -69,7 +69,7 @@ it('claims no mfa when the guard does not treat a passkey as mfa', function (): 
 
 it('only accepts ceremonies this guard\'s login endpoint started', function (): void {
     $authenticator = registerVirtualPasskey($this->user);
-    $foreign = Passkeys::authenticationOptions(null);
+    $foreign = Passkeys::authenticationOptions();
 
     Authentication::guard('users')->loginWithPasskey($authenticator->assert($foreign), sessionContext());
 })->throws(InvalidCredentials::class);
@@ -97,7 +97,7 @@ it('uses a passkey as the second factor, bound to the challenge ceremony', funct
         ->json('challenge_token');
 
     // An assertion for some other ceremony cannot complete this one.
-    $stray = $authenticator->assert(Passkeys::authenticationOptions($this->user));
+    $stray = $authenticator->assert(Passkeys::for($this->user)->authenticationOptions());
     $this->postJson('/users/auth/challenge/passkey', ['challenge_token' => $token, 'credential' => assertionPayload($stray)], ['User-Agent' => 'PestBrowser/1.0'])
         ->assertStatus(422)
         ->assertJsonPath('code', 'factor_failed');
@@ -150,7 +150,7 @@ it('manages passkeys over http', function (): void {
     $pair = issuePair($this->user);
 
     $this->postJson('/users/auth/passkeys/options', [], bearer($pair))->assertOk()->assertJsonStructure(['ceremonyId', 'publicKey']);
-    $attestation = VirtualAuthenticator::es256()->register(Passkeys::registrationOptions($this->user));
+    $attestation = VirtualAuthenticator::es256()->register(Passkeys::for($this->user)->registrationOptions());
 
     $id = $this->postJson('/users/auth/passkeys', ['credential' => attestationPayload($attestation), 'name' => 'Phone'], bearer($pair))
         ->assertCreated()
@@ -178,7 +178,7 @@ it('refuses to register a credential twice', function (): void {
     $pair = issuePair($this->user);
     Passkeys::fake()->failRegistrationWith(CredentialAlreadyRegistered::make());
 
-    $attestation = VirtualAuthenticator::es256()->register(Passkeys::registrationOptions($this->user));
+    $attestation = VirtualAuthenticator::es256()->register(Passkeys::for($this->user)->registrationOptions());
 
     $this->postJson('/users/auth/passkeys', ['credential' => attestationPayload($attestation)], bearer($pair))
         ->assertStatus(422)
@@ -240,7 +240,7 @@ it('walks a two-step challenge: passkey first, then totp', function (): void {
 it('counts a failed passkey enrolment and refuses a stray ceremony', function (): void {
     $this->configureGuard('users', ['passkeys.second_factor' => 'required']);
     $pending = Authentication::guard('users')->attempt(new PasswordCredentials($this->user->email, 'correct-horse-battery'), sessionContext())->challenge;
-    $stray = VirtualAuthenticator::es256()->register(Passkeys::registrationOptions($this->user));
+    $stray = VirtualAuthenticator::es256()->register(Passkeys::for($this->user)->registrationOptions());
 
     expect(fn () => Authentication::guard('users')->completeChallenge(new ChallengeFactorData($pending->token, FactorMethod::PasskeyEnrolment, sessionContext(), attestation: $stray)))
         ->toThrow(ChallengeFactorFailed::class);

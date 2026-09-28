@@ -52,7 +52,7 @@ final readonly class BeginPasskeyEnrolmentStep
             $this->invalidateChallenge->execute($challenge);
         }
 
-        $options = Passkeys::registrationOptions(AccountModels::passkeys($account));
+        $options = Passkeys::for(AccountModels::passkeys($account))->registrationOptions();
 
         ChallengeContext::put($challenge, 'passkey_enrolment_ceremony', $options->ceremonyId);
 

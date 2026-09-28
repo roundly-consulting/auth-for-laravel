@@ -15,7 +15,7 @@ use RoundlyConsulting\Auth\Tests\Fixtures\Models\User;
 use RoundlyConsulting\Jwt\Facades\Jwt;
 use RoundlyConsulting\Passkeys\Models\Passkey;
 use RoundlyConsulting\RefreshTokens\DataTransferObjects\IssueContext;
-use RoundlyConsulting\RefreshTokens\Facades\RefreshToken;
+use RoundlyConsulting\RefreshTokens\Facades\RefreshTokens;
 
 /**
  * An account with a second factor re-proves itself WITH it: neither a password (or email
@@ -218,7 +218,7 @@ it('never treats a session without a recorded auth_time as a fresh login', funct
     $user = User::factory()->create();
 
     // A session the host issued without the package's metadata (a pre-adoption family).
-    $issued = RefreshToken::issue($user, new IssueContext(ipAddress: '10.0.0.1', userAgent: 'PestBrowser/1.0'));
+    $issued = RefreshTokens::issue($user, new IssueContext(ipAddress: '10.0.0.1', userAgent: 'PestBrowser/1.0'));
 
     CarbonImmutable::setTestNow('2026-09-26 18:00:00');
 
@@ -235,7 +235,7 @@ it('never treats a session without a recorded auth_time as a fresh login', funct
 
 it('keeps the session start as auth_time when re-issuing a session without one', function (): void {
     $user = User::factory()->create();
-    $issued = RefreshToken::issue($user, new IssueContext(ipAddress: '10.0.0.1', userAgent: 'PestBrowser/1.0'));
+    $issued = RefreshTokens::issue($user, new IssueContext(ipAddress: '10.0.0.1', userAgent: 'PestBrowser/1.0'));
 
     CarbonImmutable::setTestNow('2026-09-26 18:00:00');
 

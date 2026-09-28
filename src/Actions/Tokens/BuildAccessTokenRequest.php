@@ -32,7 +32,7 @@ final readonly class BuildAccessTokenRequest
         $identifier = $account->getAuthIdentifier();
 
         $request = AccessTokenRequest::for(is_int($identifier) || is_string($identifier) ? $identifier : (string) $identifier)
-            ->audience(Jwt::audienceFor($guard->laravelGuard()))
+            ->audience(Jwt::guard($guard->laravelGuard())->audience())
             ->tokenVersion($account->tokenVersion())
             ->sessionId($sessionId)
             ->authTime($authTime)

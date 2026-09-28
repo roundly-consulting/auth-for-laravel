@@ -66,7 +66,7 @@ final class AboutSection
     private static function audience(string $guard): string
     {
         try {
-            return Jwt::audienceFor($guard) !== '' ? 'SET' : 'MISSING';
+            return Jwt::guard($guard)->audience() !== '' ? 'SET' : 'MISSING';
         } catch (Throwable) {
             return 'NOT A JWT GUARD';
         }

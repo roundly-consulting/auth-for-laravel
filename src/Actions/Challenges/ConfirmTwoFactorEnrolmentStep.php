@@ -22,9 +22,9 @@ use RoundlyConsulting\Auth\Exceptions\EnrolmentRequired;
 use RoundlyConsulting\Auth\Guards\GuardRegistry;
 use RoundlyConsulting\Auth\Support\AccountModels;
 use RoundlyConsulting\Auth\Support\NotificationDispatcher;
-use RoundlyConsulting\TwoFactor\Actions\ConfirmEnrolment;
 use RoundlyConsulting\TwoFactor\Exceptions\InvalidTwoFactorCodeException;
 use RoundlyConsulting\TwoFactor\Exceptions\TwoFactorNotPendingException;
+use RoundlyConsulting\TwoFactor\Facades\TwoFactor;
 
 /**
  * Confirms the forced TOTP enrolment. Possession was just proven, so this also
@@ -43,7 +43,6 @@ final readonly class ConfirmTwoFactorEnrolmentStep
         private FindActiveChallenge $findChallenge,
         private RecordChallengeFailure $recordFailure,
         private AdvanceChallenge $advance,
-        private ConfirmEnrolment $confirmEnrolment,
         private InvalidateAccountTokens $invalidate,
         private NotificationDispatcher $notifications,
         private InvalidateChallenge $invalidateChallenge,
@@ -72,7 +71,7 @@ final readonly class ConfirmTwoFactorEnrolmentStep
         }
 
         try {
-            $this->confirmEnrolment->execute($model, (string) $data->code);
+            TwoFactor::for($model)->confirm((string) $data->code);
         } catch (InvalidTwoFactorCodeException $e) {
             throw ChallengeFactorFailed::withAttemptsLeft($this->recordFailure->execute($challenge, ActivityOutcome::FailedFactor, $data->context, FactorMethod::TotpEnrolment->value), $e);
         } catch (TwoFactorNotPendingException) {

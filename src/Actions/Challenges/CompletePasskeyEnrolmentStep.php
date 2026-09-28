@@ -74,7 +74,7 @@ final readonly class CompletePasskeyEnrolmentStep
         }
 
         try {
-            $passkey = Passkeys::register(AccountModels::passkeys($account), $attestation, $data->passkeyName);
+            $passkey = Passkeys::for(AccountModels::passkeys($account))->register($attestation, $data->passkeyName);
         } catch (PasskeyException) {
             $this->fail($challenge, $data);
         }

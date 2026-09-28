@@ -23,7 +23,7 @@ use RoundlyConsulting\Auth\Tests\Fixtures\Models\User;
 use RoundlyConsulting\Jwt\Events\UserTokenIssued;
 use RoundlyConsulting\Jwt\Facades\Jwt;
 use RoundlyConsulting\RefreshTokens\Events\RefreshTokenRedeemed;
-use RoundlyConsulting\RefreshTokens\Facades\RefreshToken;
+use RoundlyConsulting\RefreshTokens\Facades\RefreshTokens;
 
 /**
  * Interleaved stale reads: the loser of each race sees the winner's write and gets the
@@ -106,7 +106,7 @@ it('answers 401 when a refresh loses the race to reuse detection', function (): 
     $second = Authentication::guard('users')->refresh($first->refreshToken, sessionContext())->refreshToken;
 
     // A thief replays the already-rotated first token while the owner's refresh is under way.
-    $minted = interleaveRefresh(static fn () => RefreshToken::redeem($first->refreshToken));
+    $minted = interleaveRefresh(static fn () => RefreshTokens::redeem($first->refreshToken));
 
     test()->postJson('/users/auth/refresh', ['refresh_token' => $second], ['User-Agent' => 'PestBrowser/1.0'])
         ->assertStatus(401)
@@ -114,7 +114,7 @@ it('answers 401 when a refresh loses the race to reuse detection', function (): 
 
     expect($minted)->toHaveCount(1)
         ->and(Jwt::denylist()->has($minted[0]))->toBeTrue()
-        ->and(RefreshToken::listFor($user))->toBeEmpty();
+        ->and(RefreshTokens::sessions($user)->all())->toBeEmpty();
 });
 
 it('answers 401 when a logout everywhere lands mid-refresh, leaving no live session', function (): void {
@@ -130,5 +130,5 @@ it('answers 401 when a logout everywhere lands mid-refresh, leaving no live sess
 
     expect($minted)->toHaveCount(1)
         ->and(Jwt::denylist()->has($minted[0]))->toBeTrue()
-        ->and(RefreshToken::listFor($user))->toBeEmpty();
+        ->and(RefreshTokens::sessions($user)->all())->toBeEmpty();
 });

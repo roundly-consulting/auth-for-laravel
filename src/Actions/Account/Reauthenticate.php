@@ -36,7 +36,6 @@ use RoundlyConsulting\Auth\Support\ReauthenticationMarker;
 use RoundlyConsulting\Auth\Support\ReauthenticationMethods;
 use RoundlyConsulting\Auth\Support\Throttle;
 use RoundlyConsulting\Crypto\Hash\ConstantTime;
-use RoundlyConsulting\Passkeys\DataTransferObjects\AuthenticationExpectation;
 use RoundlyConsulting\Passkeys\Exceptions\PasskeyException;
 use RoundlyConsulting\Passkeys\Facades\Passkeys;
 use RoundlyConsulting\TwoFactor\Enums\TwoFactorMethod;
@@ -169,7 +168,7 @@ final readonly class Reauthenticate
     private function verifyTwoFactor(Account $account, #[SensitiveParameter] string $code, ?int &$recoveryCodesLeft): bool
     {
         try {
-            $result = TwoFactor::attempt(AccountModels::twoFactor($account), $code);
+            $result = TwoFactor::for(AccountModels::twoFactor($account))->attempt($code);
         } catch (TwoFactorRateLimitedException $e) {
             throw TooManyAttempts::retryAfter($e->secondsUntilAvailable, $e);
         }
@@ -190,7 +189,7 @@ final readonly class Reauthenticate
         }
 
         try {
-            Passkeys::authenticate($data->assertion, AuthenticationExpectation::owner(AccountModels::passkeys($account)));
+            Passkeys::for(AccountModels::passkeys($account))->authenticate($data->assertion);
         } catch (PasskeyException) {
             return false;
         }

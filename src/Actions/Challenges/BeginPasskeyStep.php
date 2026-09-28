@@ -46,7 +46,7 @@ final readonly class BeginPasskeyStep
             throw new ChallengeInvalid;
         }
 
-        $options = Passkeys::authenticationOptions(AccountModels::passkeys($account));
+        $options = Passkeys::for(AccountModels::passkeys($account))->authenticationOptions();
 
         ChallengeContext::put($challenge, 'passkey_ceremony', $options->ceremonyId);
 

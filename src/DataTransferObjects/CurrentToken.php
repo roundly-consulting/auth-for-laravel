@@ -46,7 +46,7 @@ final readonly class CurrentToken
      */
     public static function fromRequest(Request $request, GuardConfig $guard): self
     {
-        $claims = Jwt::claims($guard->laravelGuard());
+        $claims = Jwt::guard($guard->laravelGuard())->claims();
 
         if ($claims === null) {
             throw new AuthenticationException(guards: [$guard->laravelGuard()]);

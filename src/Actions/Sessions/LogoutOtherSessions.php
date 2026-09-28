@@ -11,7 +11,7 @@ use RoundlyConsulting\Auth\Events\LoggedOut;
 use RoundlyConsulting\Auth\Guards\GuardRegistry;
 use RoundlyConsulting\Auth\Support\AccountModels;
 use RoundlyConsulting\RefreshTokens\Enums\RevocationReason;
-use RoundlyConsulting\RefreshTokens\Facades\RefreshToken;
+use RoundlyConsulting\RefreshTokens\Facades\RefreshTokens;
 
 /**
  * Ends every session but the caller's. No `tv` bump (that would log the caller out
@@ -27,7 +27,7 @@ final readonly class LogoutOtherSessions
     {
         $this->guards->get($guard);
 
-        $revoked = RefreshToken::revokeAllExcept(AccountModels::of($account), $current->sessionId, RevocationReason::LogoutAll);
+        $revoked = RefreshTokens::sessions(AccountModels::of($account))->revokeAllExcept($current->sessionId, RevocationReason::LogoutAll);
 
         event(new LoggedOut($guard, $account, LogoutScope::Others, $revoked));
 

@@ -53,7 +53,7 @@ final readonly class RemovePasskey
             throw new LastCredential;
         }
 
-        Passkeys::revoke($passkey);
+        Passkeys::for($model)->revoke($passkey);
 
         event(new PasskeyRemoved($guard, $account, $passkeyId));
         $this->notifications->send($config, NotificationType::PasskeyRemoved, $account, new NotificationData($guard));

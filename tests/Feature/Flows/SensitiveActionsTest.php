@@ -60,7 +60,7 @@ function performSensitiveAction(SensitiveAction $action): array
         SensitiveAction::RegenerateRecoveryCodes => [[$test->postJson('/users/auth/two-factor/recovery-codes', [], $headers), 200]],
         SensitiveAction::RegisterPasskey => [
             [$test->postJson('/users/auth/passkeys/options', [], $headers), 200],
-            [$test->postJson('/users/auth/passkeys', ['credential' => attestationPayload(VirtualAuthenticator::es256()->register(Passkeys::registrationOptions($user)))], $headers), 201],
+            [$test->postJson('/users/auth/passkeys', ['credential' => attestationPayload(VirtualAuthenticator::es256()->register(Passkeys::for($user)->registrationOptions()))], $headers), 201],
         ],
         SensitiveAction::RemovePasskey => [[$test->deleteJson('/users/auth/passkeys/'.$passkey?->getKey(), [], $headers), 200]],
         SensitiveAction::ChangeEmail => [[$test->postJson('/users/auth/email/change', ['email' => 'new@example.com'], $headers), 202]],

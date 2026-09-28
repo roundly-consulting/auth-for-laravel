@@ -8,6 +8,7 @@ use Illuminate\Support\Collection;
 use RoundlyConsulting\Auth\Contracts\Account;
 use RoundlyConsulting\Auth\Guards\GuardRegistry;
 use RoundlyConsulting\Auth\Support\AccountModels;
+use RoundlyConsulting\Passkeys\Facades\Passkeys;
 use RoundlyConsulting\Passkeys\Models\Passkey;
 
 final readonly class ListPasskeys
@@ -21,6 +22,6 @@ final readonly class ListPasskeys
     {
         $this->guards->get($guard);
 
-        return AccountModels::passkeys($account)->passkeys()->latest()->latest('id')->get()->values();
+        return Passkeys::for(AccountModels::passkeys($account))->all()->values();
     }
 }

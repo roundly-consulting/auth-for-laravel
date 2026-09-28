@@ -158,7 +158,7 @@ function registerVirtualPasskey(Model&HasPasskeys $account): VirtualAuthenticato
 {
     $authenticator = VirtualAuthenticator::es256();
 
-    Passkeys::register($account, $authenticator->register(Passkeys::registrationOptions($account)));
+    Passkeys::for($account)->register($authenticator->register(Passkeys::for($account)->registrationOptions()));
 
     return $authenticator;
 }

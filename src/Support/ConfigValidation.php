@@ -205,7 +205,7 @@ final class ConfigValidation
     private static function jwtProblems(GuardConfig $guard, string $prefix, array &$problems): void
     {
         try {
-            $settings = Jwt::guardSettings($guard->laravelGuard());
+            $settings = Jwt::guard($guard->laravelGuard())->settings();
         } catch (JwtMisconfigured $e) {
             // Not a jwt guard, or one jwt cannot build (e.g. an uncallable token_version).
             $problems[] = "{$prefix}.laravel_guard [{$guard->laravelGuard()}]: {$e->getMessage()}";
@@ -275,7 +275,7 @@ final class ConfigValidation
             }
 
             try {
-                if (Jwt::audienceFor($other->laravelGuard()) === Jwt::audienceFor($guard->laravelGuard())) {
+                if (Jwt::guard($other->laravelGuard())->audience() === Jwt::guard($guard->laravelGuard())->audience()) {
                     $problems[] = "The jwt guards of [{$guard->name()}] and [{$name}] share one audience; give each auth.guards entry its own `audience`, or one guard's tokens authenticate on the other.";
                 }
             } catch (JwtMisconfigured) {

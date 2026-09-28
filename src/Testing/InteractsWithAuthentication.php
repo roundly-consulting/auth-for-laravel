@@ -18,7 +18,7 @@ use RoundlyConsulting\Auth\Enums\LoginMethod;
 use RoundlyConsulting\Auth\Guards\GuardRegistry;
 use RoundlyConsulting\Auth\Support\AccountModels;
 use RoundlyConsulting\Auth\Support\Models;
-use RoundlyConsulting\RefreshTokens\Facades\RefreshToken;
+use RoundlyConsulting\RefreshTokens\Facades\RefreshTokens;
 
 /**
  * Test helpers for host applications (use it in your Laravel TestCase). `actingAsAccount`
@@ -100,7 +100,7 @@ trait InteractsWithAuthentication
         Assert::assertGreaterThan($baseline, $version, "The account token version did not move since {$baseline}.");
 
         if ($scope === InvalidationScope::All) {
-            Assert::assertCount(0, RefreshToken::listFor(AccountModels::of($account)), 'Sessions survived an invalidation with scope [all].');
+            Assert::assertCount(0, RefreshTokens::sessions(AccountModels::of($account))->all(), 'Sessions survived an invalidation with scope [all].');
         }
 
         return $this;

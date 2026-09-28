@@ -45,7 +45,7 @@ final readonly class RegisterPasskey
         }
 
         try {
-            $passkey = Passkeys::register(AccountModels::passkeys($account), $response, SessionContext::clean($name));
+            $passkey = Passkeys::for(AccountModels::passkeys($account))->register($response, SessionContext::clean($name));
         } catch (PasskeyException $e) {
             throw new PasskeyRegistrationFailed($e);
         }

@@ -19,9 +19,9 @@ use RoundlyConsulting\Auth\Exceptions\LoginMethodDisabled;
 use RoundlyConsulting\Auth\Guards\GuardRegistry;
 use RoundlyConsulting\Auth\Support\AccountModels;
 use RoundlyConsulting\Auth\Support\NotificationDispatcher;
-use RoundlyConsulting\TwoFactor\Actions\ConfirmEnrolment;
 use RoundlyConsulting\TwoFactor\Exceptions\InvalidTwoFactorCodeException;
 use RoundlyConsulting\TwoFactor\Exceptions\TwoFactorNotPendingException;
+use RoundlyConsulting\TwoFactor\Facades\TwoFactor;
 use SensitiveParameter;
 
 /**
@@ -37,7 +37,6 @@ final readonly class ConfirmTwoFactorEnrolment
 {
     public function __construct(
         private GuardRegistry $guards,
-        private ConfirmEnrolment $confirmEnrolment,
         private InvalidateAccountTokens $invalidate,
         private NotificationDispatcher $notifications,
     ) {}
@@ -57,7 +56,7 @@ final readonly class ConfirmTwoFactorEnrolment
         }
 
         try {
-            $this->confirmEnrolment->execute($model, $code);
+            TwoFactor::for($model)->confirm($code);
         } catch (InvalidTwoFactorCodeException|TwoFactorNotPendingException $e) {
             throw new InvalidCode($e);
         }

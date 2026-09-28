@@ -45,7 +45,7 @@ final readonly class BeginPasskeyLogin
 
         $requireUv = $config->passkeySatisfiesMfa();
 
-        $options = Passkeys::authenticationOptions(null, $requireUv ? new AuthenticationOptionsOverrides(userVerification: UserVerification::Required) : null);
+        $options = Passkeys::authenticationOptions($requireUv ? new AuthenticationOptionsOverrides(userVerification: UserVerification::Required) : null);
 
         $this->cache->put(self::key($guard, $options->ceremonyId), $requireUv ? 'uv' : 'up', $config->challengeTtl());
 

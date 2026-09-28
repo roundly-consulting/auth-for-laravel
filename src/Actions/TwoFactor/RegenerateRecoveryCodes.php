@@ -16,7 +16,7 @@ use RoundlyConsulting\Auth\Exceptions\LoginMethodDisabled;
 use RoundlyConsulting\Auth\Exceptions\TwoFactorNotEnabled;
 use RoundlyConsulting\Auth\Guards\GuardRegistry;
 use RoundlyConsulting\Auth\Support\AccountModels;
-use RoundlyConsulting\TwoFactor\Actions\RegenerateRecoveryCodes as RegenerateRecoveryCodesAction;
+use RoundlyConsulting\TwoFactor\Facades\TwoFactor;
 
 /**
  * Replaces the recovery codes (plaintext returned once), applies
@@ -27,7 +27,6 @@ final readonly class RegenerateRecoveryCodes
 {
     public function __construct(
         private GuardRegistry $guards,
-        private RegenerateRecoveryCodesAction $regenerate,
         private InvalidateAccountTokens $invalidate,
     ) {}
 
@@ -45,7 +44,7 @@ final readonly class RegenerateRecoveryCodes
             throw new TwoFactorNotEnabled;
         }
 
-        $codes = $this->regenerate->execute($model);
+        $codes = TwoFactor::for($model)->recoveryCodes()->regenerate();
 
         event(new RecoveryCodesRegenerated($guard, $account));
 

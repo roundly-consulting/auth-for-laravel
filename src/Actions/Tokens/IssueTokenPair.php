@@ -17,7 +17,7 @@ use RoundlyConsulting\Auth\Guards\GuardConfig;
 use RoundlyConsulting\Auth\Support\AccountModels;
 use RoundlyConsulting\Jwt\Facades\Jwt;
 use RoundlyConsulting\RefreshTokens\DataTransferObjects\IssueContext;
-use RoundlyConsulting\RefreshTokens\Facades\RefreshToken;
+use RoundlyConsulting\RefreshTokens\Facades\RefreshTokens;
 
 /**
  * Starts a new session: an access token and the root of a new refresh-token family.
@@ -51,7 +51,7 @@ final readonly class IssueTokenPair
 
         $access = Jwt::mintAccessToken($this->buildRequest->execute($guard, $account, $sessionId, $authMethods, $authTime));
 
-        $refresh = RefreshToken::issue(AccountModels::of($account), new IssueContext(
+        $refresh = RefreshTokens::issue(AccountModels::of($account), new IssueContext(
             ipAddress: $context->ipAddress,
             userAgent: $context->userAgent,
             accessReference: $access->jti,

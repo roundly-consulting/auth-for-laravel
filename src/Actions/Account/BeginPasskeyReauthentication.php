@@ -35,7 +35,7 @@ final readonly class BeginPasskeyReauthentication
             throw new FactorNotAllowed;
         }
 
-        $options = Passkeys::authenticationOptions(AccountModels::passkeys($account));
+        $options = Passkeys::for(AccountModels::passkeys($account))->authenticationOptions();
 
         $this->marker->bindCeremony($guard, $current->sessionKey(), $options->ceremonyId, $config->challengeTtl());
 

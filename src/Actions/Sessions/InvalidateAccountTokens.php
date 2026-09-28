@@ -24,7 +24,7 @@ use RoundlyConsulting\Auth\Support\AccountModels;
 use RoundlyConsulting\Auth\Support\AccountState;
 use RoundlyConsulting\Auth\Support\Models;
 use RoundlyConsulting\Jwt\Facades\Jwt;
-use RoundlyConsulting\RefreshTokens\Facades\RefreshToken;
+use RoundlyConsulting\RefreshTokens\Facades\RefreshTokens;
 
 /**
  * The invalidation policy applied after every credential change or incident, per the
@@ -73,14 +73,14 @@ final readonly class InvalidateAccountTokens
 
         $model = AccountModels::of($account);
         $kept = $scope === InvalidationScope::Others && $keep?->sessionId !== null
-            ? RefreshToken::findSession($model, $keep->sessionId)
+            ? RefreshTokens::sessions($model)->find($keep->sessionId)
             : null;
         $meta = $kept === null ? [] : ($kept->meta ?? []);
 
         $revoked = $model->getConnection()->transaction(function () use ($guard, $account, $model, $reason, $exceptChallengeId): int {
             AccountState::bumpTokenVersion($account);
 
-            $revoked = RefreshToken::revokeAll($model, $reason->revocationReason());
+            $revoked = RefreshTokens::sessions($model)->revokeAll($reason->revocationReason());
 
             Models::challenges()
                 ->forGuard($guard->name())

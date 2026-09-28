@@ -23,12 +23,13 @@ final readonly class RenamePasskey
     {
         $this->guards->get($guard);
 
-        $passkey = AccountModels::passkeys($account)->passkeys()->whereKey($passkeyId)->first();
+        $model = AccountModels::passkeys($account);
+        $passkey = $model->passkeys()->whereKey($passkeyId)->first();
 
         if (! $passkey instanceof Passkey) {
             throw new PasskeyNotFound;
         }
 
-        return Passkeys::rename($passkey, (string) SessionContext::clean($name));
+        return Passkeys::for($model)->rename($passkey, (string) SessionContext::clean($name));
     }
 }

@@ -12,7 +12,7 @@ use RoundlyConsulting\Auth\Exceptions\SessionNotFound;
 use RoundlyConsulting\Auth\Guards\GuardRegistry;
 use RoundlyConsulting\Auth\Support\AccountModels;
 use RoundlyConsulting\RefreshTokens\Enums\RevocationReason;
-use RoundlyConsulting\RefreshTokens\Facades\RefreshToken;
+use RoundlyConsulting\RefreshTokens\Facades\RefreshTokens;
 
 /**
  * Ends one of the account's sessions by id. Unknown, malformed and foreign ids are the
@@ -31,7 +31,7 @@ final readonly class LogoutSession
             throw new SessionNotFound;
         }
 
-        if (! RefreshToken::revokeSession(AccountModels::of($account), $sessionId, RevocationReason::Logout)) {
+        if (! RefreshTokens::sessions(AccountModels::of($account))->revoke($sessionId, RevocationReason::Logout)) {
             throw new SessionNotFound;
         }
 

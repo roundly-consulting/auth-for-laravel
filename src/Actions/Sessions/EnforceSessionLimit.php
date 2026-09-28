@@ -10,7 +10,7 @@ use RoundlyConsulting\Auth\Events\LoggedOut;
 use RoundlyConsulting\Auth\Guards\GuardConfig;
 use RoundlyConsulting\Auth\Support\AccountModels;
 use RoundlyConsulting\RefreshTokens\Enums\RevocationReason;
-use RoundlyConsulting\RefreshTokens\Facades\RefreshToken;
+use RoundlyConsulting\RefreshTokens\Facades\RefreshTokens;
 
 /**
  * Applies `sessions.max_active`: the oldest sessions above the cap are revoked.
@@ -28,8 +28,8 @@ final class EnforceSessionLimit
         $model = AccountModels::of($account);
         $revoked = 0;
 
-        foreach (RefreshToken::listFor($model)->slice($max) as $session) {
-            if (RefreshToken::revokeSession($model, $session->family_id, RevocationReason::SessionLimit)) {
+        foreach (RefreshTokens::sessions($model)->all()->slice($max) as $session) {
+            if (RefreshTokens::sessions($model)->revoke($session->family_id, RevocationReason::SessionLimit)) {
                 $revoked++;
             }
         }

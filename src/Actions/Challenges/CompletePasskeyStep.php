@@ -16,7 +16,6 @@ use RoundlyConsulting\Auth\Exceptions\ChallengeInvalid;
 use RoundlyConsulting\Auth\Models\LoginChallenge;
 use RoundlyConsulting\Auth\Support\AccountModels;
 use RoundlyConsulting\Crypto\Hash\ConstantTime;
-use RoundlyConsulting\Passkeys\DataTransferObjects\AuthenticationExpectation;
 use RoundlyConsulting\Passkeys\Exceptions\PasskeyException;
 use RoundlyConsulting\Passkeys\Facades\Passkeys;
 
@@ -52,7 +51,7 @@ final readonly class CompletePasskeyStep
         }
 
         try {
-            Passkeys::authenticate($assertion, AuthenticationExpectation::owner(AccountModels::passkeys($account)));
+            Passkeys::for(AccountModels::passkeys($account))->authenticate($assertion);
         } catch (PasskeyException) {
             $this->fail($challenge, $data);
         }

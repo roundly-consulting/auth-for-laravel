@@ -22,6 +22,6 @@ final readonly class BeginPasskeyRegistration
             throw new LoginMethodDisabled;
         }
 
-        return Passkeys::registrationOptions(AccountModels::passkeys($account));
+        return Passkeys::for(AccountModels::passkeys($account))->registrationOptions();
     }
 }
