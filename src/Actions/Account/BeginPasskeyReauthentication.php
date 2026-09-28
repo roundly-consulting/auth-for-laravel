@@ -29,7 +29,7 @@ final readonly class BeginPasskeyReauthentication
 
     public function execute(string $guard, Account $account, CurrentToken $current): RequestOptionsData
     {
-        $config = $this->guards->get($guard);
+        $config = $this->guards->owning($guard, $account);
 
         if (! in_array(ReauthenticationMethod::Passkey, ReauthenticationMethods::available($config, $account), true)) {
             throw new FactorNotAllowed;

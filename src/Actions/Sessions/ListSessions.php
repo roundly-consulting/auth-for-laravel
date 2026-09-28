@@ -27,7 +27,7 @@ final readonly class ListSessions
      */
     public function execute(string $guard, Account $account, ?string $currentSessionId = null): Collection
     {
-        $this->guards->get($guard);
+        $this->guards->owning($guard, $account);
 
         return RefreshTokens::sessions(AccountModels::of($account))->all()
             ->map(static function (RefreshTokenModel $row) use ($currentSessionId): SessionData {

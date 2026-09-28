@@ -23,7 +23,7 @@ final readonly class ListLoginActivity
      */
     public function execute(string $guard, Account $account, int $perPage = 20): LengthAwarePaginator
     {
-        $this->guards->get($guard);
+        $this->guards->owning($guard, $account);
         $model = AccountModels::of($account);
 
         return Models::loginActivities()

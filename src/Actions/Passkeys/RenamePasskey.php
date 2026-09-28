@@ -21,7 +21,7 @@ final readonly class RenamePasskey
 
     public function execute(string $guard, Account $account, int $passkeyId, string $name): Passkey
     {
-        $this->guards->get($guard);
+        $this->guards->owning($guard, $account);
 
         $model = AccountModels::passkeys($account);
         $passkey = $model->passkeys()->whereKey($passkeyId)->first();

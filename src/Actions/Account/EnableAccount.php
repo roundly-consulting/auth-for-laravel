@@ -16,7 +16,7 @@ final readonly class EnableAccount
 
     public function execute(string $guard, Account $account): void
     {
-        $this->guards->get($guard);
+        $this->guards->owning($guard, $account);
 
         AccountState::write($account, [Columns::disabledAt() => null, Columns::disabledReason() => null]);
 

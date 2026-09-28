@@ -27,7 +27,8 @@ use SensitiveParameter;
 /**
  * Confirms a pending TOTP enrolment, then applies `invalidation.two_factor_changed`.
  * Returns the pair re-issued to the calling device under `others` (the default) — the
- * client must swap to it, its current access token dies with the change.
+ * client must swap to it, its current access token dies with the change. Without a
+ * `$current` token (admin/CLI) no device is kept and nothing is re-issued.
  *
  * Only a PENDING enrolment can be confirmed: with TOTP already on there is nothing to
  * confirm, and the answer is the same `invalid_code` as a wrong code — before any write,
@@ -41,9 +42,9 @@ final readonly class ConfirmTwoFactorEnrolment
         private NotificationDispatcher $notifications,
     ) {}
 
-    public function execute(string $guard, Account $account, #[SensitiveParameter] string $code, CurrentToken $current, SessionContext $context): ?TokenPair
+    public function execute(string $guard, Account $account, #[SensitiveParameter] string $code, ?CurrentToken $current = null, ?SessionContext $context = null): ?TokenPair
     {
-        $config = $this->guards->get($guard);
+        $config = $this->guards->owning($guard, $account);
 
         if ($config->twoFactorMode() === TwoFactorMode::Off) {
             throw new LoginMethodDisabled;
@@ -64,6 +65,6 @@ final readonly class ConfirmTwoFactorEnrolment
         event(new TwoFactorEnabled($guard, $account));
         $this->notifications->send($config, NotificationType::TwoFactorEnabled, $account, new NotificationData($guard));
 
-        return $this->invalidate->execute($config, $account, InvalidationReason::TwoFactorChanged, $current, $context)->tokens;
+        return $this->invalidate->execute($config, $account, InvalidationReason::TwoFactorChanged, $current, $context ?? new SessionContext)->tokens;
     }
 }

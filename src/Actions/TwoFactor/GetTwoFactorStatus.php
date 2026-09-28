@@ -16,7 +16,7 @@ final readonly class GetTwoFactorStatus
 
     public function execute(string $guard, Account $account): TwoFactorStatusData
     {
-        $config = $this->guards->get($guard);
+        $config = $this->guards->owning($guard, $account);
         $status = TwoFactor::for(AccountModels::twoFactor($account))->status();
 
         return new TwoFactorStatusData(

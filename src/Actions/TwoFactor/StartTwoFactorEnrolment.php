@@ -25,7 +25,7 @@ final readonly class StartTwoFactorEnrolment
 
     public function execute(string $guard, Account $account): TwoFactorSetupData
     {
-        $config = $this->guards->get($guard);
+        $config = $this->guards->owning($guard, $account);
 
         if ($config->twoFactorMode() === TwoFactorMode::Off) {
             throw new LoginMethodDisabled;

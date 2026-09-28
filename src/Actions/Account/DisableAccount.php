@@ -27,7 +27,7 @@ final readonly class DisableAccount
 
     public function execute(string $guard, Account $account, ?string $reason = null): void
     {
-        $config = $this->guards->get($guard);
+        $config = $this->guards->owning($guard, $account);
 
         AccountState::write($account, [
             Columns::disabledAt() => CarbonImmutable::now(),

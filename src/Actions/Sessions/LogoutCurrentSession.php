@@ -24,7 +24,7 @@ final readonly class LogoutCurrentSession
 
     public function execute(string $guard, Account $account, CurrentToken $current): void
     {
-        $this->guards->get($guard);
+        $this->guards->owning($guard, $account);
 
         Jwt::denylist()->deny($current->jti, $current->expiresAt);
 

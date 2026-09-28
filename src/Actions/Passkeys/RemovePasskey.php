@@ -39,9 +39,9 @@ final readonly class RemovePasskey
         private NotificationDispatcher $notifications,
     ) {}
 
-    public function execute(string $guard, Account $account, int $passkeyId, CurrentToken $current, SessionContext $context): ?TokenPair
+    public function execute(string $guard, Account $account, int $passkeyId, ?CurrentToken $current = null, ?SessionContext $context = null): ?TokenPair
     {
-        $config = $this->guards->get($guard);
+        $config = $this->guards->owning($guard, $account);
         $model = AccountModels::passkeys($account);
         $passkey = $model->passkeys()->whereKey($passkeyId)->first();
 
@@ -58,7 +58,7 @@ final readonly class RemovePasskey
         event(new PasskeyRemoved($guard, $account, $passkeyId));
         $this->notifications->send($config, NotificationType::PasskeyRemoved, $account, new NotificationData($guard));
 
-        return $this->invalidate->execute($config, $account, InvalidationReason::PasskeyChanged, $current, $context)->tokens;
+        return $this->invalidate->execute($config, $account, InvalidationReason::PasskeyChanged, $current, $context ?? new SessionContext)->tokens;
     }
 
     private function lastOneIsNeeded(GuardConfig $guard, Account $account): bool

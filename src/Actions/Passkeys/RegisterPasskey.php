@@ -26,7 +26,7 @@ use RoundlyConsulting\Passkeys\Facades\Passkeys;
 /**
  * Registers a passkey for a signed-in account, notifies the owner, and applies
  * `invalidation.passkey_changed` (none by default) — returning the re-issued pair when
- * that scope is `others`.
+ * that scope is `others` and a `$current` device was given.
  */
 final readonly class RegisterPasskey
 {
@@ -36,9 +36,9 @@ final readonly class RegisterPasskey
         private NotificationDispatcher $notifications,
     ) {}
 
-    public function execute(string $guard, Account $account, RegistrationResponseData $response, ?string $name, CurrentToken $current, SessionContext $context): RegisteredPasskeyData
+    public function execute(string $guard, Account $account, RegistrationResponseData $response, ?string $name = null, ?CurrentToken $current = null, ?SessionContext $context = null): RegisteredPasskeyData
     {
-        $config = $this->guards->get($guard);
+        $config = $this->guards->owning($guard, $account);
 
         if ($config->passkeyMode() === PasskeyMode::Off) {
             throw new LoginMethodDisabled;
@@ -53,6 +53,6 @@ final readonly class RegisterPasskey
         event(new PasskeyAdded($guard, $account, (int) $passkey->getKey()));
         $this->notifications->send($config, NotificationType::PasskeyAdded, $account, new NotificationData($guard));
 
-        return new RegisteredPasskeyData($passkey, $this->invalidate->execute($config, $account, InvalidationReason::PasskeyChanged, $current, $context)->tokens);
+        return new RegisteredPasskeyData($passkey, $this->invalidate->execute($config, $account, InvalidationReason::PasskeyChanged, $current, $context ?? new SessionContext)->tokens);
     }
 }

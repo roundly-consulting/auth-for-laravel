@@ -5,6 +5,7 @@ declare(strict_types=1);
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Notification;
+use RoundlyConsulting\Auth\Actions\Account\LockAccount;
 use RoundlyConsulting\Auth\DataTransferObjects\PasswordCredentials;
 use RoundlyConsulting\Auth\Events\AccountLocked;
 use RoundlyConsulting\Auth\Exceptions\InvalidCredentials;
@@ -79,4 +80,13 @@ it('never revokes existing sessions when locking', function (): void {
     }
 
     $this->getJson('/users/auth/me', bearer($pair))->assertOk();
+});
+
+it('notifies the owner of a manual lock exactly like an automatic one', function (): void {
+    Notification::fake();
+    $user = User::factory()->create();
+
+    app(LockAccount::class)->execute('users', $user, 120);
+
+    Notification::assertSentTo($user, AccountLockedNotification::class);
 });

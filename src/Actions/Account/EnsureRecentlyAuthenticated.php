@@ -35,7 +35,7 @@ final readonly class EnsureRecentlyAuthenticated
      */
     public function execute(string $guard, CurrentToken $current, Account $account, ?int $seconds = null): void
     {
-        $config = $this->guards->get($guard);
+        $config = $this->guards->owning($guard, $account);
         $window = CarbonImmutable::now()->subSeconds($seconds ?? $config->reauthenticationTimeout());
         $secondFactor = ReauthenticationMethods::requireSecondFactor($config, $account);
 

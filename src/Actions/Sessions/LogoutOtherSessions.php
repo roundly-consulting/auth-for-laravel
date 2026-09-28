@@ -25,7 +25,7 @@ final readonly class LogoutOtherSessions
 
     public function execute(string $guard, Account $account, CurrentToken $current): int
     {
-        $this->guards->get($guard);
+        $this->guards->owning($guard, $account);
 
         $revoked = RefreshTokens::sessions(AccountModels::of($account))->revokeAllExcept($current->sessionId, RevocationReason::LogoutAll);
 

@@ -20,7 +20,7 @@ final readonly class ListPasskeys
      */
     public function execute(string $guard, Account $account): Collection
     {
-        $this->guards->get($guard);
+        $this->guards->owning($guard, $account);
 
         return Passkeys::for(AccountModels::passkeys($account))->all()->values();
     }

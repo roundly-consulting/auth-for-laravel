@@ -38,7 +38,7 @@ final readonly class RequestEmailChange
 
     public function execute(string $guard, Account $account, EmailChangeData $data): void
     {
-        $config = $this->guards->get($guard);
+        $config = $this->guards->owning($guard, $account);
 
         if (! $config->emailChangeEnabled()) {
             throw new LoginMethodDisabled;

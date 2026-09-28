@@ -25,7 +25,8 @@ use RoundlyConsulting\TwoFactor\Facades\TwoFactor;
 /**
  * Disables TOTP — refused (409) while the guard requires it, or when the account has
  * none enabled (nothing is written, invalidated or announced). Applies
- * `invalidation.two_factor_changed` and returns the pair re-issued to the caller.
+ * `invalidation.two_factor_changed` and returns the pair re-issued to the caller's
+ * `$current` device (none without one — an admin/CLI disable keeps no device).
  */
 final readonly class DisableTwoFactor
 {
@@ -35,9 +36,9 @@ final readonly class DisableTwoFactor
         private NotificationDispatcher $notifications,
     ) {}
 
-    public function execute(string $guard, Account $account, CurrentToken $current, SessionContext $context): ?TokenPair
+    public function execute(string $guard, Account $account, ?CurrentToken $current = null, ?SessionContext $context = null): ?TokenPair
     {
-        $config = $this->guards->get($guard);
+        $config = $this->guards->owning($guard, $account);
 
         match ($config->twoFactorMode()) {
             TwoFactorMode::Off => throw new LoginMethodDisabled,
@@ -56,6 +57,6 @@ final readonly class DisableTwoFactor
         event(new TwoFactorDisabled($guard, $account));
         $this->notifications->send($config, NotificationType::TwoFactorDisabled, $account, new NotificationData($guard));
 
-        return $this->invalidate->execute($config, $account, InvalidationReason::TwoFactorChanged, $current, $context)->tokens;
+        return $this->invalidate->execute($config, $account, InvalidationReason::TwoFactorChanged, $current, $context ?? new SessionContext)->tokens;
     }
 }

@@ -32,7 +32,7 @@ final readonly class SetPassword
 
     public function execute(string $guard, Account $account, #[SensitiveParameter] string $password, InvalidationReason $reason = InvalidationReason::PasswordReset): void
     {
-        $config = $this->guards->get($guard);
+        $config = $this->guards->owning($guard, $account);
 
         $this->policy->execute($config, $password, $account);
 

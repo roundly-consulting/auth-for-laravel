@@ -24,7 +24,7 @@ final readonly class LogoutEverywhere
 
     public function execute(string $guard, Account $account): int
     {
-        $config = $this->guards->get($guard);
+        $config = $this->guards->owning($guard, $account);
 
         $revoked = $this->invalidate->execute($config, $account, InvalidationReason::Logout, null, new SessionContext)->revoked;
 

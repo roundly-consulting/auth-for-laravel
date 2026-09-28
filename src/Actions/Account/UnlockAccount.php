@@ -16,7 +16,7 @@ final readonly class UnlockAccount
 
     public function execute(string $guard, Account $account): void
     {
-        $this->guards->get($guard);
+        $this->guards->owning($guard, $account);
 
         AccountState::write($account, [Columns::lockedUntil() => null, Columns::failedLoginCount() => 0]);
 

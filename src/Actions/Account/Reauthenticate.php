@@ -68,7 +68,7 @@ final readonly class Reauthenticate
 
     public function execute(string $guard, Account $account, ReauthenticationData $data): CarbonImmutable
     {
-        $config = $this->guards->get($guard);
+        $config = $this->guards->owning($guard, $account);
         $sessionKey = $data->current->sessionKey();
 
         $this->throttle->attempt($config, [ThrottleKind::Reauthentication], $sessionKey, $data->context, ActivityType::Reauthentication);

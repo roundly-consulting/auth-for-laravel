@@ -20,7 +20,8 @@ use RoundlyConsulting\TwoFactor\Facades\TwoFactor;
 
 /**
  * Replaces the recovery codes (plaintext returned once), applies
- * `invalidation.two_factor_changed`, and returns the pair re-issued to the caller.
+ * `invalidation.two_factor_changed`, and returns the pair re-issued to the caller's
+ * `$current` device (none without one).
  * Refused (409) for an account without TOTP — before any write or invalidation.
  */
 final readonly class RegenerateRecoveryCodes
@@ -30,9 +31,9 @@ final readonly class RegenerateRecoveryCodes
         private InvalidateAccountTokens $invalidate,
     ) {}
 
-    public function execute(string $guard, Account $account, CurrentToken $current, SessionContext $context): RecoveryCodesData
+    public function execute(string $guard, Account $account, ?CurrentToken $current = null, ?SessionContext $context = null): RecoveryCodesData
     {
-        $config = $this->guards->get($guard);
+        $config = $this->guards->owning($guard, $account);
 
         if ($config->twoFactorMode() === TwoFactorMode::Off) {
             throw new LoginMethodDisabled;
@@ -48,6 +49,6 @@ final readonly class RegenerateRecoveryCodes
 
         event(new RecoveryCodesRegenerated($guard, $account));
 
-        return new RecoveryCodesData($codes, $this->invalidate->execute($config, $account, InvalidationReason::TwoFactorChanged, $current, $context)->tokens);
+        return new RecoveryCodesData($codes, $this->invalidate->execute($config, $account, InvalidationReason::TwoFactorChanged, $current, $context ?? new SessionContext)->tokens);
     }
 }

@@ -35,7 +35,7 @@ final readonly class SendEmailVerification
 
     public function execute(string $guard, Account $account, ?SessionContext $context = null): void
     {
-        $config = $this->guards->get($guard);
+        $config = $this->guards->owning($guard, $account);
 
         if ($config->verificationMode() === EmailVerificationMode::Off) {
             throw new LoginMethodDisabled;

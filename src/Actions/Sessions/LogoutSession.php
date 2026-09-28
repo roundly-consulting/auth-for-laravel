@@ -25,7 +25,7 @@ final readonly class LogoutSession
 
     public function execute(string $guard, Account $account, string $sessionId): void
     {
-        $this->guards->get($guard);
+        $this->guards->owning($guard, $account);
 
         if (! Str::isUuid($sessionId)) {
             throw new SessionNotFound;

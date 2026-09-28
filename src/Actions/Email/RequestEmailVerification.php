@@ -32,7 +32,7 @@ final readonly class RequestEmailVerification
      */
     public function execute(string $guard, Account $account, SessionContext $context): void
     {
-        $config = $this->guards->get($guard);
+        $config = $this->guards->owning($guard, $account);
 
         if ($config->verificationMode() === EmailVerificationMode::Off) {
             throw new LoginMethodDisabled;

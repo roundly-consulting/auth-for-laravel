@@ -47,7 +47,7 @@ final readonly class ChangePassword
 
     public function execute(string $guard, Account $account, ChangePasswordData $data): ?TokenPair
     {
-        $config = $this->guards->get($guard);
+        $config = $this->guards->owning($guard, $account);
 
         if (! $config->passwordChangeEnabled()) {
             throw new LoginMethodDisabled;

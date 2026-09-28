@@ -24,7 +24,7 @@ final readonly class UpdateLocale
 
     public function execute(string $guard, Account $account, LocaleData $data): Account
     {
-        $config = $this->guards->get($guard);
+        $config = $this->guards->owning($guard, $account);
 
         Validator::make(
             ['locale' => $data->locale, 'timezone' => $data->timezone],

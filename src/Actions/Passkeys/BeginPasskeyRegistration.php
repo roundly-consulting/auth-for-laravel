@@ -18,7 +18,7 @@ final readonly class BeginPasskeyRegistration
 
     public function execute(string $guard, Account $account): CreationOptionsData
     {
-        if ($this->guards->get($guard)->passkeyMode() === PasskeyMode::Off) {
+        if ($this->guards->owning($guard, $account)->passkeyMode() === PasskeyMode::Off) {
             throw new LoginMethodDisabled;
         }
 

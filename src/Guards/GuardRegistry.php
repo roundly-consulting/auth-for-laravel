@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace RoundlyConsulting\Auth\Guards;
 
 use Illuminate\Database\Eloquent\Model;
+use RoundlyConsulting\Auth\Contracts\Account;
+use RoundlyConsulting\Auth\Exceptions\AuthenticationMisconfigured;
 use RoundlyConsulting\Auth\Exceptions\GuardNotConfigured;
 use RoundlyConsulting\Auth\Support\ConfigValidation;
 
@@ -40,6 +42,23 @@ final class GuardRegistry
         ConfigValidation::assertValid($guard, $this);
 
         return $this->resolved[$name] = $guard;
+    }
+
+    /**
+     * The validated configuration of a guard, once the account is proven to be one of
+     * the guard's model — every action taking an account resolves its guard through
+     * here, so a foreign account is refused before anything is written.
+     *
+     * @throws GuardNotConfigured
+     * @throws AuthenticationMisconfigured when the account belongs to another guard
+     */
+    public function owning(?string $name, Account $account): GuardConfig
+    {
+        $guard = $this->get($name);
+
+        (new AccountRepository($guard))->ensureOwns($account);
+
+        return $guard;
     }
 
     public function has(string $name): bool

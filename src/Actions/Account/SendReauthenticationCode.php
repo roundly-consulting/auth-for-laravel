@@ -34,7 +34,7 @@ final readonly class SendReauthenticationCode
 
     public function execute(string $guard, Account $account, SessionContext $context): void
     {
-        $config = $this->guards->get($guard);
+        $config = $this->guards->owning($guard, $account);
 
         if (! in_array(ReauthenticationMethod::EmailOtp, ReauthenticationMethods::available($config, $account), true)) {
             throw new FactorNotAllowed;
