@@ -281,6 +281,11 @@ $result = $guard->attempt(
 return $result->isAuthenticated()
     ? TokenPairResource::make($result->tokens)
     : ChallengeResource::make($result->challenge);   // continue with $guard->challenges()->complete(…)
+```
+
+```php
+use RoundlyConsulting\Auth\DataTransferObjects\InvitationData;
+use RoundlyConsulting\Auth\Enums\InvalidationReason;
 
 Authentication::twoFactor()->status($user);          // enabled, pending, recovery codes left, mode
 Authentication::passwords()->set($user, 'n3w-Passphrase!', InvalidationReason::Security);
@@ -325,8 +330,8 @@ Plus `Authentication::prune(?$days)`, `guards()`, `routes($guard)`, `currentGuar
 
 **Scoping.** Every method that takes an account refuses one of another guard's model
 (`AuthenticationMisconfigured`, "belongs to another guard") before anything is written. Another
-guard's invitation, passkey or challenge token is unknown (`InvitationNotFound`,
-`PasskeyNotFound`, `ChallengeInvalid`).
+guard's invitation or challenge token, and another account's passkey, are unknown
+(`InvitationNotFound`, `ChallengeInvalid`, `PasskeyNotFound`).
 
 **Acting for the signed-in user.** Pass the caller's token (`$guard->tokenFrom($request)`) as
 `$current` to the credential changes: its device is kept under `others` and the re-issued pair
@@ -374,8 +379,8 @@ final class ResetSupportPassword
 app(SetPassword::class)->execute('users', $user, $password, InvalidationReason::Security);
 ```
 
-Rebinding an action in the container changes the facade too. Actions tagged `@internal` are
-building blocks of the flows above, not API.
+The facade, the manager and the controllers resolve actions from the container, so all three run
+the same code. Actions tagged `@internal` are building blocks of the flows above, not API.
 
 ### Testing without a fake
 
