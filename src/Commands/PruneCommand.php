@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace RoundlyConsulting\Auth\Commands;
 
 use Illuminate\Console\Command;
-use RoundlyConsulting\Auth\Actions\Activity\PruneAuthenticationData;
+use RoundlyConsulting\Auth\AuthenticationManager;
 
 final class PruneCommand extends Command
 {
@@ -13,7 +13,7 @@ final class PruneCommand extends Command
 
     protected $description = 'Delete expired challenges and one-time tokens, and old invitations and login activity';
 
-    public function handle(PruneAuthenticationData $prune): int
+    public function handle(AuthenticationManager $authentication): int
     {
         $days = $this->option('days');
 
@@ -23,7 +23,7 @@ final class PruneCommand extends Command
             return self::FAILURE;
         }
 
-        $report = $prune->execute(is_string($days) ? (int) $days : null);
+        $report = $authentication->prune(is_string($days) ? (int) $days : null);
 
         $this->components->twoColumnDetail('Challenges', (string) $report->challenges);
         $this->components->twoColumnDetail('One-time tokens', (string) $report->oneTimeTokens);

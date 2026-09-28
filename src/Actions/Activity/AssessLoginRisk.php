@@ -11,6 +11,8 @@ use RoundlyConsulting\Auth\DataTransferObjects\RiskAssessment;
 
 /**
  * Runs the guard's `risk.assessor` (or the bound {@see AssessesLoginRisk}, low by default).
+ *
+ * @internal a login-pipeline step (`CompleteFirstFactor`); swap the assessor through `risk.assessor` / `AssessesLoginRisk`.
  */
 final readonly class AssessLoginRisk
 {

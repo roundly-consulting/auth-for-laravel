@@ -7,6 +7,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Notification;
 use RoundlyConsulting\Auth\Contracts\Account;
+use RoundlyConsulting\Auth\DataTransferObjects\CurrentToken;
 use RoundlyConsulting\Auth\DataTransferObjects\SessionContext;
 use RoundlyConsulting\Auth\DataTransferObjects\TokenPair;
 use RoundlyConsulting\Auth\Enums\AuthMethodReference;
@@ -72,6 +73,14 @@ function bearer(TokenPair $pair): array
 function claimsOf(TokenPair $pair, string $audience = 'app-users'): Claims
 {
     return Jwt::verify($pair->accessToken, $audience);
+}
+
+/**
+ * The caller's token of a pair, as the HTTP layer reads it from the request.
+ */
+function currentTokenOf(TokenPair $pair): CurrentToken
+{
+    return CurrentToken::fromClaims(claimsOf($pair));
 }
 
 /**

@@ -21,6 +21,8 @@ use SensitiveParameter;
  * constant-time MAC comparison, then an atomic consume. With no row at all a dummy MAC
  * is still computed (timing). `attempts_left` is only revealed on authenticated paths —
  * on guest endpoints it would tell real addresses from unknown ones.
+ *
+ * @internal the one-time-token store behind links and codes.
  */
 final readonly class VerifyOneTimeCode
 {

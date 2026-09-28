@@ -22,9 +22,7 @@ final class RequestEmailChangeController
 
         // `email_change.require_reauthentication = false` switches the gate off; otherwise
         // `reauthentication.required_for` decides, like every other sensitive action.
-        if ($guard->emailChangeRequiresReauthentication()) {
-            $gate->check($guard, SensitiveAction::ChangeEmail, CurrentToken::fromRequest($request, $guard), $account);
-        }
+        $gate->check($guard, SensitiveAction::ChangeEmail, CurrentToken::fromRequest($request, $guard), $account);
 
         $change->execute($guard->name(), $account, $request->toData());
 

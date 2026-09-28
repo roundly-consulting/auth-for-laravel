@@ -22,6 +22,8 @@ use RoundlyConsulting\Crypto\Random\Token;
  * (per purpose / verification channel), stored only as a keyed HMAC bound to the guard
  * and purpose (and, for codes, the address). Every earlier usable secret of the same
  * purpose dies — only the newest link or code works. The plaintext is returned once.
+ *
+ * @internal the one-time-token store behind links and codes.
  */
 final readonly class IssueOneTimeToken
 {

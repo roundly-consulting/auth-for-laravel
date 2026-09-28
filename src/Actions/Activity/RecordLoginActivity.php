@@ -17,6 +17,8 @@ use RoundlyConsulting\Auth\Support\SecretHasher;
 /**
  * Writes one login-activity row (when the guard's activity log is on) and dispatches
  * {@see LoginActivityRecorded} — ids only — for host enrichment.
+ *
+ * @internal the activity recorder every flow calls; read rows through `activity()`.
  */
 final readonly class RecordLoginActivity
 {

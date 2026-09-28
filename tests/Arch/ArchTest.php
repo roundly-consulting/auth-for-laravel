@@ -50,3 +50,5 @@ ArchPresets::morphColumnsUseTheSeam(__DIR__.'/../../database/migrations');
 ArchPresets::runtimeRequireIsWhitelisted(__DIR__.'/../../composer.json');
 
 ArchPresets::noDebuggingLeftovers();
+
+ArchPresets::modelsGoThroughTheFacade('RoundlyConsulting\Auth');

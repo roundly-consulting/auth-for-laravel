@@ -20,6 +20,8 @@ use SensitiveParameter;
  * Loads an active challenge by `(guard, HMAC(token))`. Unknown, expired, completed,
  * invalidated and foreign-guard tokens are one uniform {@see ChallengeInvalid}; a
  * fingerprint mismatch counts as a failed attempt first.
+ *
+ * @internal a challenge-engine step; drive challenges through `challenges()`.
  */
 final readonly class FindActiveChallenge
 {

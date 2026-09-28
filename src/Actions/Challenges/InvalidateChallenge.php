@@ -13,6 +13,8 @@ use RoundlyConsulting\Auth\Support\Models;
  * Ends a challenge whose remaining steps no longer fit the account (the factor a step
  * would enrol was set up meanwhile): a conditional write, then the uniform
  * {@see ChallengeInvalid}. A fresh login resolves the steps the account needs now.
+ *
+ * @internal a challenge-engine step; drive challenges through `challenges()`.
  */
 final class InvalidateChallenge
 {

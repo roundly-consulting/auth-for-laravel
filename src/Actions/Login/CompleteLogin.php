@@ -28,6 +28,8 @@ use RoundlyConsulting\Auth\Support\NotificationDispatcher;
  * finalizes: issue the pair, stamp `last_login_at`, record the activity, dispatch the
  * events, and send the new-device / risk notifications (only now that the login is
  * complete).
+ *
+ * @internal the success tail of every login; log in through the guard context.
  */
 final readonly class CompleteLogin
 {

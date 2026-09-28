@@ -224,14 +224,14 @@ it('walks a two-step challenge: passkey first, then totp', function (): void {
     $pending = Authentication::guard('users')->attempt(new PasswordCredentials($this->user->email, 'correct-horse-battery'), sessionContext())->challenge;
     $options = app(BeginPasskeyStep::class)->execute('users', $pending->token, sessionContext());
 
-    $halfway = Authentication::guard('users')->completeChallenge(new ChallengeFactorData($pending->token, FactorMethod::Passkey, sessionContext(), assertion: $authenticator->assert($options)));
+    $halfway = Authentication::guard('users')->challenges()->complete(new ChallengeFactorData($pending->token, FactorMethod::Passkey, sessionContext(), assertion: $authenticator->assert($options)));
 
     expect($halfway->requiresChallenge())->toBeTrue()
         ->and(array_map(fn ($step) => $step->value, $halfway->challenge->completed))->toBe(['passkey'])
         ->and($halfway->challenge->remaining[0]->step->value)->toBe('second_factor')
         ->and($halfway->challenge->token)->toBe($pending->token);
 
-    $done = Authentication::guard('users')->completeChallenge(new ChallengeFactorData($pending->token, FactorMethod::Totp, sessionContext(), code: totpCode($secret)));
+    $done = Authentication::guard('users')->challenges()->complete(new ChallengeFactorData($pending->token, FactorMethod::Totp, sessionContext(), code: totpCode($secret)));
 
     expect($done->isAuthenticated())->toBeTrue()
         ->and(claimsOf($done->tokens)->authMethods())->toBe(['pwd', 'hwk', 'otp', 'mfa']);
@@ -242,13 +242,13 @@ it('counts a failed passkey enrolment and refuses a stray ceremony', function ()
     $pending = Authentication::guard('users')->attempt(new PasswordCredentials($this->user->email, 'correct-horse-battery'), sessionContext())->challenge;
     $stray = VirtualAuthenticator::es256()->register(Passkeys::for($this->user)->registrationOptions());
 
-    expect(fn () => Authentication::guard('users')->completeChallenge(new ChallengeFactorData($pending->token, FactorMethod::PasskeyEnrolment, sessionContext(), attestation: $stray)))
+    expect(fn () => Authentication::guard('users')->challenges()->complete(new ChallengeFactorData($pending->token, FactorMethod::PasskeyEnrolment, sessionContext(), attestation: $stray)))
         ->toThrow(ChallengeFactorFailed::class);
 
     $options = app(BeginPasskeyEnrolmentStep::class)->execute('users', $pending->token, sessionContext());
     Passkeys::fake()->failRegistrationWith(CredentialAlreadyRegistered::make());
 
-    expect(fn () => Authentication::guard('users')->completeChallenge(new ChallengeFactorData($pending->token, FactorMethod::PasskeyEnrolment, sessionContext(), attestation: VirtualAuthenticator::es256()->register($options))))
+    expect(fn () => Authentication::guard('users')->challenges()->complete(new ChallengeFactorData($pending->token, FactorMethod::PasskeyEnrolment, sessionContext(), attestation: VirtualAuthenticator::es256()->register($options))))
         ->toThrow(ChallengeFactorFailed::class);
 });
 

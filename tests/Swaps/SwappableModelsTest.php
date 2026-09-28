@@ -38,7 +38,7 @@ it('creates one-time tokens as the host subclass', function (): void {
 it('creates invitations as the host subclass', function (): void {
     Notification::fake();
 
-    expect('authentication.models.invitation')->toHonourModelSwap(CustomInvitation::class, fn () => Authentication::guard('users')->invite(new InvitationData('someone@example.com')));
+    expect('authentication.models.invitation')->toHonourModelSwap(CustomInvitation::class, fn () => Authentication::guard('users')->invitations()->create(new InvitationData('someone@example.com'))->invitation);
 });
 
 it('records activity as the host subclass', function (): void {

@@ -23,6 +23,8 @@ use SensitiveParameter;
  * Records a satisfied step with an optimistic write (`… WHERE version = ?`): of two
  * concurrent submissions exactly one advances, the other gets {@see ChallengeInvalid}.
  * Finalizes the login when no step remains.
+ *
+ * @internal a challenge-engine step; drive challenges through `challenges()`.
  */
 final readonly class AdvanceChallenge
 {

@@ -13,7 +13,7 @@ final class CreateInvitationController
 {
     public function __invoke(CreateInvitationRequest $request, CreateInvitation $create): JsonResponse
     {
-        return (new InvitationResource($create->execute($request->guardConfig()->name(), $request->toData())))
+        return (new InvitationResource($create->execute($request->guardConfig()->name(), $request->toData())->invitation))
             ->toResponse($request)
             ->setStatusCode(201);
     }

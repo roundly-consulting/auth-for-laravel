@@ -18,6 +18,8 @@ use RoundlyConsulting\Auth\Support\Models;
 /**
  * Counts a failed step atomically (`attempts = attempts + 1 WHERE attempts < max AND
  * still active`), invalidates the challenge at the cap, and returns the attempts left.
+ *
+ * @internal a challenge-engine step; drive challenges through `challenges()`.
  */
 final readonly class RecordChallengeFailure
 {

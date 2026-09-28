@@ -18,7 +18,8 @@ final class ResendInvitationController
 {
     public function __invoke(Request $request, ResendInvitation $resend, string $invitation): JsonResponse
     {
-        $link = $resend->execute(InvitationRoute::resolve(RequestGuard::name($request), $invitation));
+        $guard = RequestGuard::name($request);
+        $link = $resend->execute($guard, InvitationRoute::resolve($guard, $invitation));
 
         return new JsonResponse(['status' => 'sent', 'url' => $link->url]);
     }

@@ -14,7 +14,8 @@ final class RevokeInvitationController
 {
     public function __invoke(Request $request, RevokeInvitation $revoke, string $invitation): Response
     {
-        $revoke->execute(InvitationRoute::resolve(RequestGuard::name($request), $invitation));
+        $guard = RequestGuard::name($request);
+        $revoke->execute($guard, InvitationRoute::resolve($guard, $invitation));
 
         return new Response(status: 204);
     }

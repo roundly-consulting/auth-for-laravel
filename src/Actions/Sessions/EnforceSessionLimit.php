@@ -14,6 +14,8 @@ use RoundlyConsulting\RefreshTokens\Facades\RefreshTokens;
 
 /**
  * Applies `sessions.max_active`: the oldest sessions above the cap are revoked.
+ *
+ * @internal applied by `IssueTokenPair` on every new session.
  */
 final class EnforceSessionLimit
 {

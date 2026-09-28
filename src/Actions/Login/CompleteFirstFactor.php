@@ -52,6 +52,8 @@ use RoundlyConsulting\Auth\Support\Throttle;
  *  6. risk assessment — deny, notify, or require a second factor;
  *  7. required steps → a challenge, or
  *  8. the success tail.
+ *
+ * @internal the shared login pipeline behind every first factor; log in through the guard context.
  */
 final readonly class CompleteFirstFactor
 {

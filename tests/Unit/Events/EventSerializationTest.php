@@ -32,7 +32,7 @@ it('serializes an account by its identifier, never its attributes', function ():
 });
 
 it('serializes an invitation by its identifier', function (): void {
-    $invitation = Authentication::guard('users')->invite(new InvitationData('invitee@example.com', ['role' => 'vet'], send: false));
+    $invitation = Authentication::guard('users')->invitations()->create(new InvitationData('invitee@example.com', ['role' => 'vet'], send: false))->invitation;
     $serialized = serialize(new InvitationCreated('users', $invitation));
 
     expect($serialized)->not->toContain('invitee@example.com')

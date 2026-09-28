@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace RoundlyConsulting\Auth\Testing;
 
 use PHPUnit\Framework\Assert;
-use RoundlyConsulting\Auth\Actions\Tokens\IssueTokenPair;
+use RoundlyConsulting\Auth\AuthenticationManager;
 use RoundlyConsulting\Auth\Contracts\Account;
 use RoundlyConsulting\Auth\DataTransferObjects\SessionContext;
 use RoundlyConsulting\Auth\DataTransferObjects\TokenPair;
@@ -22,8 +22,9 @@ use RoundlyConsulting\RefreshTokens\Facades\RefreshTokens;
 
 /**
  * Test helpers for host applications (use it in your Laravel TestCase). `actingAsAccount`
- * mints a REAL token pair and sends it as the bearer token, so requests run through the
- * real jwt guard, audience, denylist and token-version checks.
+ * mints a REAL token pair through `Authentication::guard($guard)->issueTokens()` — so
+ * `TokensIssued` fires like for any host-issued login — and sends it as the bearer token,
+ * so requests run through the real jwt guard, audience, denylist and token-version checks.
  */
 trait InteractsWithAuthentication
 {
@@ -49,16 +50,13 @@ trait InteractsWithAuthentication
      */
     public function actingAsAccount(Account $account, ?string $guard = null, array $authMethods = [AuthMethodReference::Pwd]): static
     {
-        $config = app(GuardRegistry::class)->get($guard);
-
         $this->authenticationTokenVersions[$this->authenticationAccountKey($account)] = $this->freshAccount($account)->tokenVersion();
 
-        $this->authenticationTokens = app(IssueTokenPair::class)->execute(
-            $config,
+        $this->authenticationTokens = app(AuthenticationManager::class)->guard($guard)->issueTokens(
             $account,
+            new SessionContext('127.0.0.1', 'Testing'),
             LoginMethod::Host,
             $authMethods,
-            new SessionContext('127.0.0.1', 'Testing'),
         );
 
         return $this->withHeader('Authorization', 'Bearer '.$this->authenticationTokens->accessToken);

@@ -22,6 +22,8 @@ use RoundlyConsulting\Crypto\Random\Token;
  * the challenge finalizes kills it), and the device fingerprint. At most
  * `challenge.max_active_per_account` stay active — older ones are superseded, so a
  * password-holding attacker cannot farm parallel challenges for extra guesses.
+ *
+ * @internal a login-pipeline step (`CompleteFirstFactor`).
  */
 final readonly class StartLoginChallenge
 {

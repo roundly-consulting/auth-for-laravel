@@ -2,8 +2,10 @@
 
 declare(strict_types=1);
 
+use Illuminate\Support\Facades\Event;
 use PHPUnit\Framework\AssertionFailedError;
 use RoundlyConsulting\Auth\Enums\InvalidationReason;
+use RoundlyConsulting\Auth\Events\TokensIssued;
 use RoundlyConsulting\Auth\Facades\Authentication;
 use RoundlyConsulting\Auth\Tests\Fixtures\Models\User;
 
@@ -38,4 +40,14 @@ it('accepts a correctly applied none scope, and fails when it moved anyway', fun
 
     Authentication::guard('users')->invalidate($user, InvalidationReason::Security);
     expect(fn () => $this->assertTokensInvalidated($user, InvalidationReason::PasskeyChanged))->toThrow(AssertionFailedError::class);
+});
+
+it('announces the pair actingAsAccount issues, like any host-issued login', function (): void {
+    Event::fake([TokensIssued::class]);
+    $user = User::factory()->create();
+
+    $this->actingAsAccount($user);
+
+    Event::assertDispatched(TokensIssued::class, fn (TokensIssued $event): bool => $event->guard === 'users'
+        && $event->sessionId === $this->authenticationTokens?->sessionId);
 });

@@ -6,7 +6,7 @@ namespace RoundlyConsulting\Auth\Commands;
 
 use Illuminate\Console\Command;
 use Illuminate\Support\Str;
-use RoundlyConsulting\Auth\Actions\Sessions\LogoutEverywhere;
+use RoundlyConsulting\Auth\AuthenticationManager;
 use RoundlyConsulting\Auth\Guards\AccountRepository;
 use RoundlyConsulting\Auth\Guards\GuardRegistry;
 use RoundlyConsulting\PackageToolkit\Enums\KeyType;
@@ -20,7 +20,7 @@ final class LogoutEverywhereCommand extends Command
 
     protected $description = 'Revoke every session and access token of an account';
 
-    public function handle(GuardRegistry $guards, LogoutEverywhere $logout): int
+    public function handle(GuardRegistry $guards, AuthenticationManager $authentication): int
     {
         $guard = $guards->get($this->text('guard'));
         $id = $this->text('id');
@@ -39,7 +39,7 @@ final class LogoutEverywhereCommand extends Command
             return self::FAILURE;
         }
 
-        $revoked = $logout->execute($guard->name(), $account);
+        $revoked = $authentication->guard($guard->name())->logoutEverywhere($account);
 
         $this->components->info("Logged out everywhere: {$revoked} session(s) revoked, every access token invalidated.");
 

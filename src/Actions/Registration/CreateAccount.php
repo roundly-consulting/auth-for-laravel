@@ -17,6 +17,8 @@ use RoundlyConsulting\Auth\Support\Columns;
  * The default account creator: the normalised email, a hashed password (or none),
  * locale/timezone, verification state, and the host's extra attributes — which the
  * caller has already allow-listed by the host's registration rules. Never raw input.
+ *
+ * @internal the default `CreatesAccounts`; replace it through `registration.creator`.
  */
 final readonly class CreateAccount implements CreatesAccounts
 {

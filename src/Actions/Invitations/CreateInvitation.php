@@ -8,6 +8,7 @@ use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Validation\ValidationException;
 use RoundlyConsulting\Auth\DataTransferObjects\InvitationData;
+use RoundlyConsulting\Auth\DataTransferObjects\InvitationLink;
 use RoundlyConsulting\Auth\Events\InvitationCreated;
 use RoundlyConsulting\Auth\Events\InvitationRevoked;
 use RoundlyConsulting\Auth\Exceptions\LoginMethodDisabled;
@@ -18,7 +19,9 @@ use RoundlyConsulting\Auth\Rules\SupportedLocale;
 use RoundlyConsulting\Auth\Support\Models;
 
 /**
- * Creates an invitation (and sends it unless told not to). An earlier pending
+ * Creates an invitation and returns its link once (`->invitation`, `->token`, `->url`) —
+ * mailed to the invitee unless `send: false`, in which case the host delivers the link
+ * itself (Slack, SMS, an admin screen). An earlier pending
  * invitation for the same address is revoked (`replace_pending`); an address that
  * already has an account is refused unless `allow_existing_email` (admin-facing, so the
  * error is fine to show). The locale must be one of the guard's `locale.supported` — it
@@ -31,7 +34,7 @@ final readonly class CreateInvitation
         private SendInvitation $send,
     ) {}
 
-    public function execute(string $guard, InvitationData $data): Invitation
+    public function execute(string $guard, InvitationData $data): InvitationLink
     {
         $config = $this->guards->get($guard);
 
@@ -73,10 +76,6 @@ final readonly class CreateInvitation
 
         event(new InvitationCreated($guard, $invitation));
 
-        if ($data->send) {
-            $this->send->execute($invitation);
-        }
-
-        return $invitation->refresh();
+        return $this->send->execute($guard, $invitation, notify: $data->send);
     }
 }

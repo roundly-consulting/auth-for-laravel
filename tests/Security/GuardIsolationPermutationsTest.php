@@ -7,7 +7,6 @@ use RoundlyConsulting\Auth\Actions\Challenges\FindActiveChallenge;
 use RoundlyConsulting\Auth\Actions\Email\SendEmailVerification;
 use RoundlyConsulting\Auth\Actions\Email\VerifyEmail;
 use RoundlyConsulting\Auth\Actions\Invitations\PreviewInvitation;
-use RoundlyConsulting\Auth\Actions\Invitations\SendInvitation;
 use RoundlyConsulting\Auth\Actions\Passwords\RequestPasswordReset;
 use RoundlyConsulting\Auth\Actions\Passwords\ResetPassword;
 use RoundlyConsulting\Auth\DataTransferObjects\InvitationData;
@@ -66,10 +65,7 @@ it('refuses a users verification link on clients', function (): void {
 });
 
 it('refuses a users invitation on clients', function (): void {
-    $link = app(SendInvitation::class)->execute(
-        Authentication::guard('users')->invite(new InvitationData('invitee@example.com', send: false)),
-        notify: false,
-    );
+    $link = Authentication::guard('users')->invitations()->create(new InvitationData('invitee@example.com', send: false));
 
     expect(fn () => app(PreviewInvitation::class)->execute('clients', $link->token))->toThrow(InvalidInvitation::class)
         ->and(app(PreviewInvitation::class)->execute('users', $link->token)->email)->toBe('invitee@example.com');

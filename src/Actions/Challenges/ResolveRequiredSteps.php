@@ -26,6 +26,8 @@ use RoundlyConsulting\Auth\Support\ReauthenticationMethods;
  *
  * Verification steps always precede enrolment steps. A password reset is never exempt
  * from an enrolled second factor (a mailbox compromise must not bypass 2FA).
+ *
+ * @internal a login-pipeline step (`CompleteFirstFactor`).
  */
 final class ResolveRequiredSteps
 {

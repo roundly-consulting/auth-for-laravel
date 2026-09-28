@@ -25,6 +25,8 @@ use SensitiveParameter;
  * link's address must still be the account's current one (except for an email change,
  * whose link targets the new address). Every failure is one uniform
  * {@see InvalidOneTimeToken}.
+ *
+ * @internal the one-time-token store behind links and codes.
  */
 final readonly class ConsumeOneTimeToken
 {

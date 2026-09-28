@@ -26,6 +26,8 @@ use RoundlyConsulting\Auth\Support\Lockout;
  * {@see TooManyAttempts} — never `account_locked` — so a correct password is not
  * confirmed; `login.reveal_account_state = false` makes every state uniform
  * `invalid_credentials`.
+ *
+ * @internal a login-pipeline step (`CompleteFirstFactor`).
  */
 final readonly class EnsureAccountCanLogin
 {

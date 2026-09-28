@@ -10,6 +10,8 @@ use RoundlyConsulting\Auth\DataTransferObjects\NotificationData;
 use RoundlyConsulting\Auth\Enums\NotificationType;
 use RoundlyConsulting\Auth\Enums\UrlKind;
 use RoundlyConsulting\Auth\Events\InvitationSent;
+use RoundlyConsulting\Auth\Exceptions\InvalidInvitation;
+use RoundlyConsulting\Auth\Exceptions\InvitationNotFound;
 use RoundlyConsulting\Auth\Guards\GuardRegistry;
 use RoundlyConsulting\Auth\Models\Invitation;
 use RoundlyConsulting\Auth\Support\Models;
@@ -21,7 +23,9 @@ use RoundlyConsulting\Crypto\Random\Token;
 /**
  * Mints a FRESH token for every send (the previous link dies), mails it in the
  * invitation's locale, and returns the link once — an admin UI may also show it as a
- * copyable link. The plaintext is never stored or logged.
+ * copyable link. With `$notify = false` nothing is mailed: the host delivers the link
+ * itself. Only a pending invitation gets a link; another guard's is unknown here
+ * ({@see InvitationNotFound}). The plaintext is never stored or logged.
  */
 final readonly class SendInvitation
 {
@@ -31,29 +35,37 @@ final readonly class SendInvitation
         private NotificationDispatcher $notifications,
     ) {}
 
-    public function execute(Invitation $invitation, bool $notify = true): InvitationLink
+    public function execute(string $guard, Invitation $invitation, bool $notify = true): InvitationLink
     {
-        $guard = $this->guards->get($invitation->guard);
+        if ($invitation->guard !== $guard) {
+            throw new InvitationNotFound;
+        }
+
+        if (! $invitation->isPending()) {
+            throw new InvalidInvitation;
+        }
+
+        $config = $this->guards->get($guard);
         $token = Token::urlSafe(64);
 
-        Models::invitations()->whereKey($invitation->getKey())->update([
-            'token_hash' => $this->hasher->link($guard->name(), 'invitation', $token),
+        Models::invitations()->whereKey($invitation->getKey())->where('guard', $guard)->update([
+            'token_hash' => $this->hasher->link($guard, 'invitation', $token),
             'send_count' => $invitation->send_count + 1,
             'last_sent_at' => CarbonImmutable::now(),
         ]);
 
         $invitation->refresh();
-        $url = UrlTemplate::render($guard, UrlKind::Invitation, $token, $invitation->email);
+        $url = UrlTemplate::render($config, UrlKind::Invitation, $token, $invitation->email);
 
         if ($notify) {
-            $this->notifications->sendTo($guard, NotificationType::Invitation, $invitation->email, new NotificationData(
-                guard: $guard->name(),
+            $this->notifications->sendTo($config, NotificationType::Invitation, $invitation->email, new NotificationData(
+                guard: $guard,
                 url: $url,
                 expiresAt: $invitation->expires_at,
             ), $invitation->locale);
         }
 
-        event(new InvitationSent($guard->name(), $invitation));
+        event(new InvitationSent($guard, $invitation));
 
         return new InvitationLink($invitation, $token, $url);
     }

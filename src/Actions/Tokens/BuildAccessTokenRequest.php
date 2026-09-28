@@ -18,6 +18,8 @@ use RoundlyConsulting\Jwt\UserTokens\AccessTokenRequest;
  * Builds the access-token request for an account: the guard's own audience (the
  * isolation boundary), `sub`, `tv`, the session claims (`sid`, `amr`, `auth_time`), the
  * guard name (`grd`, diagnostics) and the host's claims.
+ *
+ * @internal a token-issuing step (`IssueTokenPair`, `RefreshTokenPair`).
  */
 final readonly class BuildAccessTokenRequest
 {

@@ -7,9 +7,6 @@ use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Notification;
 use Illuminate\Validation\ValidationException;
-use RoundlyConsulting\Auth\Actions\Invitations\ResendInvitation;
-use RoundlyConsulting\Auth\Actions\Invitations\RevokeInvitation;
-use RoundlyConsulting\Auth\Actions\Invitations\SendInvitation;
 use RoundlyConsulting\Auth\DataTransferObjects\AcceptInvitationData;
 use RoundlyConsulting\Auth\DataTransferObjects\InvitationData;
 use RoundlyConsulting\Auth\Enums\RegistrationStatus;
@@ -29,7 +26,7 @@ beforeEach(function (): void {
 
 function invite(string $email = 'invitee@example.com', array $payload = ['role' => 'vet', 'team' => 'Clinic']): string
 {
-    Authentication::guard('users')->invite(new InvitationData($email, $payload, locale: 'sk'));
+    $link = Authentication::guard('users')->invitations()->create(new InvitationData($email, $payload, locale: 'sk'));
 
     $url = null;
 
@@ -39,7 +36,11 @@ function invite(string $email = 'invitee@example.com', array $payload = ['role' 
         return true;
     });
 
-    return tokenFromUrl($url);
+    // The link create() returns is the one it mailed.
+    expect($link->url)->toBe($url)
+        ->and($link->token)->toBe(tokenFromUrl($url));
+
+    return $link->token;
 }
 
 it('previews and accepts an invitation, creating a verified account', function (): void {
@@ -64,24 +65,24 @@ it('previews and accepts an invitation, creating a verified account', function (
 
 it('is single use', function (): void {
     $token = invite();
-    Authentication::guard('users')->acceptInvitation(new AcceptInvitationData($token, 'a-long-enough-passphrase', sessionContext()));
+    Authentication::guard('users')->invitations()->accept(new AcceptInvitationData($token, 'a-long-enough-passphrase', sessionContext()));
 
-    Authentication::guard('users')->acceptInvitation(new AcceptInvitationData($token, 'a-long-enough-passphrase', sessionContext()));
+    Authentication::guard('users')->invitations()->accept(new AcceptInvitationData($token, 'a-long-enough-passphrase', sessionContext()));
 })->throws(InvalidInvitation::class);
 
 it('expires, and dies when revoked or re-sent', function (): void {
     $token = invite();
     $invitation = Invitation::query()->sole();
 
-    $link = app(SendInvitation::class)->execute($invitation, notify: false);
-    expect(fn () => Authentication::guard('users')->acceptInvitation(new AcceptInvitationData($token, 'a-long-enough-passphrase', sessionContext())))->toThrow(InvalidInvitation::class);
+    $link = Authentication::guard('users')->invitations()->link($invitation);
+    expect(fn () => Authentication::guard('users')->invitations()->accept(new AcceptInvitationData($token, 'a-long-enough-passphrase', sessionContext())))->toThrow(InvalidInvitation::class);
 
-    app(RevokeInvitation::class)->execute($invitation);
-    expect(fn () => Authentication::guard('users')->acceptInvitation(new AcceptInvitationData($link->token, 'a-long-enough-passphrase', sessionContext())))->toThrow(InvalidInvitation::class);
+    Authentication::guard('users')->invitations()->revoke($invitation);
+    expect(fn () => Authentication::guard('users')->invitations()->accept(new AcceptInvitationData($link->token, 'a-long-enough-passphrase', sessionContext())))->toThrow(InvalidInvitation::class);
 
     $fresh = invite('late@example.com');
     $this->travel(8)->days();
-    expect(fn () => Authentication::guard('users')->acceptInvitation(new AcceptInvitationData($fresh, 'a-long-enough-passphrase', sessionContext())))->toThrow(InvalidInvitation::class);
+    expect(fn () => Authentication::guard('users')->invitations()->accept(new AcceptInvitationData($fresh, 'a-long-enough-passphrase', sessionContext())))->toThrow(InvalidInvitation::class);
 });
 
 it('replaces a pending invitation for the same address', function (): void {
@@ -94,12 +95,12 @@ it('replaces a pending invitation for the same address', function (): void {
 
 it('keeps the address locked, or stores another one unverified when unlocked', function (): void {
     $token = invite();
-    Authentication::guard('users')->acceptInvitation(new AcceptInvitationData($token, 'a-long-enough-passphrase', sessionContext(), email: 'other@example.com'));
+    Authentication::guard('users')->invitations()->accept(new AcceptInvitationData($token, 'a-long-enough-passphrase', sessionContext(), email: 'other@example.com'));
     expect(User::query()->sole()->email)->toBe('invitee@example.com');
 
     $this->configureGuard('users', ['invitations.lock_email' => false]);
     $token = invite('second@example.com');
-    $result = Authentication::guard('users')->acceptInvitation(new AcceptInvitationData($token, 'a-long-enough-passphrase', sessionContext(), email: 'Chosen@Example.com'));
+    $result = Authentication::guard('users')->invitations()->accept(new AcceptInvitationData($token, 'a-long-enough-passphrase', sessionContext(), email: 'Chosen@Example.com'));
 
     $user = User::query()->where('email', 'chosen@example.com')->sole();
     expect($user->hasVerifiedEmail())->toBeFalse()
@@ -111,7 +112,7 @@ it('refuses an existing address with a uniform error and a notice', function ():
     $token = invite('taken@example.com');
     User::factory()->create(['email' => 'taken@example.com']);
 
-    expect(fn () => Authentication::guard('users')->acceptInvitation(new AcceptInvitationData($token, 'a-long-enough-passphrase', sessionContext())))->toThrow(InvalidInvitation::class)
+    expect(fn () => Authentication::guard('users')->invitations()->accept(new AcceptInvitationData($token, 'a-long-enough-passphrase', sessionContext())))->toThrow(InvalidInvitation::class)
         ->and(Invitation::query()->sole()->accepted_at)->toBeNull();
 
     Notification::assertSentOnDemand(AccountExistsNotification::class);
@@ -120,7 +121,7 @@ it('refuses an existing address with a uniform error and a notice', function ():
 it('refuses to invite an existing address unless allowed', function (): void {
     User::factory()->create(['email' => 'taken@example.com']);
 
-    expect(fn () => Authentication::guard('users')->invite(new InvitationData('taken@example.com')))->toThrow(ValidationException::class);
+    expect(fn () => Authentication::guard('users')->invitations()->create(new InvitationData('taken@example.com')))->toThrow(ValidationException::class);
 });
 
 it('enforces the resend cooldown and the send cap', function (): void {
@@ -129,14 +130,14 @@ it('enforces the resend cooldown and the send cap', function (): void {
     invite();
     $invitation = Invitation::query()->sole();
 
-    expect(fn () => app(ResendInvitation::class)->execute($invitation))->toThrow(TooManyAttempts::class);
+    expect(fn () => Authentication::guard('users')->invitations()->resend($invitation))->toThrow(TooManyAttempts::class);
 
     CarbonImmutable::setTestNow('2026-09-26 10:01:00');
-    $link = app(ResendInvitation::class)->execute($invitation->fresh());
+    $link = Authentication::guard('users')->invitations()->resend((int) $invitation->getKey());
     expect($link->url)->toContain('#token=');
 
     CarbonImmutable::setTestNow('2026-09-26 10:05:00');
-    expect(fn () => app(ResendInvitation::class)->execute($invitation->fresh()))->toThrow(TooManyAttempts::class);
+    expect(fn () => Authentication::guard('users')->invitations()->resend((int) $invitation->getKey()))->toThrow(TooManyAttempts::class);
     CarbonImmutable::setTestNow();
 });
 
@@ -172,7 +173,7 @@ it('lets two concurrent accepts create exactly one account', function (): void {
     // The loser's view: the claim already happened.
     Invitation::query()->whereKey($invitation->getKey())->update(['accepted_at' => now()]);
 
-    expect(fn () => Authentication::guard('users')->acceptInvitation(new AcceptInvitationData($token, 'a-long-enough-passphrase', sessionContext())))->toThrow(InvalidInvitation::class)
+    expect(fn () => Authentication::guard('users')->invitations()->accept(new AcceptInvitationData($token, 'a-long-enough-passphrase', sessionContext())))->toThrow(InvalidInvitation::class)
         ->and(User::query()->count())->toBe(0);
 });
 
@@ -195,7 +196,7 @@ it('answers accepted when a forced enrolment cannot happen in the challenge', fu
     $this->configureGuard('users', ['two_factor.mode' => 'required', 'challenge.allow_enrolment' => false]);
     $token = invite();
 
-    $result = Authentication::guard('users')->acceptInvitation(new AcceptInvitationData($token, 'a-long-enough-passphrase', sessionContext()));
+    $result = Authentication::guard('users')->invitations()->accept(new AcceptInvitationData($token, 'a-long-enough-passphrase', sessionContext()));
 
     expect($result->status)->toBe(RegistrationStatus::Accepted)
         ->and($result->login)->toBeNull()
@@ -215,8 +216,8 @@ it('creates no account through an invitation while registration is closed', func
 });
 
 it('refuses an invitation locale the guard does not support', function (): void {
-    expect(fn () => Authentication::guard('users')->invite(new InvitationData('x@example.com', [], locale: 'zz-ZZ')))->toThrow(ValidationException::class)
-        ->and(fn () => Authentication::guard('users')->invite(new InvitationData('y@example.com', [], locale: 'sk/../x')))->toThrow(ValidationException::class);
+    expect(fn () => Authentication::guard('users')->invitations()->create(new InvitationData('x@example.com', [], locale: 'zz-ZZ')))->toThrow(ValidationException::class)
+        ->and(fn () => Authentication::guard('users')->invitations()->create(new InvitationData('y@example.com', [], locale: 'sk/../x')))->toThrow(ValidationException::class);
 
     $admin = User::factory()->create();
     Gate::define('authentication.invitations.manage', fn (User $user): bool => $user->is($admin));

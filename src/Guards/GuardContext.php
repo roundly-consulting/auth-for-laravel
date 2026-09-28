@@ -4,17 +4,18 @@ declare(strict_types=1);
 
 namespace RoundlyConsulting\Auth\Guards;
 
+use Carbon\CarbonImmutable;
+use Illuminate\Auth\AuthenticationException;
 use Illuminate\Contracts\Container\Container;
+use Illuminate\Contracts\Pagination\LengthAwarePaginator;
+use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
 use RoundlyConsulting\Auth\Actions\Account\DisableAccount;
 use RoundlyConsulting\Auth\Actions\Account\EnableAccount;
+use RoundlyConsulting\Auth\Actions\Account\LockAccount;
 use RoundlyConsulting\Auth\Actions\Account\UnlockAccount;
-use RoundlyConsulting\Auth\Actions\Challenges\CompletePasskeyEnrolmentStep;
-use RoundlyConsulting\Auth\Actions\Challenges\CompletePasskeyStep;
-use RoundlyConsulting\Auth\Actions\Challenges\CompleteTwoFactorStep;
-use RoundlyConsulting\Auth\Actions\Challenges\ConfirmTwoFactorEnrolmentStep;
-use RoundlyConsulting\Auth\Actions\Invitations\AcceptInvitation;
-use RoundlyConsulting\Auth\Actions\Invitations\CreateInvitation;
+use RoundlyConsulting\Auth\Actions\Account\UpdateLocale;
+use RoundlyConsulting\Auth\Actions\Activity\ListLoginActivity;
 use RoundlyConsulting\Auth\Actions\Login\AttemptPasswordLogin;
 use RoundlyConsulting\Auth\Actions\Login\BeginPasskeyLogin;
 use RoundlyConsulting\Auth\Actions\Login\CompletePasskeyLogin;
@@ -29,13 +30,11 @@ use RoundlyConsulting\Auth\Actions\Sessions\LogoutCurrentSession;
 use RoundlyConsulting\Auth\Actions\Sessions\LogoutEverywhere;
 use RoundlyConsulting\Auth\Actions\Sessions\LogoutOtherSessions;
 use RoundlyConsulting\Auth\Actions\Sessions\LogoutSession;
-use RoundlyConsulting\Auth\Actions\Tokens\IssueTokenPair;
+use RoundlyConsulting\Auth\Actions\Tokens\IssueAccountTokens;
 use RoundlyConsulting\Auth\Actions\Tokens\RefreshTokenPair;
 use RoundlyConsulting\Auth\Contracts\Account;
-use RoundlyConsulting\Auth\DataTransferObjects\AcceptInvitationData;
-use RoundlyConsulting\Auth\DataTransferObjects\ChallengeFactorData;
 use RoundlyConsulting\Auth\DataTransferObjects\CurrentToken;
-use RoundlyConsulting\Auth\DataTransferObjects\InvitationData;
+use RoundlyConsulting\Auth\DataTransferObjects\LocaleData;
 use RoundlyConsulting\Auth\DataTransferObjects\LoginResult;
 use RoundlyConsulting\Auth\DataTransferObjects\PasswordCredentials;
 use RoundlyConsulting\Auth\DataTransferObjects\RegistrationData;
@@ -44,25 +43,38 @@ use RoundlyConsulting\Auth\DataTransferObjects\SessionContext;
 use RoundlyConsulting\Auth\DataTransferObjects\SessionData;
 use RoundlyConsulting\Auth\DataTransferObjects\TokenPair;
 use RoundlyConsulting\Auth\Enums\AuthMethodReference;
-use RoundlyConsulting\Auth\Enums\FactorMethod;
 use RoundlyConsulting\Auth\Enums\InvalidationReason;
 use RoundlyConsulting\Auth\Enums\LoginMethod;
-use RoundlyConsulting\Auth\Events\TokensIssued;
-use RoundlyConsulting\Auth\Models\Invitation;
+use RoundlyConsulting\Auth\Guards\Contexts\ChallengesContext;
+use RoundlyConsulting\Auth\Guards\Contexts\EmailContext;
+use RoundlyConsulting\Auth\Guards\Contexts\InvitationsContext;
+use RoundlyConsulting\Auth\Guards\Contexts\PasskeysContext;
+use RoundlyConsulting\Auth\Guards\Contexts\PasswordsContext;
+use RoundlyConsulting\Auth\Guards\Contexts\ReauthenticationContext;
+use RoundlyConsulting\Auth\Guards\Contexts\ScopedToGuard;
+use RoundlyConsulting\Auth\Guards\Contexts\TwoFactorContext;
+use RoundlyConsulting\Auth\Models\LoginActivity;
 use RoundlyConsulting\Passkeys\DataTransferObjects\AuthenticationResponseData;
 use RoundlyConsulting\Passkeys\DataTransferObjects\RequestOptionsData;
 use SensitiveParameter;
 
 /**
- * The per-guard, discoverable surface: every method is one action call. A method taking
- * an account refuses one of another guard's model ({@see AccountRepository::ensureOwns()}).
+ * One guard's API: the core verbs flat (login, registration, tokens, sessions, account
+ * lifecycle) and a sub-context per area (`twoFactor()`, `passkeys()`, `passwords()`,
+ * `email()`, `invitations()`, `reauthentication()`, `challenges()`). Every method runs
+ * one action resolved from the container; every method taking an account refuses one of
+ * another guard's model before anything is written ({@see AccountRepository::ensureOwns()}).
  *
  * ```php
- * Authentication::guard('clients')->attempt($credentials, SessionContext::fromRequest($request));
+ * $guard = Authentication::guard('clients');
+ * $guard->attempt($credentials, $guard->contextFrom($request));
+ * $guard->twoFactor()->status($client);
  * ```
  */
 final readonly class GuardContext
 {
+    use ScopedToGuard;
+
     public function __construct(
         private GuardConfig $config,
         private Container $container,
@@ -83,81 +95,112 @@ final readonly class GuardContext
         return new AccountRepository($this->config);
     }
 
+    // ── Sub-areas ────────────────────────────────────────────────────────
+
+    public function twoFactor(): TwoFactorContext
+    {
+        return new TwoFactorContext($this->config, $this->container);
+    }
+
+    public function passkeys(): PasskeysContext
+    {
+        return new PasskeysContext($this->config, $this->container);
+    }
+
+    public function passwords(): PasswordsContext
+    {
+        return new PasswordsContext($this->config, $this->container);
+    }
+
+    public function email(): EmailContext
+    {
+        return new EmailContext($this->config, $this->container);
+    }
+
+    public function invitations(): InvitationsContext
+    {
+        return new InvitationsContext($this->config, $this->container);
+    }
+
+    public function reauthentication(): ReauthenticationContext
+    {
+        return new ReauthenticationContext($this->config, $this->container);
+    }
+
+    public function challenges(): ChallengesContext
+    {
+        return new ChallengesContext($this->config, $this->container);
+    }
+
+    // ── Request-derived inputs ───────────────────────────────────────────
+
+    /**
+     * IP, user agent, device id/name, timezone and the negotiated locale of a request.
+     */
+    public function contextFrom(Request $request): SessionContext
+    {
+        return SessionContext::fromRequest($request, $this->config);
+    }
+
+    /**
+     * The request's access token on this guard (`jti`, `sid`, `auth_time`, `amr`).
+     *
+     * @throws AuthenticationException when the request is not authenticated on the guard
+     */
+    public function tokenFrom(Request $request): CurrentToken
+    {
+        return CurrentToken::fromRequest($request, $this->config);
+    }
+
     // ── Login ────────────────────────────────────────────────────────────
 
     public function attempt(PasswordCredentials $credentials, SessionContext $context): LoginResult
     {
-        return $this->container->make(AttemptPasswordLogin::class)->execute($this->name(), $credentials, $context);
+        return $this->make(AttemptPasswordLogin::class)->execute($this->name(), $credentials, $context);
     }
 
     public function requestMagicLink(string $email, SessionContext $context): void
     {
-        $this->container->make(RequestMagicLink::class)->execute($this->name(), $email, $context);
+        $this->make(RequestMagicLink::class)->execute($this->name(), $email, $context);
     }
 
     public function consumeMagicLink(#[SensitiveParameter] string $token, SessionContext $context): LoginResult
     {
-        return $this->container->make(ConsumeMagicLink::class)->execute($this->name(), $token, $context);
+        return $this->make(ConsumeMagicLink::class)->execute($this->name(), $token, $context);
     }
 
     public function requestEmailOtp(string $email, SessionContext $context): void
     {
-        $this->container->make(RequestEmailOtp::class)->execute($this->name(), $email, $context);
+        $this->make(RequestEmailOtp::class)->execute($this->name(), $email, $context);
     }
 
     public function verifyEmailOtp(string $email, #[SensitiveParameter] string $code, SessionContext $context): LoginResult
     {
-        return $this->container->make(VerifyEmailOtp::class)->execute($this->name(), $email, $code, $context);
+        return $this->make(VerifyEmailOtp::class)->execute($this->name(), $email, $code, $context);
     }
 
     public function passkeyLoginOptions(SessionContext $context): RequestOptionsData
     {
-        return $this->container->make(BeginPasskeyLogin::class)->execute($this->name(), $context);
+        return $this->make(BeginPasskeyLogin::class)->execute($this->name(), $context);
     }
 
     public function loginWithPasskey(AuthenticationResponseData $response, SessionContext $context): LoginResult
     {
-        return $this->container->make(CompletePasskeyLogin::class)->execute($this->name(), $response, $context);
+        return $this->make(CompletePasskeyLogin::class)->execute($this->name(), $response, $context);
     }
 
-    /**
-     * Continue a pending challenge with a TOTP / recovery code, an enrolment
-     * confirmation, a passkey assertion or a passkey registration.
-     */
-    public function completeChallenge(ChallengeFactorData $data): LoginResult
-    {
-        $action = match ($data->method) {
-            FactorMethod::Totp, FactorMethod::RecoveryCode => CompleteTwoFactorStep::class,
-            FactorMethod::TotpEnrolment => ConfirmTwoFactorEnrolmentStep::class,
-            FactorMethod::Passkey => CompletePasskeyStep::class,
-            FactorMethod::PasskeyEnrolment => CompletePasskeyEnrolmentStep::class,
-        };
-
-        return $this->container->make($action)->execute($this->name(), $data);
-    }
-
-    // ── Registration & invitations ───────────────────────────────────────
+    // ── Registration ─────────────────────────────────────────────────────
 
     public function register(RegistrationData $data): RegistrationResult
     {
-        return $this->container->make(RegisterAccount::class)->execute($this->name(), $data);
-    }
-
-    public function invite(InvitationData $data): Invitation
-    {
-        return $this->container->make(CreateInvitation::class)->execute($this->name(), $data);
-    }
-
-    public function acceptInvitation(AcceptInvitationData $data): RegistrationResult
-    {
-        return $this->container->make(AcceptInvitation::class)->execute($this->name(), $data);
+        return $this->make(RegisterAccount::class)->execute($this->name(), $data);
     }
 
     // ── Tokens & sessions ────────────────────────────────────────────────
 
     /**
-     * Issue a pair from host code (impersonation, an SSO callback, tests). The caller
-     * vouches for the authentication; `amr` defaults to none.
+     * Issue a pair from host code (impersonation, an SSO callback, tests) and announce it
+     * (`TokensIssued`). The caller vouches for the authentication; `amr` defaults to none.
      *
      * @param  list<AuthMethodReference>  $authMethods
      */
@@ -165,16 +208,12 @@ final readonly class GuardContext
     {
         $this->own($account);
 
-        $tokens = $this->container->make(IssueTokenPair::class)->execute($this->config, $account, $method, $authMethods, $context);
-
-        event(new TokensIssued($this->name(), $account, $tokens->sessionId, $tokens->accessTokenId, $method));
-
-        return $tokens;
+        return $this->make(IssueAccountTokens::class)->execute($this->name(), $account, $context, $method, $authMethods);
     }
 
     public function refresh(#[SensitiveParameter] string $refreshToken, SessionContext $context): TokenPair
     {
-        return $this->container->make(RefreshTokenPair::class)->execute($this->name(), $refreshToken, $context);
+        return $this->make(RefreshTokenPair::class)->execute($this->name(), $refreshToken, $context);
     }
 
     /**
@@ -184,35 +223,35 @@ final readonly class GuardContext
     {
         $this->own($account);
 
-        return $this->container->make(ListSessions::class)->execute($this->name(), $account, $currentSessionId);
+        return $this->make(ListSessions::class)->execute($this->name(), $account, $currentSessionId);
     }
 
     public function logout(Account $account, CurrentToken $current): void
     {
         $this->own($account);
 
-        $this->container->make(LogoutCurrentSession::class)->execute($this->name(), $account, $current);
+        $this->make(LogoutCurrentSession::class)->execute($this->name(), $account, $current);
     }
 
     public function logoutSession(Account $account, string $sessionId): void
     {
         $this->own($account);
 
-        $this->container->make(LogoutSession::class)->execute($this->name(), $account, $sessionId);
+        $this->make(LogoutSession::class)->execute($this->name(), $account, $sessionId);
     }
 
     public function logoutOthers(Account $account, CurrentToken $current): int
     {
         $this->own($account);
 
-        return $this->container->make(LogoutOtherSessions::class)->execute($this->name(), $account, $current);
+        return $this->make(LogoutOtherSessions::class)->execute($this->name(), $account, $current);
     }
 
     public function logoutEverywhere(Account $account): int
     {
         $this->own($account);
 
-        return $this->container->make(LogoutEverywhere::class)->execute($this->name(), $account);
+        return $this->make(LogoutEverywhere::class)->execute($this->name(), $account);
     }
 
     /**
@@ -223,39 +262,63 @@ final readonly class GuardContext
     {
         $this->own($account);
 
-        return $this->container->make(InvalidateAccountTokens::class)
+        return $this->make(InvalidateAccountTokens::class)
             ->execute($this->config, $account, $reason, $keep, $context ?? new SessionContext)
             ->tokens;
     }
 
-    // ── Account lifecycle ────────────────────────────────────────────────
+    // ── Account ──────────────────────────────────────────────────────────
 
     public function disable(Account $account, ?string $reason = null): void
     {
         $this->own($account);
 
-        $this->container->make(DisableAccount::class)->execute($this->name(), $account, $reason);
+        $this->make(DisableAccount::class)->execute($this->name(), $account, $reason);
     }
 
     public function enable(Account $account): void
     {
         $this->own($account);
 
-        $this->container->make(EnableAccount::class)->execute($this->name(), $account);
+        $this->make(EnableAccount::class)->execute($this->name(), $account);
+    }
+
+    /**
+     * Hard-lock the account (default `lockout.duration`) and tell its owner; sessions stay.
+     */
+    public function lock(Account $account, ?int $seconds = null): CarbonImmutable
+    {
+        $this->own($account);
+
+        return $this->make(LockAccount::class)->execute($this->name(), $account, $seconds);
     }
 
     public function unlock(Account $account): void
     {
         $this->own($account);
 
-        $this->container->make(UnlockAccount::class)->execute($this->name(), $account);
+        $this->make(UnlockAccount::class)->execute($this->name(), $account);
     }
 
     /**
-     * Every account-taking method refuses an account of another guard's model.
+     * Set the notification locale and/or display timezone (only the fields `$data` flags).
      */
-    private function own(Account $account): void
+    public function updateLocale(Account $account, LocaleData $data): Account
     {
-        $this->accounts()->ensureOwns($account);
+        $this->own($account);
+
+        return $this->make(UpdateLocale::class)->execute($this->name(), $account, $data);
+    }
+
+    /**
+     * The account's own login activity on this guard, newest first.
+     *
+     * @return LengthAwarePaginator<int, LoginActivity>
+     */
+    public function activity(Account $account, int $perPage = 20): LengthAwarePaginator
+    {
+        $this->own($account);
+
+        return $this->make(ListLoginActivity::class)->execute($this->name(), $account, $perPage);
     }
 }

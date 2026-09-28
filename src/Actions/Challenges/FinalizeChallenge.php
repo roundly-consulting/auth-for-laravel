@@ -28,6 +28,8 @@ use RoundlyConsulting\Auth\Support\Models;
  * password reset, disable or logout-everywhere in between kills the login), then claims
  * the challenge once (`completed_at … WHERE completed_at IS NULL AND version = ?`) — a
  * replayed final step gets nothing — and runs the success tail.
+ *
+ * @internal a challenge-engine step; drive challenges through `challenges()`.
  */
 final readonly class FinalizeChallenge
 {

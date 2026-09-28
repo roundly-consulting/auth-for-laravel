@@ -25,6 +25,8 @@ use RoundlyConsulting\RefreshTokens\Facades\RefreshTokens;
  * The chicken-and-egg (the access token carries the session id; the refresh token
  * carries the access token's jti) is solved by choosing the session id first: it is
  * minted into `sid`, then used as the refresh family's root id.
+ *
+ * @internal the session minter every login shares; host code issues through `issueTokens()` (`IssueAccountTokens`), which also announces the pair.
  */
 final readonly class IssueTokenPair
 {

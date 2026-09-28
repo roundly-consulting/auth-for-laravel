@@ -13,6 +13,8 @@ use RoundlyConsulting\Auth\Support\Models;
 /**
  * Kills an account's still-usable one-time secrets of the given purposes (all purposes
  * when none are given).
+ *
+ * @internal the one-time-token store behind links and codes.
  */
 final class InvalidateOneTimeTokens
 {

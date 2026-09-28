@@ -21,6 +21,8 @@ use RoundlyConsulting\Auth\Support\Models;
  * re-authentications. Unauthenticated requests are recorded as "succeeded" too (a reset
  * or sign-in link sent to a known address), and anyone who knows the address can make
  * one from any device.
+ *
+ * @internal a login-pipeline step (`CompleteLogin`).
  */
 final readonly class DetectNewDevice
 {

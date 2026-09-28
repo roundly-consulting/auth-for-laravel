@@ -143,7 +143,7 @@ it('counts a wrong enrolment confirmation code', function (): void {
 
     $this->postJson('/users/auth/challenge/two-factor/enrol', ['challenge_token' => $token], ['User-Agent' => 'PestBrowser/1.0'])->assertOk();
 
-    expect(fn () => Authentication::guard('users')->completeChallenge(new ChallengeFactorData($token, FactorMethod::TotpEnrolment, sessionContext(), code: '000000')))
+    expect(fn () => Authentication::guard('users')->challenges()->complete(new ChallengeFactorData($token, FactorMethod::TotpEnrolment, sessionContext(), code: '000000')))
         ->toThrow(ChallengeFactorFailed::class);
 });
 
@@ -172,7 +172,7 @@ it('walks a challenge through the guard context', function (): void {
     $secret = enableTotp($this->user);
     $pending = Authentication::guard('users')->attempt(new PasswordCredentials($this->user->email, 'correct-horse-battery'), sessionContext())->challenge;
 
-    $result = Authentication::guard('users')->completeChallenge(new ChallengeFactorData($pending->token, FactorMethod::Totp, sessionContext(), code: totpCode($secret)));
+    $result = Authentication::guard('users')->challenges()->complete(new ChallengeFactorData($pending->token, FactorMethod::Totp, sessionContext(), code: totpCode($secret)));
 
     expect($result->isAuthenticated())->toBeTrue();
 });

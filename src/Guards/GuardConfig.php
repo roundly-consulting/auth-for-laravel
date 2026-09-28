@@ -605,8 +605,17 @@ final readonly class GuardConfig
         return (bool) ($this->settings['reauthentication']['fresh_login_counts'] ?? true);
     }
 
+    /**
+     * Whether the action needs a recent re-authentication: listed in
+     * `reauthentication.required_for` — and, for an email change, not switched off by
+     * `email_change.require_reauthentication = false`.
+     */
     public function requiresReauthentication(SensitiveAction $action): bool
     {
+        if ($action === SensitiveAction::ChangeEmail && ! $this->emailChangeRequiresReauthentication()) {
+            return false;
+        }
+
         return in_array($action, $this->sensitiveActions(), true);
     }
 
