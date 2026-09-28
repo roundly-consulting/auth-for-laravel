@@ -16,7 +16,7 @@ Initial public release.
   and forced two-factor or passkey enrolment.
 - RS256 access tokens with rotating refresh tokens and device sessions, including logout of one
   session, all others or everywhere — built on jwt-for-laravel and refresh-tokens-for-laravel.
-- Registration and invitations (`register()`, `invite()`, `acceptInvitation()`).
+- Registration and invitations (`register()`, `invitations()->create()/accept()`).
 - Email verification and verified email change.
 - Forgot, reset and change password with a password policy and an optional breached-password check.
 - Per-account locale and time zone, plus re-authentication for sensitive actions.
@@ -28,3 +28,36 @@ Initial public release.
   `authentication:prune` and `authentication:logout-everywhere`.
 - `InteractsWithAuthentication` test helpers (`actingAsAccount()` with a real token pair,
   `assertLoginActivity()`, `assertTokensInvalidated()`).
+- One API in three layers: the `Authentication` facade, the injectable
+  `AuthenticationManager` and the action classes, all running the same code. Per-guard
+  sub-contexts `twoFactor()`, `passkeys()`, `passwords()`, `email()`, `invitations()`,
+  `reauthentication()` and `challenges()`, plus `lock()`, `updateLocale()`, `activity()`,
+  `contextFrom()` and `tokenFrom()` on every guard and `Authentication::prune()`. Every
+  per-guard method also works without `guard()` on the default guard
+  (`Authentication::twoFactor()->status($user)`).
+- `invitations()->create()` returns the `InvitationLink` it mailed (or, with `send: false`,
+  the link for the host to deliver); `invitations()->link()` mints a copyable link without
+  mailing it.
+- `reauthentication()->ensureFor(SensitiveAction, …)` runs the HTTP layer's sensitive-action
+  gate for host code acting on behalf of the signed-in user.
+
+### Changed
+
+- `completeChallenge()`, `invite()` and `acceptInvitation()` moved to
+  `challenges()->complete()`, `invitations()->create()` and `invitations()->accept()`.
+- The admin/CLI forms of the credential changes need no caller token: `$current` and
+  `$context` are optional in the two-factor and passkey actions.
+- `ResendInvitation`, `RevokeInvitation` and `SendInvitation` take the guard name first.
+- Building-block actions are tagged `@internal`; host code issues tokens through
+  `issueTokens()` (`IssueAccountTokens`), which announces them with `TokensIssued` — also for
+  `actingAsAccount()`.
+
+### Fixed
+
+- Every action taking an account refuses one of another guard's model before it writes —
+  setting or changing a password, two-factor and passkey changes, disabling, locking,
+  unlocking and locale updates no longer write first and fail afterwards.
+- Resending, revoking or re-linking another guard's invitation is refused.
+- A manual `lock()` notifies the owner exactly like the automatic lockout.
+- `email_change.require_reauthentication = false` now also switches off
+  `ensureFor(SensitiveAction::ChangeEmail)`, not only the HTTP endpoint.

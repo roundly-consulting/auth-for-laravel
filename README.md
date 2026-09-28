@@ -259,26 +259,36 @@ one table is authorization, not a guard) or an audience.
 
 ## Usage
 
-### The facade and guard contexts
+### The facade
+
+`Authentication::guard('clients')` is one guard's API. Every other per-guard method on the
+facade runs on the default guard (`authentication.default`), so
+`Authentication::twoFactor()->status($user)` is `Authentication::guard()->twoFactor()->status($user)`.
 
 ```php
 use RoundlyConsulting\Auth\DataTransferObjects\PasswordCredentials;
-use RoundlyConsulting\Auth\DataTransferObjects\SessionContext;
 use RoundlyConsulting\Auth\Facades\Authentication;
 use RoundlyConsulting\Auth\Http\Resources\ChallengeResource;
 use RoundlyConsulting\Auth\Http\Resources\TokenPairResource;
 
-$result = Authentication::guard('clients')->attempt(
+$guard = Authentication::guard('clients');
+
+$result = $guard->attempt(
     new PasswordCredentials(identifier: $request->string('email')->toString(), password: $request->string('password')->toString()),
-    SessionContext::fromRequest($request),
+    $guard->contextFrom($request),
 );
 
 return $result->isAuthenticated()
     ? TokenPairResource::make($result->tokens)
-    : ChallengeResource::make($result->challenge);   // continue at POST …/challenge/*
+    : ChallengeResource::make($result->challenge);   // continue with $guard->challenges()->complete(…)
+
+Authentication::twoFactor()->status($user);          // enabled, pending, recovery codes left, mode
+Authentication::passwords()->set($user, 'n3w-Passphrase!', InvalidationReason::Security);
+Authentication::invitations()->create(new InvitationData('ada@example.com'))->url;
+Authentication::lock($user, seconds: 3600);
 ```
 
-Every `GuardContext` method is one action call:
+Core verbs sit on the guard itself:
 
 | Method | Returns |
 |---|---|
@@ -286,25 +296,100 @@ Every `GuardContext` method is one action call:
 | `requestMagicLink($email, $ctx)` / `consumeMagicLink($token, $ctx)` | `void` / `LoginResult` |
 | `requestEmailOtp($email, $ctx)` / `verifyEmailOtp($email, $code, $ctx)` | `void` / `LoginResult` |
 | `passkeyLoginOptions($ctx)` / `loginWithPasskey($response, $ctx)` | `RequestOptionsData` / `LoginResult` |
-| `completeChallenge(ChallengeFactorData)` | `LoginResult` |
-| `issueTokens($account, $ctx, $method, $amr)` | `TokenPair` (host-driven login: impersonation, SSO callback) |
+| `register(RegistrationData)` | `RegistrationResult` |
+| `issueTokens($account, $ctx, $method, $amr)` | `TokenPair` — host-vouched login (impersonation, SSO); fires `TokensIssued` |
 | `refresh($refreshToken, $ctx)` | `TokenPair` |
 | `sessions($account, $currentSessionId)` | `Collection<SessionData>` |
 | `logout($account, $current)` / `logoutSession($account, $id)` / `logoutOthers($account, $current)` / `logoutEverywhere($account)` | — / — / `int` / `int` |
-| `invalidate($account, InvalidationReason, ?$keep)` | `?TokenPair` (the re-issued pair under `others`) |
-| `register(RegistrationData)` | `RegistrationResult` |
-| `invite(InvitationData)` / `acceptInvitation(AcceptInvitationData)` | `Invitation` / `RegistrationResult` (like `register()`) |
+| `invalidate($account, InvalidationReason, ?$keep, ?$ctx)` | `?TokenPair` (the re-issued pair under `others`) |
+| `disable($account, ?$reason)` / `enable($account)` | — |
+| `lock($account, ?$seconds)` / `unlock($account)` | `CarbonImmutable` / — (a lock notifies the owner, never logs out) |
+| `updateLocale($account, LocaleData)` | `Account` |
+| `activity($account, $perPage = 20)` | paginated own `LoginActivity` |
+| `contextFrom(Request)` / `tokenFrom(Request)` | `SessionContext` / `CurrentToken` |
+| `name()` / `config()` / `accounts()` | `string` / `GuardConfig` / `AccountRepository` |
 
-Every flow is also a container-resolvable action with a single `execute()` in
-`RoundlyConsulting\Auth\Actions\*` (e.g. `ChangePassword`, `SetPassword`, `DisableAccount`,
-`LockAccount`, `Reauthenticate`, `CreateInvitation`, `ResendInvitation`, `PruneAuthenticationData`).
+Each area has a sub-context:
+
+| Sub-context | Methods |
+|---|---|
+| `twoFactor()` | `status($a)`, `start($a)`, `confirm($a, $code, ?$current, ?$ctx)`, `disable($a, ?$current, ?$ctx)`, `regenerateRecoveryCodes($a, ?$current, ?$ctx)` |
+| `passkeys()` | `all($a)`, `registrationOptions($a)`, `register($a, $response, ?$name, ?$current, ?$ctx)`, `rename($a, Passkey\|int, $name)`, `remove($a, Passkey\|int, ?$current, ?$ctx)` |
+| `passwords()` | `set($a, $password, $reason)`, `change($a, ChangePasswordData)`, `requestReset($email, $ctx)`, `reset(PasswordResetData)`, `validate($password, ?$a, ?$email)`, `rule(?$email)` |
+| `email()` | `sendVerification($a, ?$ctx)`, `requestVerification($a, $ctx)`, `resendVerification($email, $ctx)`, `verify($tokenOrCode, ?$email, $ctx)`, `requestChange($a, EmailChangeData)`, `confirmChange($token, $ctx)` |
+| `invitations()` | `create(InvitationData)` → `InvitationLink`, `accept(AcceptInvitationData)`, `paginate(?$status, $perPage)`, `preview($token)`, `find($id)`, `resend(Invitation\|int)`, `revoke(Invitation\|int)`, `link(Invitation\|int)` |
+| `reauthentication()` | `methods($a)`, `sendCode($a, $ctx)`, `passkeyOptions($a, $current)`, `confirm($a, ReauthenticationData)`, `ensureRecent($a, $current, ?$seconds)`, `ensureFor(SensitiveAction, $a, $current)` |
+| `challenges()` | `complete(ChallengeFactorData)`, `passkeyOptions($token, $ctx)`, `passkeyEnrolmentOptions($token, $ctx)`, `startTwoFactorEnrolment($token, $ctx)` |
+
+Plus `Authentication::prune(?$days)`, `guards()`, `routes($guard)`, `currentGuard()`.
+
+**Scoping.** Every method that takes an account refuses one of another guard's model
+(`AuthenticationMisconfigured`, "belongs to another guard") before anything is written. Another
+guard's invitation, passkey or challenge token is unknown (`InvitationNotFound`,
+`PasskeyNotFound`, `ChallengeInvalid`).
+
+**Acting for the signed-in user.** Pass the caller's token (`$guard->tokenFrom($request)`) as
+`$current` to the credential changes: its device is kept under `others` and the re-issued pair
+is returned — the client must swap to it. Leave `$current` out for admin and CLI calls. The HTTP
+layer also demands a recent re-authentication before the actions in
+`reauthentication.required_for`; PHP callers vouch for the user themselves, or run the same gate
+first:
 
 ```php
-// An admin sets a password: every session of the account ends.
-app(SetPassword::class)->execute('users', $user, 'n3w-Passphrase!', InvalidationReason::Security);
+$current = $guard->tokenFrom($request);
 
-// Incident response.
-Authentication::guard('users')->logoutEverywhere($user);
+$guard->reauthentication()->ensureFor(SensitiveAction::DisableTwoFactor, $user, $current);
+$tokens = $guard->twoFactor()->disable($user, $current, $guard->contextFrom($request));
+```
+
+(`passwords()->change()` runs the gate itself for an account that is setting its first password.)
+
+**Use `Authentication::…`, not the lower packages' model methods.** Methods such as
+`$user->disableTwoFactor()`, `$user->regenerateTwoFactorRecoveryCodes()`,
+`Passkeys::for($user)->revoke()`, `$user->revokeAllSessions()` or
+`RefreshTokens::sessions($user)->revokeAll()` change the credential but skip this package's
+policy — the guard's mode, the invalidation, the events and the owner's notification.
+
+### Without the facade
+
+The facade is sugar over `RoundlyConsulting\Auth\AuthenticationManager` — inject it for the same
+API — and every method runs one container-resolved action (`RoundlyConsulting\Auth\Actions\*`,
+a single `execute()`), which you can also call directly:
+
+```php
+use RoundlyConsulting\Auth\Actions\Passwords\SetPassword;
+use RoundlyConsulting\Auth\AuthenticationManager;
+
+final class ResetSupportPassword
+{
+    public function __construct(private AuthenticationManager $authentication) {}
+
+    public function __invoke(User $user, string $password): void
+    {
+        $this->authentication->guard('users')->passwords()->set($user, $password, InvalidationReason::Security);
+    }
+}
+
+// The raw action — the same code path.
+app(SetPassword::class)->execute('users', $user, $password, InvalidationReason::Security);
+```
+
+Rebinding an action in the container changes the facade too. Actions tagged `@internal` are
+building blocks of the flows above, not API.
+
+### Testing without a fake
+
+There is no `Authentication::fake()` on purpose. Every write already fires a domain event —
+assert them with `Event::fake()` — and the [testing helpers](#testing-helpers) issue REAL token
+pairs, so a test runs through the guard, audience, denylist and token-version checks that a stub
+would hide.
+
+```php
+Event::fake([PasswordChanged::class]);
+
+Authentication::passwords()->set($user, 'n3w-Passphrase!');
+
+Event::assertDispatched(PasswordChanged::class);
 ```
 
 ### Login challenges
@@ -482,7 +567,7 @@ abstract class TestCase extends BaseTestCase
     use InteractsWithAuthentication;
 }
 
-$this->actingAsAccount($user)->getJson('/api/orders')->assertOk();        // a REAL token pair
+$this->actingAsAccount($user)->getJson('/api/orders')->assertOk();        // a REAL token pair (fires TokensIssued)
 $this->assertLoginActivity('users', ActivityType::PasswordLogin, ActivityOutcome::Succeeded);
 $this->assertTokensInvalidated($user, InvalidationReason::PasswordChanged);   // moved since actingAsAccount() (or pass `since:`)
 ```
