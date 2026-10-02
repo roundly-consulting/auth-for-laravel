@@ -69,6 +69,24 @@ it('does not let an unauthenticated request make an attacker device known', func
     Notification::assertSentTo($user, NewDeviceLoginNotification::class);
 })->with(['password/forgot', 'login/magic-link', 'login/otp']);
 
+it('does not let a re-authentication make its device known', function (): void {
+    Event::fake([NewDeviceDetected::class]);
+    Notification::fake();
+    $user = User::factory()->create();
+    login($user, 'Laptop', 'owner-laptop');
+    $pair = issuePair($user);
+
+    // A stolen access token re-authenticates from another device…
+    $this->postJson('/users/auth/reauthenticate', ['method' => 'password', 'password' => 'correct-horse-battery'], ['Authorization' => 'Bearer '.$pair->accessToken, 'X-Device-Id' => 'attacker-box', 'User-Agent' => 'EvilBrowser/1.0'])
+        ->assertOk();
+
+    // …which must not make the first real sign-in from that device a known one.
+    login($user, 'EvilBrowser/1.0', 'attacker-box');
+
+    Event::assertDispatched(NewDeviceDetected::class);
+    Notification::assertSentTo($user, NewDeviceLoginNotification::class);
+});
+
 it('prefers the device header over the user agent', function (): void {
     Event::fake([NewDeviceDetected::class]);
     $user = User::factory()->create();
