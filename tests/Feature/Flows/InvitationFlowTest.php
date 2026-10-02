@@ -11,6 +11,7 @@ use RoundlyConsulting\Auth\DataTransferObjects\AcceptInvitationData;
 use RoundlyConsulting\Auth\DataTransferObjects\InvitationData;
 use RoundlyConsulting\Auth\Enums\RegistrationStatus;
 use RoundlyConsulting\Auth\Events\InvitationAccepted;
+use RoundlyConsulting\Auth\Events\InvitationSent;
 use RoundlyConsulting\Auth\Exceptions\InvalidInvitation;
 use RoundlyConsulting\Auth\Exceptions\TooManyAttempts;
 use RoundlyConsulting\Auth\Facades\Authentication;
@@ -164,6 +165,40 @@ it('manages invitations over http behind the gate', function (): void {
     $this->deleteJson('/users/auth/invitations/999', [], bearer($pair))->assertNotFound();
     $this->deleteJson('/users/auth/invitations/abc', [], bearer($pair))->assertNotFound();
     $this->postJson("/users/auth/invitations/{$id}/resend", [], bearer($pair))->assertStatus(422);
+});
+
+it('returns the link of an unsent invitation over http, and counts no send that never happened', function (): void {
+    Event::fake([InvitationSent::class]);
+    $admin = User::factory()->create();
+    $pair = issuePair($admin);
+    Gate::define('authentication.invitations.manage', fn (User $user): bool => $user->is($admin));
+
+    $response = $this->postJson('/users/auth/invitations', ['email' => 'slack@example.com', 'send' => false], bearer($pair))
+        ->assertCreated()
+        ->assertJsonPath('data.send_count', 0)
+        ->assertJsonPath('data.last_sent_at', null);
+
+    Notification::assertNothingSent();
+    Event::assertNotDispatched(InvitationSent::class);
+    expect(Authentication::guard('users')->invitations()->preview(tokenFromUrl($response->json('url')))->email)->toBe('slack@example.com');
+
+    // Nothing was mailed, so the first real send is neither cooled down nor capped early.
+    $this->postJson('/users/auth/invitations/'.$response->json('data.id').'/resend', [], bearer($pair))->assertOk();
+    Event::assertDispatchedTimes(InvitationSent::class, 1);
+    expect(Invitation::query()->sole()->send_count)->toBe(1);
+});
+
+it('returns the mailed link too when creating over http', function (): void {
+    $admin = User::factory()->create();
+    $pair = issuePair($admin);
+    Gate::define('authentication.invitations.manage', fn (User $user): bool => $user->is($admin));
+
+    $url = $this->postJson('/users/auth/invitations', ['email' => 'mail@example.com'], bearer($pair))
+        ->assertCreated()
+        ->assertJsonPath('data.send_count', 1)
+        ->json('url');
+
+    Notification::assertSentOnDemand(InvitationNotification::class, fn (InvitationNotification $notification): bool => $notification->data->url === $url);
 });
 
 it('lets two concurrent accepts create exactly one account', function (): void {
