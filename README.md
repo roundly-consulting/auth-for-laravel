@@ -183,6 +183,10 @@ one table is authorization, not a guard) or an audience.
 
 ### Per-guard keys (`defaults.*`)
 
+Every on/off key accepts the usual env spellings — `true`/`false`, `1`/`0`, `on`/`off`, `yes`/`no` —
+so `AUTHENTICATION_LOGIN_PASSWORD=off` really turns password login off; anything unrecognised falls
+back to the default shown.
+
 | Key | Default | Purpose |
 |---|---|---|
 | `model` | — (required) | `class-string<Model&Account>` |

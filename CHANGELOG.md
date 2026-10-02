@@ -77,3 +77,6 @@ Initial public release.
 - A re-authentication no longer makes its device known to new-device detection.
 - The users-table stub also adds the passkey user handle, so a fresh install passes
   `authentication:check`.
+- On/off settings set from `.env` as `0`/`off`/`no` were cast to true
+  (`AUTHENTICATION_LOGIN_PASSWORD=off` left password login on). Every guard switch is now parsed
+  as a boolean.

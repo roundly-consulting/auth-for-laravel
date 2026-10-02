@@ -80,10 +80,10 @@ return [
         ],
 
         'login' => [
-            'password' => (bool) env('AUTHENTICATION_LOGIN_PASSWORD', true),
-            'magic_link' => (bool) env('AUTHENTICATION_LOGIN_MAGIC_LINK', false),
-            'email_otp' => (bool) env('AUTHENTICATION_LOGIN_EMAIL_OTP', false),
-            'passkey' => (bool) env('AUTHENTICATION_LOGIN_PASSKEY', false),  // passwordless
+            'password' => env('AUTHENTICATION_LOGIN_PASSWORD', true),
+            'magic_link' => env('AUTHENTICATION_LOGIN_MAGIC_LINK', false),
+            'email_otp' => env('AUTHENTICATION_LOGIN_EMAIL_OTP', false),
+            'passkey' => env('AUTHENTICATION_LOGIN_PASSKEY', false),  // passwordless
             'reveal_account_state' => true,  // disabled/unverified codes only after a verified first factor
         ],
 
@@ -186,7 +186,7 @@ return [
                 'symbols' => false,
                 'not_identifier' => true,
                 'uncompromised' => [
-                    'enabled' => (bool) env('AUTHENTICATION_PASSWORD_BREACH_CHECK', false),
+                    'enabled' => env('AUTHENTICATION_PASSWORD_BREACH_CHECK', false),
                     'threshold' => 0,
                     'timeout' => 3,
                     'fail_closed' => false,

@@ -29,6 +29,7 @@ use RoundlyConsulting\Auth\Notifications\AuthenticationNotification;
 use RoundlyConsulting\Jwt\Exceptions\JwtMisconfigured;
 use RoundlyConsulting\Jwt\Facades\Jwt;
 use RoundlyConsulting\PackageToolkit\Enums\KeyType;
+use RoundlyConsulting\PackageToolkit\Support\Config;
 use RoundlyConsulting\Passkeys\Contracts\HasPasskeys;
 use RoundlyConsulting\TwoFactor\Contracts\TwoFactorAuthenticatable;
 
@@ -93,7 +94,7 @@ final class ConfigValidation
         try {
             $settings = $guard->toArray();
 
-            if (! $guard->loginMethodEnabled(LoginMethod::Password) && (bool) ($settings['passwords']['reset']['enabled'] ?? false)) {
+            if (! $guard->loginMethodEnabled(LoginMethod::Password) && Config::for($settings)->boolean('passwords.reset.enabled')) {
                 $warnings[] = "{$prefix}.passwords.reset.enabled is ignored because login.password is off.";
             }
 
