@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Facades\Schema;
 use RoundlyConsulting\Auth\AuthenticationManager;
@@ -40,6 +41,40 @@ it('fails on each broken piece of wiring', function (Closure $break, string $mes
         app(GuardRegistry::class)->flush();
     }, 'routes are not registered'],
 ]);
+
+it('passes after the documented install on a stock users table', function (): void {
+    // Laravel's own users table, then the two published column stubs `migrate` runs.
+    Schema::drop('users');
+    Schema::create('users', function (Blueprint $table): void {
+        $table->id();
+        $table->string('name');
+        $table->string('email')->unique();
+        $table->timestamp('email_verified_at')->nullable();
+        $table->string('password');
+        $table->rememberToken();
+        $table->timestamps();
+    });
+
+    foreach ([__DIR__.'/../../vendor/roundly-consulting/two-factor-for-laravel/database/migrations/add_two_factor_columns_to_users_table.php.stub', __DIR__.'/../../database/migrations/add_authentication_columns_to_users_table.php.stub'] as $stub) {
+        (require $stub)->up();
+    }
+
+    expect(Schema::hasColumn('users', 'passkey_user_handle'))->toBeTrue();
+    $this->artisan('authentication:check', ['guard' => 'users'])->doesntExpectOutputToContain('missing columns')->assertSuccessful();
+});
+
+it('leaves an existing passkey handle column alone', function (): void {
+    Schema::drop('users');
+    Schema::create('users', function (Blueprint $table): void {
+        $table->id();
+        $table->string('email')->unique();
+        $table->passkeyUserHandle();
+    });
+
+    (require __DIR__.'/../../database/migrations/add_authentication_columns_to_users_table.php.stub')->up();
+
+    expect(Schema::hasColumns('users', ['passkey_user_handle', 'token_version']))->toBeTrue();
+});
 
 it('reports warnings without failing', function (): void {
     $this->configureGuard('users', ['notifications.delivery' => 'queue']);
