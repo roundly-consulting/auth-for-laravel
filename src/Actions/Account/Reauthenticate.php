@@ -51,8 +51,9 @@ use SensitiveParameter;
  * password must not be able to disable the factor that protects the account.
  *
  * The TOTP and recovery-code methods share one check (two-factor reports which one
- * matched): the marker records the factor that actually matched, and a spent recovery
- * code is announced to the owner exactly as at login.
+ * matched): the allow-list and the marker use the factor that actually matched, and a
+ * spent recovery code is announced to the owner exactly as at login — also when the
+ * guard does not accept recovery codes here and the proof is refused.
  */
 final readonly class Reauthenticate
 {
@@ -82,7 +83,9 @@ final readonly class Reauthenticate
                 throw AccountLocked::retryAfter(Lockout::secondsRemaining($account));
             }
 
-            if (! in_array($data->method, ReauthenticationMethods::available($config, $account), true)) {
+            $available = ReauthenticationMethods::available($config, $account);
+
+            if (! in_array($data->method, $available, true)) {
                 throw new FactorNotAllowed;
             }
 
@@ -100,6 +103,15 @@ final readonly class Reauthenticate
                 $this->fail($config, $account, $data);
 
                 throw $data->method === ReauthenticationMethod::Password ? new InvalidCredentials : new InvalidCode;
+            }
+
+            // A recovery code sent as `totp` matched: the guard must accept what matched.
+            if (! in_array($proven, $available, true)) {
+                $wrong = true;
+                $this->fail($config, $account, $data);
+                $this->announceRecoveryCode($config, $account, $proven, $recoveryCodesLeft);
+
+                throw new FactorNotAllowed;
             }
         } finally {
             if (! $wrong) {
@@ -123,16 +135,23 @@ final readonly class Reauthenticate
 
         event(new Reauthenticated($guard, $account, $proven));
 
-        if ($proven === ReauthenticationMethod::RecoveryCode) {
-            event(new RecoveryCodeUsed($guard, $account, (int) $recoveryCodesLeft));
-
-            $this->notifications->send($config, NotificationType::RecoveryCodeUsed, $account, new NotificationData(
-                guard: $guard,
-                replacements: ['remaining' => (int) $recoveryCodesLeft],
-            ));
-        }
+        $this->announceRecoveryCode($config, $account, $proven, $recoveryCodesLeft);
 
         return $now->addSeconds($config->reauthenticationTimeout());
+    }
+
+    private function announceRecoveryCode(GuardConfig $guard, Account $account, ReauthenticationMethod $proven, ?int $recoveryCodesLeft): void
+    {
+        if ($proven !== ReauthenticationMethod::RecoveryCode) {
+            return;
+        }
+
+        event(new RecoveryCodeUsed($guard->name(), $account, (int) $recoveryCodesLeft));
+
+        $this->notifications->send($guard, NotificationType::RecoveryCodeUsed, $account, new NotificationData(
+            guard: $guard->name(),
+            replacements: ['remaining' => (int) $recoveryCodesLeft],
+        ));
     }
 
     /**

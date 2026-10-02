@@ -164,3 +164,30 @@ it('announces a recovery code spent on a re-authentication and records it as suc
     Notification::assertSentTo($user, RecoveryCodeUsedNotification::class);
     expect(app(ReauthenticationMarker::class)->proof('users', $pair->sessionId)?->method)->toBe(ReauthenticationMethod::RecoveryCode);
 })->with(['recovery_code', 'totp']);
+
+it('checks the allow-list against the factor that actually matched', function (): void {
+    Notification::fake();
+    Event::fake([RecoveryCodeUsed::class, Reauthenticated::class]);
+    $this->configureGuard('users', ['reauthentication.methods' => ['password', 'totp', 'passkey']]);
+    $user = User::factory()->create();
+    $secret = enableTotp($user);
+    $pair = staleSession($user);
+
+    $this->postJson('/users/auth/reauthenticate', ['method' => 'recovery_code', 'code' => recoveryCodes()[0]], bearer($pair))
+        ->assertStatus(422)
+        ->assertJsonPath('code', 'factor_not_allowed');
+
+    // Claimed as totp, but a recovery code matched: refused all the same.
+    $this->postJson('/users/auth/reauthenticate', ['method' => 'totp', 'code' => recoveryCodes()[0]], bearer($pair))
+        ->assertStatus(422)
+        ->assertJsonPath('code', 'factor_not_allowed');
+
+    expect(app(ReauthenticationMarker::class)->proof('users', $pair->sessionId))->toBeNull();
+    Event::assertNotDispatched(Reauthenticated::class);
+    // The code is spent all the same, so the owner hears about it.
+    Event::assertDispatched(RecoveryCodeUsed::class, fn (RecoveryCodeUsed $event): bool => $event->remaining === 2);
+    Notification::assertSentTo($user, RecoveryCodeUsedNotification::class);
+
+    $this->postJson('/users/auth/reauthenticate', ['method' => 'totp', 'code' => totpCode($secret)], bearer($pair))->assertOk();
+    expect(app(ReauthenticationMarker::class)->proof('users', $pair->sessionId)?->method)->toBe(ReauthenticationMethod::Totp);
+});
