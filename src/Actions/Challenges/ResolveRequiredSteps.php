@@ -65,8 +65,8 @@ final class ResolveRequiredSteps
         }
 
         // 2. Email-possession primaries are exempt only when the host opts out (E = false).
-        //    PasswordReset is deliberately absent (D12).
-        $emailPrimaries = [LoginMethod::MagicLink, LoginMethod::EmailOtp, LoginMethod::Invitation, LoginMethod::Registration];
+        //    PasswordReset is deliberately absent (D12); Registration proves no mailbox.
+        $emailPrimaries = [LoginMethod::MagicLink, LoginMethod::EmailOtp, LoginMethod::Invitation];
 
         if (in_array($method, $emailPrimaries, true) && ! $guard->twoFactorAfterEmailLogin()) {
             return [];

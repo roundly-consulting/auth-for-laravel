@@ -108,6 +108,17 @@ it('returns a challenge when the new account must enrol a factor, or asks to ver
         ->assertExactJson(['status' => 'verification_required']);
 });
 
+it('never lets registration skip required 2FA enrolment, even when email logins skip 2FA', function (): void {
+    // Registration proves no mailbox, so after_email_login=false does not exempt it.
+    $this->configureGuard('users', ['two_factor.mode' => 'required', 'two_factor.after_email_login' => false, 'challenge.enrolment_requires_verified_email' => false]);
+
+    $this->postJson('/users/auth/register', registration(), ['User-Agent' => 'PestBrowser/1.0'])
+        ->assertOk()
+        ->assertJsonPath('status', 'challenge')
+        ->assertJsonPath('remaining.0.step', 'enrol_two_factor')
+        ->assertJsonMissingPath('access_token');
+});
+
 it('registers without a password when password login is off', function (): void {
     $this->configureGuard('users', ['login.password' => false]);
 
