@@ -17,6 +17,7 @@ use RoundlyConsulting\Auth\Exceptions\InvalidCredentials;
 use RoundlyConsulting\Auth\Exceptions\LoginDenied;
 use RoundlyConsulting\Auth\Facades\Authentication;
 use RoundlyConsulting\Auth\Models\LoginActivity;
+use RoundlyConsulting\Auth\Notifications\MagicLinkNotification;
 use RoundlyConsulting\Auth\Notifications\NewDeviceLoginNotification;
 use RoundlyConsulting\Auth\Notifications\SuspiciousSessionNotification;
 use RoundlyConsulting\Auth\Tests\Fixtures\Models\User;
@@ -151,6 +152,26 @@ it('steps up to a second factor on high risk, or denies when there is none', fun
 
     $this->configureGuard('users', ['risk.deny_response' => 'explicit']);
     expect(fn () => login(User::factory()->create()))->toThrow(LoginDenied::class);
+
+    FixedRiskAssessor::$level = RiskLevel::Low;
+});
+
+it('steps up a magic-link login on high risk even when email logins skip 2FA', function (): void {
+    Notification::fake();
+    $this->configureGuard('users', ['risk.assessor' => FixedRiskAssessor::class, 'two_factor.after_email_login' => false]);
+    FixedRiskAssessor::$level = RiskLevel::High;
+    $magicLink = static function (User $user): LoginResult {
+        Authentication::guard('users')->requestMagicLink($user->email, sessionContext());
+
+        return Authentication::guard('users')->consumeMagicLink(tokenFromUrl(sentNotification($user, MagicLinkNotification::class)->data->url), sessionContext());
+    };
+
+    $enrolled = User::factory()->create();
+    enableTotp($enrolled);
+
+    expect($magicLink($enrolled)->requiresChallenge())->toBeTrue()
+        ->and(fn () => $magicLink(User::factory()->create()))->toThrow(InvalidCredentials::class)
+        ->and(LoginActivity::query()->where('reason', 'step_up_unavailable')->count())->toBe(1);
 
     FixedRiskAssessor::$level = RiskLevel::Low;
 });

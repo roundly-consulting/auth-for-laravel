@@ -51,6 +51,13 @@ function policyRows(): array
         'T=required S=required Q=false, passkey no totp, password' => [['two_factor.mode' => 'required', 'passkeys.second_factor' => 'required', 'two_factor.passkey_satisfies_required' => false], ['passkey' => true], LoginMethod::Password, RiskReaction::Allow, ['passkey{passkey}', 'enrol_two_factor{totp_enrolment}']],
         'T=optional S=required P=required, nothing, password (one enrol_passkey)' => [['passkeys.second_factor' => 'required', 'passkeys.mode' => 'required'], [], LoginMethod::Password, RiskReaction::Allow, ['enrol_passkey{passkey_enrolment}']],
         'T=required E=true, totp, invitation' => [['two_factor.mode' => 'required'], ['totp' => true], LoginMethod::Invitation, RiskReaction::Allow, ['second_factor{totp,recovery_code}']],
+        // E=false exempts email primaries from the 2FA policy, never from a risk step-up.
+        'T=optional E=false risk=high, totp, magic link' => [['two_factor.after_email_login' => false], ['totp' => true], LoginMethod::MagicLink, RiskReaction::RequireSecondFactor, ['second_factor{totp,recovery_code}']],
+        'T=optional E=false risk=high, totp, email otp' => [['two_factor.after_email_login' => false], ['totp' => true], LoginMethod::EmailOtp, RiskReaction::RequireSecondFactor, ['second_factor{totp,recovery_code}']],
+        'T=optional E=false risk=high, passkey only, invitation' => [['two_factor.after_email_login' => false], ['passkey' => true], LoginMethod::Invitation, RiskReaction::RequireSecondFactor, ['second_factor{passkey}']],
+        // A passkey that counts as MFA already is the step-up; one that does not needs TOTP.
+        'T=optional Y=true risk=high, passkey only, passkey' => [[], ['passkey' => true], LoginMethod::Passkey, RiskReaction::RequireSecondFactor, []],
+        'T=optional Y=false risk=high, totp, passkey' => [['passkeys.satisfies_mfa' => false], ['totp' => true, 'passkey' => true], LoginMethod::Passkey, RiskReaction::RequireSecondFactor, ['second_factor{totp,recovery_code}']],
         // Registration proves no mailbox: E=false does not exempt it.
         'T=required E=false, new account, registration' => [['two_factor.mode' => 'required', 'two_factor.after_email_login' => false], [], LoginMethod::Registration, RiskReaction::Allow, ['enrol_two_factor{totp_enrolment}']],
     ];
@@ -79,11 +86,21 @@ it('resolves the required steps', function (array $settings, array $has, LoginMe
 })->with('policy');
 
 it('pins the number of policy rows', function (): void {
-    expect(policyRows())->toHaveCount(28);
+    expect(policyRows())->toHaveCount(33);
 });
 
-it('denies a risk step-up the account cannot satisfy', function (): void {
+it('denies a risk step-up the account cannot satisfy', function (array $settings, array $has, LoginMethod $method): void {
+    $this->configureGuard('users', $settings);
     $user = User::factory()->create();
 
-    app(ResolveRequiredSteps::class)->execute(app(GuardRegistry::class)->get('users'), $user, LoginMethod::Password, RiskReaction::RequireSecondFactor);
-})->throws(LoginDenied::class);
+    if ($has['passkey'] ?? false) {
+        addPasskey($user);
+    }
+
+    app(ResolveRequiredSteps::class)->execute(app(GuardRegistry::class)->get('users'), $user->fresh(), $method, RiskReaction::RequireSecondFactor);
+})->throws(LoginDenied::class)->with([
+    'password, no factor' => [[], [], LoginMethod::Password],
+    'magic link E=false, no factor' => [['two_factor.after_email_login' => false], [], LoginMethod::MagicLink],
+    'registration E=false, new account' => [['two_factor.after_email_login' => false], [], LoginMethod::Registration],
+    'passkey Y=false, no totp (the passkey cannot step itself up)' => [['passkeys.satisfies_mfa' => false], ['passkey' => true], LoginMethod::Passkey],
+]);

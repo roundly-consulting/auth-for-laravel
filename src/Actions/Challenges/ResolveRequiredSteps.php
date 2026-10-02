@@ -25,7 +25,13 @@ use RoundlyConsulting\Auth\Support\ReauthenticationMethods;
  * the account has enrolled, and the risk reaction.
  *
  * Verification steps always precede enrolment steps. A password reset is never exempt
- * from an enrolled second factor (a mailbox compromise must not bypass 2FA).
+ * from an enrolled second factor (a mailbox compromise must not bypass 2FA), and
+ * registration never counts as an email-possession primary (it proves no mailbox).
+ *
+ * The risk step-up applies to EVERY primary: E = false exempts email logins from the
+ * two-factor policy, not from a `require_second_factor` reaction. A passkey primary that
+ * counts as MFA (Y) already is the step-up; one that does not must add TOTP — the same
+ * passkey cannot step itself up.
  *
  * @internal a login-pipeline step (`CompleteFirstFactor`).
  */
@@ -38,12 +44,42 @@ final class ResolveRequiredSteps
      */
     public function execute(GuardConfig $guard, Account $account, LoginMethod $method, RiskReaction $reaction = RiskReaction::Allow): array
     {
-        $twoFactor = $guard->twoFactorMode();
         $passkeys = $guard->passkeyMode();
         $secondFactor = $passkeys === PasskeyMode::Off ? PasskeySecondFactor::Off : $guard->passkeySecondFactor();
-        $satisfiesMfa = $guard->passkeySatisfiesMfa();
         $hasTotp = ReauthenticationMethods::hasTotp($guard, $account);
         $hasPasskeys = ReauthenticationMethods::hasPasskeys($guard, $account);
+
+        $steps = $this->policySteps($guard, $method, $secondFactor, $hasTotp, $hasPasskeys);
+
+        // Risk step-up needs a VERIFICATION step — an enrolment proves nothing about this login.
+        if ($reaction === RiskReaction::RequireSecondFactor
+            && ! ($method === LoginMethod::Passkey && $guard->passkeySatisfiesMfa())
+            && ! $this->contains($steps, ChallengeStep::SecondFactor)
+            && ! $this->contains($steps, ChallengeStep::Passkey)) {
+            $available = [
+                ...($hasTotp ? [FactorMethod::Totp, FactorMethod::RecoveryCode] : []),
+                ...($hasPasskeys && $secondFactor !== PasskeySecondFactor::Off && $method !== LoginMethod::Passkey ? [FactorMethod::Passkey] : []),
+            ];
+
+            if ($available === []) {
+                throw new LoginDenied;
+            }
+
+            array_unshift($steps, new ChallengeRequirement(ChallengeStep::SecondFactor, $available));
+        }
+
+        return $this->verificationFirst($steps);
+    }
+
+    /**
+     * The steps the two-factor and passkey policy demands, before any risk step-up.
+     *
+     * @return list<ChallengeRequirement>
+     */
+    private function policySteps(GuardConfig $guard, LoginMethod $method, PasskeySecondFactor $secondFactor, bool $hasTotp, bool $hasPasskeys): array
+    {
+        $twoFactor = $guard->twoFactorMode();
+        $satisfiesMfa = $guard->passkeySatisfiesMfa();
         $q = $guard->passkeySatisfiesRequiredTwoFactor();
 
         $totp = new ChallengeRequirement(ChallengeStep::SecondFactor, [FactorMethod::Totp, FactorMethod::RecoveryCode]);
@@ -95,27 +131,11 @@ final class ResolveRequiredSteps
         }
 
         // 4. Enrolment of a mandated passkey.
-        if ($passkeys === PasskeyMode::Required && ! $hasPasskeys && ! $this->contains($steps, ChallengeStep::EnrolPasskey)) {
+        if ($guard->passkeyMode() === PasskeyMode::Required && ! $hasPasskeys && ! $this->contains($steps, ChallengeStep::EnrolPasskey)) {
             $steps[] = $enrolPasskey;
         }
 
-        // 5. Risk step-up needs a VERIFICATION step — an enrolment proves nothing about this login.
-        if ($reaction === RiskReaction::RequireSecondFactor
-            && ! $this->contains($steps, ChallengeStep::SecondFactor)
-            && ! $this->contains($steps, ChallengeStep::Passkey)) {
-            $available = [
-                ...($hasTotp ? [FactorMethod::Totp, FactorMethod::RecoveryCode] : []),
-                ...($hasPasskeys && $secondFactor !== PasskeySecondFactor::Off ? [FactorMethod::Passkey] : []),
-            ];
-
-            if ($available === []) {
-                throw new LoginDenied;
-            }
-
-            array_unshift($steps, new ChallengeRequirement(ChallengeStep::SecondFactor, $available));
-        }
-
-        return $this->verificationFirst($steps);
+        return $steps;
     }
 
     /**
