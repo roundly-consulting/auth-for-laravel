@@ -20,6 +20,7 @@ use RoundlyConsulting\Auth\Guards\AccountRepository;
 use RoundlyConsulting\Auth\Guards\GuardRegistry;
 use RoundlyConsulting\Auth\Support\Throttle;
 use RoundlyConsulting\Jwt\Facades\Jwt;
+use RoundlyConsulting\RefreshTokens\Contracts\AccessTokenRevoker;
 use RoundlyConsulting\RefreshTokens\DataTransferObjects\IssueContext;
 use RoundlyConsulting\RefreshTokens\Enums\RevocationReason;
 use RoundlyConsulting\RefreshTokens\Exceptions\InvalidTokenFamilyException;
@@ -39,6 +40,11 @@ use SensitiveParameter;
  * a credential change or a disable landing concurrently. refresh-tokens then refuses to
  * extend it (or hands back an already-revoked row); either way the access token just
  * minted is denied and the answer is a plain 401, never a 500 or a live session.
+ *
+ * A successful refresh retires the access token minted with the redeemed refresh token:
+ * a session holds exactly one live access token, so revoking it (logout, logout others,
+ * the session cap, reuse detection) kills every token the session ever minted — not just
+ * the newest one while a copied older one lives on until it expires.
  */
 final readonly class RefreshTokenPair
 {
@@ -47,6 +53,7 @@ final readonly class RefreshTokenPair
         private Throttle $throttle,
         private BuildAccessTokenRequest $buildRequest,
         private RecordLoginActivity $recordActivity,
+        private AccessTokenRevoker $revoker,
     ) {}
 
     public function execute(string $guard, #[SensitiveParameter] string $refreshToken, SessionContext $context): TokenPair
@@ -96,6 +103,12 @@ final readonly class RefreshTokenPair
         if ($replacement === null || $replacement->token->revoked_at !== null) {
             Jwt::denylist()->deny($access->jti, $access->expiresAt);
             $this->fail($guard, $context, $owner, 'revoked');
+        }
+
+        $previous = $redeemed->redeemedToken->access_reference;
+
+        if ($previous !== null && $previous !== '') {
+            $this->revoker->revoke($previous);
         }
 
         event(new TokensRefreshed($guard, $owner, $redeemed->familyId, $access->jti));

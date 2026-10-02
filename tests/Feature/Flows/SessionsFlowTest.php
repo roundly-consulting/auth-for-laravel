@@ -153,6 +153,24 @@ it('logs out every other session but keeps the caller', function (): void {
     $this->getJson('/users/auth/me', bearer($b))->assertUnauthorized();
 });
 
+it('retires the previous access token on refresh, so revoking a session kills every token it minted', function (): void {
+    $user = User::factory()->create();
+    $mine = issuePair($user);
+    $stolen = issuePair($user);
+
+    // A thief refreshes the stolen session, keeping the access token it already had.
+    $refreshed = Authentication::guard('users')->refresh($stolen->refreshToken, new SessionContext('10.0.0.9', 'PestBrowser/1.0'));
+
+    $this->getJson('/users/auth/me', bearer($stolen))->assertUnauthorized();
+    $this->getJson('/users/auth/me', bearer($refreshed))->assertOk();
+
+    $this->postJson('/users/auth/logout/others', [], bearer($mine))->assertOk()->assertJsonPath('revoked', 1);
+
+    $this->getJson('/users/auth/me', bearer($stolen))->assertUnauthorized();
+    $this->getJson('/users/auth/me', bearer($refreshed))->assertUnauthorized();
+    $this->getJson('/users/auth/me', bearer($mine))->assertOk();
+});
+
 it('logs out everywhere, killing every access token through the token version', function (): void {
     $user = User::factory()->create();
     $mine = issuePair($user);
