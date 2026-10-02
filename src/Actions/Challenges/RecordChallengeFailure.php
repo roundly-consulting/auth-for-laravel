@@ -13,11 +13,14 @@ use RoundlyConsulting\Auth\Enums\ActivityOutcome;
 use RoundlyConsulting\Auth\Enums\ActivityType;
 use RoundlyConsulting\Auth\Events\ChallengeFailed;
 use RoundlyConsulting\Auth\Models\LoginChallenge;
+use RoundlyConsulting\Auth\Support\ChallengeAttempts;
 use RoundlyConsulting\Auth\Support\Models;
 
 /**
  * Counts a failed step atomically (`attempts = attempts + 1 WHERE attempts < max AND
- * still active`), invalidates the challenge at the cap, and returns the attempts left.
+ * still active`) — unless the step already took its attempt before checking a code
+ * ({@see ChallengeAttempts}) — invalidates the challenge at the cap, and returns the
+ * attempts left.
  *
  * @internal a challenge-engine step; drive challenges through `challenges()`.
  */
@@ -25,16 +28,21 @@ final readonly class RecordChallengeFailure
 {
     public function __construct(private RecordLoginActivity $recordActivity) {}
 
-    public function execute(LoginChallenge $challenge, ActivityOutcome $outcome, SessionContext $context, ?string $method = null): int
+    /**
+     * @param  bool  $attemptTaken  the attempt was already taken before the code was checked
+     */
+    public function execute(LoginChallenge $challenge, ActivityOutcome $outcome, SessionContext $context, ?string $method = null, bool $attemptTaken = false): int
     {
         $now = CarbonImmutable::now();
 
-        Models::challenges()
-            ->whereKey($challenge->getKey())
-            ->where('attempts', '<', $challenge->max_attempts)
-            ->whereNull('completed_at')
-            ->whereNull('invalidated_at')
-            ->increment('attempts');
+        if (! $attemptTaken) {
+            Models::challenges()
+                ->whereKey($challenge->getKey())
+                ->where('attempts', '<', $challenge->max_attempts)
+                ->whereNull('completed_at')
+                ->whereNull('invalidated_at')
+                ->increment('attempts');
+        }
 
         $fresh = Models::challenges()->whereKey($challenge->getKey())->first() ?? $challenge;
         $left = $fresh->attemptsLeft();

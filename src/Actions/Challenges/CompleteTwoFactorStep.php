@@ -19,6 +19,7 @@ use RoundlyConsulting\Auth\Exceptions\ChallengeInvalid;
 use RoundlyConsulting\Auth\Exceptions\TooManyAttempts;
 use RoundlyConsulting\Auth\Guards\GuardRegistry;
 use RoundlyConsulting\Auth\Support\AccountModels;
+use RoundlyConsulting\Auth\Support\ChallengeAttempts;
 use RoundlyConsulting\Auth\Support\NotificationDispatcher;
 use RoundlyConsulting\TwoFactor\Enums\TwoFactorMethod;
 use RoundlyConsulting\TwoFactor\Exceptions\TwoFactorRateLimitedException;
@@ -26,8 +27,10 @@ use RoundlyConsulting\TwoFactor\Facades\TwoFactor;
 
 /**
  * A TOTP code — or a recovery code, on the same endpoint: two-factor-for-laravel reports
- * which one matched (and runs its atomic replay guard and per-user limiter). A used
- * recovery code is announced to the owner with the number left.
+ * which one matched (and runs its atomic replay guard and per-user limiter). The
+ * challenge attempt is taken before the code is checked, so a parallel burst cannot
+ * outrun `challenge.max_attempts`. A used recovery code is announced to the owner with
+ * the number left.
  */
 final readonly class CompleteTwoFactorStep
 {
@@ -37,6 +40,7 @@ final readonly class CompleteTwoFactorStep
         private RecordChallengeFailure $recordFailure,
         private AdvanceChallenge $advance,
         private NotificationDispatcher $notifications,
+        private ChallengeAttempts $attempts,
     ) {}
 
     public function execute(string $guard, ChallengeFactorData $data): LoginResult
@@ -52,17 +56,24 @@ final readonly class CompleteTwoFactorStep
             throw new ChallengeInvalid;
         }
 
+        $this->attempts->take($challenge);
+
         try {
             $result = TwoFactor::for(AccountModels::twoFactor($account))->attempt((string) $data->code);
         } catch (TwoFactorRateLimitedException $e) {
+            // Refused before the code was checked.
+            $this->attempts->giveBack($challenge);
+
             throw TooManyAttempts::retryAfter($e->secondsUntilAvailable, $e);
         }
 
         if (! $result->verified) {
-            $left = $this->recordFailure->execute($challenge, $result->replayed ? ActivityOutcome::Replayed : ActivityOutcome::FailedFactor, $data->context, $data->method->value);
+            $left = $this->recordFailure->execute($challenge, $result->replayed ? ActivityOutcome::Replayed : ActivityOutcome::FailedFactor, $data->context, $data->method->value, attemptTaken: true);
 
             throw ChallengeFactorFailed::withAttemptsLeft($left);
         }
+
+        $this->attempts->giveBack($challenge);
 
         $method = $result->method === TwoFactorMethod::RecoveryCode ? FactorMethod::RecoveryCode : FactorMethod::Totp;
 

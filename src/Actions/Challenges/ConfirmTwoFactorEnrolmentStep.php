@@ -21,6 +21,7 @@ use RoundlyConsulting\Auth\Exceptions\ChallengeInvalid;
 use RoundlyConsulting\Auth\Exceptions\EnrolmentRequired;
 use RoundlyConsulting\Auth\Guards\GuardRegistry;
 use RoundlyConsulting\Auth\Support\AccountModels;
+use RoundlyConsulting\Auth\Support\ChallengeAttempts;
 use RoundlyConsulting\Auth\Support\NotificationDispatcher;
 use RoundlyConsulting\TwoFactor\Exceptions\InvalidTwoFactorCodeException;
 use RoundlyConsulting\TwoFactor\Exceptions\TwoFactorNotPendingException;
@@ -46,6 +47,7 @@ final readonly class ConfirmTwoFactorEnrolmentStep
         private InvalidateAccountTokens $invalidate,
         private NotificationDispatcher $notifications,
         private InvalidateChallenge $invalidateChallenge,
+        private ChallengeAttempts $attempts,
     ) {}
 
     public function execute(string $guard, ChallengeFactorData $data): LoginResult
@@ -70,14 +72,19 @@ final readonly class ConfirmTwoFactorEnrolmentStep
             $this->invalidateChallenge->execute($challenge);
         }
 
+        // Taken before the code is checked, like every challenge code.
+        $this->attempts->take($challenge);
+
         try {
             TwoFactor::for($model)->confirm((string) $data->code);
         } catch (InvalidTwoFactorCodeException $e) {
-            throw ChallengeFactorFailed::withAttemptsLeft($this->recordFailure->execute($challenge, ActivityOutcome::FailedFactor, $data->context, FactorMethod::TotpEnrolment->value), $e);
+            throw ChallengeFactorFailed::withAttemptsLeft($this->recordFailure->execute($challenge, ActivityOutcome::FailedFactor, $data->context, FactorMethod::TotpEnrolment->value, attemptTaken: true), $e);
         } catch (TwoFactorNotPendingException) {
             // Enabled (or cancelled) between the check above and the confirmation.
             $this->invalidateChallenge->execute($challenge);
         }
+
+        $this->attempts->giveBack($challenge);
 
         event(new TwoFactorEnabled($guard, $account));
         $this->notifications->send($config, NotificationType::TwoFactorEnabled, $account, new NotificationData($guard));

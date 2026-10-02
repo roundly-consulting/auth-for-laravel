@@ -138,7 +138,7 @@ it('keeps DTOs and events final readonly, enums on Helpers and exceptions on the
 });
 
 it('claims single-use state with conditional updates, never a read-then-save', function (): void {
-    foreach (['Actions/Challenges/FinalizeChallenge.php', 'Actions/Challenges/RecordChallengeFailure.php', 'Actions/OneTimeTokens/ConsumeOneTimeToken.php', 'Actions/OneTimeTokens/VerifyOneTimeCode.php', 'Actions/Invitations/AcceptInvitation.php'] as $file) {
+    foreach (['Actions/Challenges/FinalizeChallenge.php', 'Actions/Challenges/RecordChallengeFailure.php', 'Support/ChallengeAttempts.php', 'Actions/OneTimeTokens/ConsumeOneTimeToken.php', 'Actions/OneTimeTokens/VerifyOneTimeCode.php', 'Actions/Invitations/AcceptInvitation.php'] as $file) {
         expect(code(__DIR__.'/../../src/'.$file))->not->toContain('->save(')->not->toContain('->forceFill(');
     }
 });
