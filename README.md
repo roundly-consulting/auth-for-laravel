@@ -58,7 +58,7 @@ between steps, what is invalidated when, and what the client sees.
 - PHP 8.4, Laravel 12 or 13
 - `ext-bcmath` and `ext-mbstring` (required transitively by `qr-for-laravel` and its
   `money-for-laravel` dependency), `ext-openssl`
-- An RSA key pair for `jwt-for-laravel` (`php artisan jwt:keys`)
+- An RSA key pair for `jwt-for-laravel` (`php artisan jwt:generate-keys`)
 - A cache store with atomic locks (rate limits, re-authentication markers, the jti denylist)
 - A mail transport, and — for `notifications.delivery = queue` — a real queue
 - Laravel's `TrustProxies` configured when behind a proxy (IP-keyed limits read `$request->ip()`)
@@ -68,6 +68,7 @@ between steps, what is invalidated when, and what the client sees.
 
 ```bash
 composer require roundly-consulting/auth-for-laravel
+php artisan jwt:generate-keys
 php artisan authentication:install
 php artisan migrate
 ```
@@ -79,7 +80,7 @@ wiring below. The package never edits your config files. Publish tags:
 | Tag | What |
 |---|---|
 | `authentication-config` | `config/authentication.php` |
-| `authentication-migrations` | the four package tables + the columns stub for the default guard's table |
+| `authentication-migrations` | the four package tables + the columns stub for the default guard's table (authentication columns + `passkey_user_handle`) |
 | `authentication-translations` | `lang/vendor/authentication` (error messages, notification copy) |
 
 Wire each guard in `config/auth.php` — a `jwt` guard with **its own audience**, and the
@@ -130,8 +131,10 @@ class User extends Authenticatable implements Account, HasPasskeys, TwoFactorAut
 }
 ```
 
-The published stub adds the authentication columns to the default guard's table. Every other
-guard table calls `$table->authenticationColumns()` (plus `$table->twoFactorColumns()` and
+The published stub adds the authentication columns and the passkey user handle
+(`passkey_user_handle`, skipped when the table already has it) to the default guard's table;
+two-factor's own stub (`two-factor-migrations`) adds the TOTP columns. Every other guard table
+calls `$table->authenticationColumns()` (plus `$table->twoFactorColumns()` and
 `$table->passkeyUserHandle()` when those features are on) — `php artisan authentication:guard
 clients` scaffolds the model, migration and factory for you.
 
@@ -191,20 +194,20 @@ one table is authorization, not a guard) or an audience.
 | `login.password` / `.magic_link` / `.email_otp` / `.passkey` | `true` / `false` / `false` / `false` | login methods (env `AUTHENTICATION_LOGIN_*`) |
 | `login.reveal_account_state` | `true` | disabled/unverified codes after a verified first factor; `false` makes them `invalid_credentials` |
 | `challenge.ttl` / `.enrolment_ttl` | `300` / `900` | challenge lifetime (the longer one when an enrolment step is pending) |
-| `challenge.max_attempts` | `5` | failed steps before the challenge dies |
+| `challenge.max_attempts` | `5` | failed steps before the challenge dies (taken before a code is checked; a code that verifies gives its attempt back) |
 | `challenge.allow_enrolment` | `true` | allow forced enrolment inside a challenge |
 | `challenge.enrolment_requires_verified_email` | `true` | …only for verified addresses |
 | `challenge.bind.user_agent` / `.ip` / `.device_header` | `true` / `false` / `true` | device binding of a challenge |
 | `challenge.max_active_per_account` | `3` | older active challenges are superseded |
 | `two_factor.mode` | `optional` | `off`, `optional`, `required` (env `AUTHENTICATION_TWO_FACTOR`) |
-| `two_factor.after_email_login` | `true` | magic link / email code / invitation also need the second factor |
+| `two_factor.after_email_login` | `true` | magic link / email code / invitation also need the second factor; `false` exempts them from the two-factor policy, never from a risk step-up (registration is never exempt) |
 | `two_factor.required_with_passkey` | `false` | a passkey primary still forces TOTP enrolment under `required` |
 | `two_factor.passkey_satisfies_required` | `true` | a passkey second factor satisfies `required` |
 | `two_factor.issuer` | `null` | otpauth issuer for this guard (null → two-factor's issuer / app name) |
 | `two_factor.qr.enabled` / `.size` | `true` / `240` | TOTP setup QR code |
 | `passkeys.mode` | `optional` | `off`, `optional`, `required` (env `AUTHENTICATION_PASSKEYS`) |
 | `passkeys.second_factor` | `allowed` | `off`, `allowed`, `required_when_enrolled`, `required` |
-| `passkeys.satisfies_mfa` | `true` | a user-verified passwordless passkey login needs no further factor (UV is then enforced per ceremony) |
+| `passkeys.satisfies_mfa` | `true` | a user-verified passwordless passkey login needs no further factor (UV is then enforced per ceremony) — also not under a risk step-up; with `false` a step-up demands TOTP |
 | `tokens.access_ttl` | `null` | seconds; null → `jwt.ttl` |
 | `tokens.refresh_ttl` / `.refresh_absolute_ttl` | 30 / 90 days | sliding and absolute refresh lifetime (0 = no cap) |
 | `tokens.claims_resolver` | `DefaultClaimsResolver` | `ResolvesAccessTokenClaims` implementation |
@@ -248,7 +251,7 @@ one table is authorization, not a guard) or an audience.
 | `reauthentication.required_for` | all eight actions | `SensitiveAction` values that need a recent re-authentication; remove one to drop its gate (`set_password` = a passwordless account setting a first password) |
 | `activity.enabled` / `.store_identifier` / `.retention_days` | `true` / `plain` / `90` | login-activity log (`plain`, `hash`, `none`) |
 | `activity.new_device.enabled` / `.header` / `.skip_first_login` | `true` / `X-Device-Id` / `true` | new-device detection |
-| `risk.assessor` / `.reactions.elevated` / `.reactions.high` / `.deny_response` | `null` / `notify` / `require_second_factor` / `uniform` | risk hooks |
+| `risk.assessor` / `.reactions.elevated` / `.reactions.high` / `.deny_response` | `null` / `notify` / `require_second_factor` / `uniform` | risk hooks (`allow`, `notify`, `require_second_factor`, `deny`); a step-up applies to every login method and denies an account with no factor to step up with |
 | `locale.header` / `.supported` / `.store_on_registration` / `.fill_on_login` / `.timezone` | `X-Locale` / `[app.locale]` / `true` / `true` / `true` | locale & timezone |
 | `notifications.delivery` / `.connection` / `.queue` | `after_response` / null / null | `sync`, `after_response`, `queue` (env `AUTHENTICATION_NOTIFICATION_*`) |
 | `notifications.classes.*` | packaged classes | 18 notification classes; `null` disables one |
@@ -289,9 +292,12 @@ use RoundlyConsulting\Auth\Enums\InvalidationReason;
 
 Authentication::twoFactor()->status($user);          // enabled, pending, recovery codes left, mode
 Authentication::passwords()->set($user, 'n3w-Passphrase!', InvalidationReason::Security);
-Authentication::invitations()->create(new InvitationData('ada@example.com'))->url;
+Authentication::invitations()->create(new InvitationData('ada@example.com'))->url;   // needs invitations.enabled
 Authentication::lock($user, seconds: 3600);
 ```
+
+Invitations are off by default: until the guard sets `invitations.enabled = true`, every
+`invitations()` call throws `LoginMethodDisabled` (a 404 `method_disabled` over HTTP).
 
 Core verbs sit on the guard itself:
 
@@ -303,7 +309,7 @@ Core verbs sit on the guard itself:
 | `passkeyLoginOptions($ctx)` / `loginWithPasskey($response, $ctx)` | `RequestOptionsData` / `LoginResult` |
 | `register(RegistrationData)` | `RegistrationResult` |
 | `issueTokens($account, $ctx, $method, $amr)` | `TokenPair` — host-vouched login (impersonation, SSO); fires `TokensIssued` |
-| `refresh($refreshToken, $ctx)` | `TokenPair` |
+| `refresh($refreshToken, $ctx)` | `TokenPair` (the session's previous access token stops working) |
 | `sessions($account, $currentSessionId)` | `Collection<SessionData>` |
 | `logout($account, $current)` / `logoutSession($account, $id)` / `logoutOthers($account, $current)` / `logoutEverywhere($account)` | — / — / `int` / `int` |
 | `invalidate($account, InvalidationReason, ?$keep, ?$ctx)` | `?TokenPair` (the re-issued pair under `others`) |
@@ -433,35 +439,57 @@ or set `routes.enabled = true` for the guard. Groups for `only()` / `except()`: 
 
 Every route carries `authentication.guard:{guard}` and `Cache-Control: no-store`, and exists
 only when its feature is enabled for the guard (a disabled feature is a 404). Tokens always
-travel in request **bodies**. `*` = authenticated (`auth:{laravel_guard}`).
+travel in request **bodies** (JSON). `*` = authenticated (`auth:{laravel_guard}`); `?` = optional.
 
-| Method | URI (under the prefix) | Purpose |
-|---|---|---|
-| POST | `login` | email/identifier + password |
-| POST | `login/magic-link`, `login/magic-link/consume` | request / consume a magic link |
-| POST | `login/otp`, `login/otp/verify` | request / verify an email code |
-| POST | `login/passkey/options`, `login/passkey` | passwordless passkey login |
-| POST | `challenge/two-factor` | TOTP or recovery code |
-| POST | `challenge/two-factor/enrol`, `…/enrol/confirm` | forced TOTP enrolment |
-| POST | `challenge/passkey/options`, `challenge/passkey` | passkey second factor |
-| POST | `challenge/passkey/enrol/options`, `challenge/passkey/enrol` | forced passkey enrolment |
-| POST | `refresh` | rotate the refresh token |
-| POST | `register` | registration |
-| POST | `invitations/preview`, `invitations/accept` | invitations |
-| POST | `password/forgot`, `password/reset` | password reset |
-| POST | `email/verify`, `email/verification/resend` | email verification |
-| POST | `email/change/confirm` | confirm an email change (opened from the mail) |
-| GET\* | `me` | the account |
-| PATCH\* | `locale` | locale / timezone |
-| POST\* | `reauthenticate`, `reauthenticate/passkey/options`, `reauthenticate/otp` | re-authentication |
-| GET\* | `activity` | own login activity |
-| POST\* | `logout`, `logout/others`, `logout/everywhere` | logouts |
-| GET\* / DELETE\* | `sessions`, `sessions/{session}` | device sessions |
-| PUT\* | `password` | change password |
-| POST\* | `email/change`, `email/verification` | email change / send verification |
-| GET\* POST\* DELETE\* | `two-factor`, `two-factor/confirm`, `two-factor/recovery-codes` | 2FA management |
-| GET\* POST\* PATCH\* DELETE\* | `passkeys`, `passkeys/options`, `passkeys/{passkey}` | passkey management |
-| GET\* POST\* DELETE\* | `invitations`, `invitations/{invitation}/resend`, `invitations/{invitation}` | invitation admin (Gate ability) |
+| Method | URI (under the prefix) | Body | Purpose |
+|---|---|---|---|
+| POST | `login` | `identifier`, `password` | password login (`identifier` is any of `identifier.columns` — the email by default; there is no `email` field) |
+| POST | `login/magic-link` | `email` | request a magic link |
+| POST | `login/magic-link/consume` | `token` | sign in with the link's token |
+| POST | `login/otp` | `email` | request an email code |
+| POST | `login/otp/verify` | `email`, `code` | sign in with the code |
+| POST | `login/passkey/options` | — | passwordless passkey options |
+| POST | `login/passkey` | `credential` | passwordless passkey login |
+| POST | `challenge/two-factor` | `challenge_token`, `code`, `method?` (`totp` \| `recovery_code`) | TOTP or recovery code (either kind is accepted under `totp`) |
+| POST | `challenge/two-factor/enrol` | `challenge_token` | start the forced TOTP enrolment (secret, QR code, recovery codes) |
+| POST | `challenge/two-factor/enrol/confirm` | `challenge_token`, `code` | confirm it |
+| POST | `challenge/passkey/options` | `challenge_token` | passkey second-factor options |
+| POST | `challenge/passkey` | `challenge_token`, `credential` | passkey second factor |
+| POST | `challenge/passkey/enrol/options` | `challenge_token` | forced passkey enrolment options |
+| POST | `challenge/passkey/enrol` | `challenge_token`, `credential`, `name?` | forced passkey enrolment |
+| POST | `refresh` | `refresh_token` | rotate the refresh token (the previous access token stops working) |
+| POST | `register` | `email`, `password` (when required), `attributes?` | registration (`attributes` = the host fields of `registration.rules`) |
+| POST | `invitations/preview` | `token` | what an invitation is for |
+| POST | `invitations/accept` | `token`, `password` (when required), `email?` (only when `lock_email` is off), `attributes?` | accept an invitation |
+| POST | `password/forgot` | `email` | request a reset link |
+| POST | `password/reset` | `token`, `password` | reset the password |
+| POST | `email/verify` | `token` (the link token or the code), `email` (with the `code` channel) | verify an address |
+| POST | `email/verification/resend` | `email` | resend verification (guest) |
+| POST | `email/change/confirm` | `token` | confirm an email change (opened from the mail) |
+| GET\* | `me` | — | the account |
+| PATCH\* | `locale` | `locale?`, `timezone?` | locale / timezone |
+| POST\* | `reauthenticate` | `method` (`password`, `totp`, `recovery_code`, `email_otp`, `passkey`) + `password` \| `code` \| `credential` | re-authentication |
+| POST\* | `reauthenticate/passkey/options`, `reauthenticate/otp` | — | passkey options / mail a re-authentication code |
+| GET\* | `activity` | query `per_page?` | own login activity |
+| POST\* | `logout`, `logout/others`, `logout/everywhere` | — | logouts |
+| GET\* / DELETE\* | `sessions`, `sessions/{session}` | — | device sessions |
+| PUT\* | `password` | `current_password` (when the account has one), `password` | change password |
+| POST\* | `email/change` | `email` | request an email change |
+| POST\* | `email/verification` | — | send verification |
+| GET\* POST\* DELETE\* | `two-factor`, `two-factor/recovery-codes` | — | status, start enrolment, disable, regenerate recovery codes |
+| POST\* | `two-factor/confirm` | `code` | confirm the enrolment |
+| GET\* POST\* | `passkeys`, `passkeys/options` | `passkeys`: `credential`, `name?` | list, registration options, register |
+| PATCH\* / DELETE\* | `passkeys/{passkey}` | PATCH: `name` | rename / remove |
+| GET\* | `invitations` | query `status?`, `per_page?` | invitation admin (Gate ability) |
+| POST\* | `invitations` | `email`, `payload?`, `locale?`, `ttl?` (seconds), `send?` (default `true`) | create — 201 with `data` and the link as `url` (shown once; with `send: false` nothing is mailed and you deliver it) |
+| POST\* / DELETE\* | `invitations/{invitation}/resend`, `invitations/{invitation}` | — | resend (`{"status": "sent", "url": …}`) / revoke |
+
+Every endpoint that signs in also takes `device_name?` (shown in the session list);
+`register` and `invitations/accept` also take `timezone?` (stored on the new account). The
+device is read from the `X-Device-Id` header (`activity.new_device.header`), the locale from
+`X-Locale` / `Accept-Language`. `credential` is the browser's
+`PublicKeyCredential` JSON with base64url members, plus the `ceremonyId` of the options it
+answers.
 
 Response shapes:
 
@@ -587,25 +615,32 @@ $this->assertTokensInvalidated($user, InvalidationReason::PasswordChanged);   //
   password check always runs, against a dummy hash of the same cost for unknown accounts.
   Registration returns "email taken" only when it would issue tokens immediately; otherwise a
   taken address pays the same password hash as a new account. Only completed logins make a
-  device "known" — a reset or sign-in link requested from a device does not.
+  device "known" — a reset or sign-in link requested from a device does not, nor does a
+  re-authentication made with a (possibly stolen) access token.
 - **Guard isolation** — a token, link, code, invitation, challenge or passkey of one guard never
   works on another (distinct audiences, owner-type-scoped refresh tokens, guard + purpose in
   every MAC).
 - **Single use** — every claim is a conditional update; challenges advance with an optimistic
   version check and snapshot the account's token version.
-- **Invalidation** — `tv++` kills every outstanding access token; families are revoked; pending
-  sign-in, reset, re-authentication and email-change links die with them; the
+- **Invalidation** — `tv++` kills every outstanding access token; families are revoked, and a
+  refresh retires the session's previous access token, so revoking a session kills every token
+  it minted; pending sign-in, reset, re-authentication and email-change links die with them; the
   jti denylist is belt-and-braces. The denylist lives in cache: a flush revives revoked access
   tokens until they expire — keep `access_ttl` short (≤ 15 min), `tv++` covers the rest.
 - **Forced enrolment** — a password-only attacker could enrol their own authenticator under a
   `required` mode; enrolment is therefore limited to verified addresses and announced to them,
   and a challenge whose enrolment step went stale (the factor was set up meanwhile) is ended.
-- **Throttling** — attempts are counted atomically before a password or code is checked, so a
-  burst of concurrent guesses cannot all pass the limit.
+- **Throttling** — attempts are counted atomically before a password or code is checked — the
+  login, email and re-authentication throttles, email codes, and every challenge's own
+  `max_attempts` — so a burst of concurrent guesses cannot all pass the limit.
+- **Risk step-up** — `require_second_factor` applies to every login method, also when
+  `after_email_login = false`; an account with no factor to step up with is denied. A passkey
+  login that counts as MFA (`passkeys.satisfies_mfa`) already is the step-up.
 - **Re-authentication** — accounts with a second factor must re-authenticate with it; a password or
   email-code proof, or a login that skipped the factor, never satisfies a gate for them — also when
   the factor was enrolled after that proof (the marker records the method, the check uses the
-  account's current factors).
+  account's current factors). `reauthentication.methods` is checked against the factor that
+  actually matched: a recovery code sent as `totp` is refused when recovery codes are not allowed.
 - **Secrets at rest** — HMAC-SHA-256 with a key derived from `APP_KEY` (or `hash_key`); plaintext
   exists only in the response or the notification.
 

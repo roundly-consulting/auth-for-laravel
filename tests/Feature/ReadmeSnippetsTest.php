@@ -16,6 +16,7 @@ use RoundlyConsulting\Auth\Enums\ActivityType;
 use RoundlyConsulting\Auth\Enums\InvalidationReason;
 use RoundlyConsulting\Auth\Enums\SensitiveAction;
 use RoundlyConsulting\Auth\Events\PasswordChanged;
+use RoundlyConsulting\Auth\Exceptions\LoginMethodDisabled;
 use RoundlyConsulting\Auth\Exceptions\ReauthenticationRequired;
 use RoundlyConsulting\Auth\Facades\Authentication;
 use RoundlyConsulting\Auth\Http\Resources\ChallengeResource;
@@ -55,6 +56,13 @@ it('runs the facade snippet', function (): void {
     expect($resource)->toBeInstanceOf(TokenPairResource::class)
         ->and($url)->toContain('#token=')
         ->and($user->fresh()?->isLocked())->toBeTrue();
+});
+
+it('keeps invitations off until the guard enables them, as the README notes', function (): void {
+    $this->configureGuard('users', ['invitations.enabled' => false]);
+
+    expect(fn () => Authentication::invitations()->create(new InvitationData('ada@example.com')))->toThrow(LoginMethodDisabled::class)
+        ->and(config('authentication.defaults.invitations.enabled'))->toBeFalse();
 });
 
 it('runs the signed-in snippet: the gate is the caller\'s to run', function (): void {

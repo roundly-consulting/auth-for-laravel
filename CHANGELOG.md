@@ -61,3 +61,19 @@ Initial public release.
 - A manual `lock()` notifies the owner exactly like the automatic lockout.
 - `email_change.require_reauthentication = false` now also switches off
   `ensureFor(SensitiveAction::ChangeEmail)`, not only the HTTP endpoint.
+- A login challenge takes its attempt before a TOTP or recovery code is checked, so a parallel
+  burst can no longer check more codes than `challenge.max_attempts` allows.
+- The risk step-up (`require_second_factor`) applies to magic-link, email-code, invitation and
+  registration logins also when `two_factor.after_email_login` is off; a passkey login that
+  does not count as MFA must add TOTP.
+- Registration no longer skips required two-factor enrolment when
+  `two_factor.after_email_login` is off.
+- `POST invitations` returns the link (`url`), and a link created without mailing
+  (`send: false`, `link()`) no longer counts as a send.
+- A refresh retires the session's previous access token, so revoking a session kills every
+  access token it minted.
+- `reauthentication.methods` is checked against the factor that actually matched (a recovery
+  code sent as `totp`).
+- A re-authentication no longer makes its device known to new-device detection.
+- The users-table stub also adds the passkey user handle, so a fresh install passes
+  `authentication:check`.
