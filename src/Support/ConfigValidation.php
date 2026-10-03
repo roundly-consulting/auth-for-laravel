@@ -29,7 +29,6 @@ use RoundlyConsulting\Auth\Notifications\AuthenticationNotification;
 use RoundlyConsulting\Jwt\Exceptions\JwtMisconfigured;
 use RoundlyConsulting\Jwt\Facades\Jwt;
 use RoundlyConsulting\PackageToolkit\Enums\KeyType;
-use RoundlyConsulting\PackageToolkit\Support\Config;
 use RoundlyConsulting\Passkeys\Contracts\HasPasskeys;
 use RoundlyConsulting\TwoFactor\Contracts\TwoFactorAuthenticatable;
 
@@ -92,9 +91,7 @@ final class ConfigValidation
         $prefix = "authentication.guards.{$guard->name()}";
 
         try {
-            $settings = $guard->toArray();
-
-            if (! $guard->loginMethodEnabled(LoginMethod::Password) && Config::for($settings)->boolean('passwords.reset.enabled')) {
+            if (! $guard->loginMethodEnabled(LoginMethod::Password) && $guard->passwordResetSwitchedOn()) {
                 $warnings[] = "{$prefix}.passwords.reset.enabled is ignored because login.password is off.";
             }
 
@@ -170,6 +167,72 @@ final class ConfigValidation
         foreach (RiskLevel::cases() as $level) {
             $guard->riskReaction($level);
         }
+
+        self::resolveSwitches($guard);
+    }
+
+    /**
+     * Every on/off leaf, for the same reason: a typo'd switch throws naming its key when
+     * the guard resolves, never mid-flow (`email_change.notify_old` read only after the
+     * address already changed).
+     *
+     * @throws AuthenticationMisconfigured
+     */
+    private static function resolveSwitches(GuardConfig $guard): void
+    {
+        foreach ([LoginMethod::Password, LoginMethod::MagicLink, LoginMethod::EmailOtp, LoginMethod::Passkey] as $method) {
+            $guard->loginMethodEnabled($method);
+        }
+
+        $guard->lowercasesIdentifiers();
+        $guard->caseInsensitiveLookup();
+        $guard->revealAccountState();
+        $guard->allowsEnrolmentInChallenge();
+        $guard->enrolmentRequiresVerifiedEmail();
+        $guard->bindsChallengeToUserAgent();
+        $guard->bindsChallengeToIp();
+        $guard->bindsChallengeToDeviceHeader();
+        $guard->twoFactorAfterEmailLogin();
+        $guard->twoFactorRequiredWithPasskey();
+        $guard->passkeySatisfiesRequiredTwoFactor();
+        $guard->rendersQrCode();
+        $guard->passkeySatisfiesMfa();
+        $guard->includesEmailClaim();
+        $guard->registrationRequiresPassword();
+        $guard->loginAfterRegistration();
+        $guard->invitationsEnabled();
+        $guard->invitationLocksEmail();
+        $guard->invitationReplacesPending();
+        $guard->invitationAllowsExistingEmail();
+        $guard->verifiesEmailOnEmailLogin();
+        $guard->emailChangeEnabled();
+        $guard->emailChangeNotifiesOldAddress();
+        $guard->emailChangeRequiresReauthentication();
+        $guard->magicLinkSameDevice();
+        $guard->passwordResetSwitchedOn();
+        $guard->loginAfterPasswordReset();
+        $guard->passwordChangeEnabled();
+        $guard->rehashesPasswordsOnLogin();
+        $guard->passwordRequiresLetters();
+        $guard->passwordRequiresMixedCase();
+        $guard->passwordRequiresNumbers();
+        $guard->passwordRequiresSymbols();
+        $guard->passwordMustNotContainIdentifier();
+        $guard->breachCheckEnabled();
+        $guard->breachCheckFailsClosed();
+        $guard->lockoutEnabled();
+        $guard->passwordResetUnlocks();
+        $guard->reauthenticationRequiresSecondFactorWhenEnrolled();
+        $guard->freshLoginCountsAsReauthentication();
+        $guard->activityEnabled();
+        $guard->newDeviceDetectionEnabled();
+        $guard->newDeviceSkipsFirstLogin();
+        $guard->riskDenialIsUniform();
+        $guard->storesLocaleOnRegistration();
+        $guard->fillsLocaleOnLogin();
+        $guard->timezonesEnabled();
+        $guard->routesEnabled();
+        $guard->invitationManagementRoutes();
     }
 
     /**

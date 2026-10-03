@@ -80,3 +80,6 @@ Initial public release.
 - On/off settings set from `.env` as `0`/`off`/`no` were cast to true
   (`AUTHENTICATION_LOGIN_PASSWORD=off` left password login on). Every guard switch is now parsed
   as a boolean.
+- A typo in a guard switch (`disabled`, `maybe`) — or in `identifier.normalize` /
+  `risk.deny_response` — no longer reads as the default: the guard fails to resolve with
+  `AuthenticationMisconfigured` naming the full key, and `authentication:check` lists it.

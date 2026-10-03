@@ -3,10 +3,12 @@
 declare(strict_types=1);
 
 use RoundlyConsulting\Auth\Enums\LoginMethod;
+use RoundlyConsulting\Auth\Exceptions\AuthenticationMisconfigured;
 use RoundlyConsulting\Auth\Guards\GuardConfig;
 use RoundlyConsulting\Auth\Guards\GuardRegistry;
 use RoundlyConsulting\Auth\Support\AboutSection;
 use RoundlyConsulting\Auth\Support\ConfigValidation;
+use RoundlyConsulting\Auth\Tests\Fixtures\Models\User;
 
 /**
  * Regression (env-boolean sweep): every guard switch was read with `(bool)`, and the
@@ -16,51 +18,7 @@ use RoundlyConsulting\Auth\Support\ConfigValidation;
  * `AUTHENTICATION_PASSWORD_BREACH_CHECK=no` kept the breach check on. Every switch (and the
  * `about` rows built from them) now reads the value as a boolean.
  */
-dataset('auth env switches', [
-    '"1"' => ['1', true],
-    '"on"' => ['on', true],
-    '"yes"' => ['yes', true],
-    '"true"' => ['true', true],
-    '"0"' => ['0', false],
-    '"off"' => ['off', false],
-    '"no"' => ['no', false],
-    '"false"' => ['false', false],
-]);
-
-/**
- * @param  list<string>  $path
- * @return array<string, mixed>
- */
-function nestedSetting(array $path, mixed $value): array
-{
-    foreach (array_reverse($path) as $segment) {
-        $value = [$segment => $value];
-    }
-
-    /** @var array<string, mixed> $value */
-    return $value;
-}
-
-it('reads the login method switches from an env string', function (string $value, bool $on): void {
-    $guard = guardConfig(['login' => [
-        'password' => $value,
-        'magic_link' => $value,
-        'email_otp' => $value,
-        'passkey' => $value,
-    ]]);
-
-    foreach ([LoginMethod::Password, LoginMethod::MagicLink, LoginMethod::EmailOtp, LoginMethod::Passkey] as $method) {
-        expect($guard->loginMethodEnabled($method))->toBe($on);
-    }
-})->with('auth env switches');
-
-it('reads every boolean guard setting from an env string', function (string $accessor, array $path): void {
-    foreach (['on' => true, '1' => true, 'yes' => true, 'off' => false, '0' => false, 'no' => false] as $value => $on) {
-        $guard = guardConfig(nestedSetting($path, (string) $value));
-
-        expect($guard->{$accessor}())->toBe($on, "{$accessor}() with '{$value}'");
-    }
-})->with([
+dataset('boolean guard settings', [
     'caseInsensitiveLookup' => ['caseInsensitiveLookup', ['identifier', 'case_insensitive_lookup']],
     'revealAccountState' => ['revealAccountState', ['login', 'reveal_account_state']],
     'allowsEnrolmentInChallenge' => ['allowsEnrolmentInChallenge', ['challenge', 'allow_enrolment']],
@@ -110,15 +68,138 @@ it('reads every boolean guard setting from an env string', function (string $acc
     'invitationManagementRoutes' => ['invitationManagementRoutes', ['routes', 'invitations_management']],
 ]);
 
-it('falls back to the switch default for an unrecognised value', function (): void {
-    $guard = guardConfig([
-        'login' => ['password' => 'maybe', 'magic_link' => 'maybe'],
-        'routes' => ['enabled' => ['on']],
-    ]);
+dataset('auth env switches', [
+    '"1"' => ['1', true],
+    '"on"' => ['on', true],
+    '"yes"' => ['yes', true],
+    '"true"' => ['true', true],
+    '"0"' => ['0', false],
+    '"off"' => ['off', false],
+    '"no"' => ['no', false],
+    '"false"' => ['false', false],
+]);
+
+/**
+ * @param  list<string>  $path
+ * @return array<string, mixed>
+ */
+function nestedSetting(array $path, mixed $value): array
+{
+    foreach (array_reverse($path) as $segment) {
+        $value = [$segment => $value];
+    }
+
+    /** @var array<string, mixed> $value */
+    return $value;
+}
+
+it('reads the login method switches from an env string', function (string $value, bool $on): void {
+    $guard = guardConfig(['login' => [
+        'password' => $value,
+        'magic_link' => $value,
+        'email_otp' => $value,
+        'passkey' => $value,
+    ]]);
+
+    foreach ([LoginMethod::Password, LoginMethod::MagicLink, LoginMethod::EmailOtp, LoginMethod::Passkey] as $method) {
+        expect($guard->loginMethodEnabled($method))->toBe($on);
+    }
+})->with('auth env switches');
+
+it('reads every boolean guard setting from an env string', function (string $accessor, array $path): void {
+    foreach (['on' => true, '1' => true, 'yes' => true, 'off' => false, '0' => false, 'no' => false] as $value => $on) {
+        $guard = guardConfig(nestedSetting($path, (string) $value));
+
+        expect($guard->{$accessor}())->toBe($on, "{$accessor}() with '{$value}'");
+    }
+})->with('boolean guard settings');
+
+it('throws naming the key for an unrecognised switch value (strict config)', function (): void {
+    $guard = guardConfig(['login' => ['password' => 'maybe']]);
+
+    expect(fn (): bool => $guard->loginMethodEnabled(LoginMethod::Password))
+        ->toThrow(AuthenticationMisconfigured::class, 'Configuration value [authentication.guards.users.login.password] must be a boolean (true/false, 1/0, on/off or yes/no), [maybe] given.');
+});
+
+it('names every switch by the very offset chain it reads (strict config)', function (): void {
+    $source = (string) file_get_contents(__DIR__.'/../../src/Guards/GuardConfig.php');
+
+    preg_match_all('/\$this->(?:flag|choice)\(\$this->settings((?:\[\x27[a-z_]+\x27\])+) \?\? null, \x27([a-z_.]+)\x27/', $source, $reads, PREG_SET_ORDER);
+
+    // Pinned: every switch leaf (51 on/off + 2 two-way), so an empty parse cannot pass.
+    expect($reads)->toHaveCount(53);
+
+    foreach ($reads as [, $chain, $key]) {
+        expect(str_replace(["']['", "['", "']"], ['.', '', ''], $chain))->toBe($key);
+    }
+});
+
+it('refuses a typo in every boolean guard setting, naming its key (strict config)', function (string $accessor, array $path): void {
+    $key = 'authentication.guards.clients.'.implode('.', $path);
+
+    foreach (['disabled', 'maybe', ['on']] as $junk) {
+        $guard = guardConfig(nestedSetting($path, $junk), 'clients');
+
+        expect(fn (): mixed => $guard->{$accessor}())->toThrow(AuthenticationMisconfigured::class, "[{$key}]");
+    }
+})->with('boolean guard settings');
+
+it('reads an absent or null switch as its default (strict config)', function (): void {
+    $guard = new GuardConfig('users', ['model' => User::class, 'login' => ['password' => null]]);
 
     expect($guard->loginMethodEnabled(LoginMethod::Password))->toBeTrue()
         ->and($guard->loginMethodEnabled(LoginMethod::MagicLink))->toBeFalse()
-        ->and($guard->routesEnabled())->toBeFalse();
+        ->and($guard->routesEnabled())->toBeFalse()
+        ->and($guard->lowercasesIdentifiers())->toBeTrue()
+        ->and($guard->riskDenialIsUniform())->toBeTrue();
+});
+
+it('reads a two-way string switch strictly (strict config)', function (string $accessor, array $path, string $on, string $off): void {
+    expect(guardConfig(nestedSetting($path, $on))->{$accessor}())->toBeTrue()
+        ->and(guardConfig(nestedSetting($path, $off))->{$accessor}())->toBeFalse();
+
+    $key = 'authentication.guards.users.'.implode('.', $path);
+
+    foreach ([ucfirst($on), 'lower', true] as $junk) {
+        $guard = guardConfig(nestedSetting($path, $junk));
+
+        expect(fn (): bool => $guard->{$accessor}())->toThrow(AuthenticationMisconfigured::class, "{$key} must be {$on} or {$off}.");
+    }
+})->with([
+    'identifier.normalize' => ['lowercasesIdentifiers', ['identifier', 'normalize'], 'lowercase', 'none'],
+    'risk.deny_response' => ['riskDenialIsUniform', ['risk', 'deny_response'], 'uniform', 'explicit'],
+]);
+
+it('fails a guard with a typo in any switch when it resolves, not mid-flow (strict config)', function (string $accessor, array $path): void {
+    $this->configureGuard('users', [implode('.', $path) => 'disabled']);
+
+    $problems = ConfigValidation::problems(app(GuardRegistry::class)->all()['users'], app(GuardRegistry::class));
+
+    expect(implode("\n", $problems))->toContain('[authentication.guards.users.'.implode('.', $path).']');
+})->with('boolean guard settings');
+
+it('fails a guard with a typo in a string switch when it resolves (strict config)', function (string $key): void {
+    $this->configureGuard('users', [$key => 'typo']);
+
+    expect(fn () => app(GuardRegistry::class)->get('users'))
+        ->toThrow(AuthenticationMisconfigured::class, "authentication.guards.users.{$key} must be");
+})->with(['identifier.normalize', 'risk.deny_response']);
+
+it('reads a typo in a switch the password gate hides (strict config)', function (string $key, string $accessor): void {
+    $guard = guardConfig(['login' => ['password' => false], ...nestedSetting(explode('.', $key), 'disabled')]);
+
+    expect(fn (): bool => $guard->{$accessor}())->toThrow(AuthenticationMisconfigured::class, "[authentication.guards.users.{$key}]");
+})->with([
+    'registration.require_password' => ['registration.require_password', 'registrationRequiresPassword'],
+    'passwords.reset.enabled' => ['passwords.reset.enabled', 'passwordResetEnabled'],
+]);
+
+it('lets the doctor report a switch typo instead of crashing (strict config)', function (): void {
+    $this->configureGuard('users', ['login.password' => false, 'login.magic_link' => true, 'passwords.reset.enabled' => 'disabled']);
+
+    $this->artisan('authentication:check', ['guard' => 'users'])
+        ->expectsOutputToContain('authentication.guards.users.passwords.reset.enabled')
+        ->assertFailed();
 });
 
 it('reports env-string switches in the about section the way the guard reads them', function (string $value, bool $on): void {

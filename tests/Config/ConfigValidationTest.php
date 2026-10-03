@@ -77,7 +77,14 @@ it('requires the denylist check on the jwt guard', function (mixed $value): void
     app(GuardRegistry::class)->flush();
 
     app(GuardRegistry::class)->get('users');
-})->throws(AuthenticationMisconfigured::class, 'check_denylist')->with([false, 'false']);
+})->throws(AuthenticationMisconfigured::class, 'check_denylist')->with([false, 'false', 'off']);
+
+it('refuses a typo in the jwt guard denylist switch (strict config)', function (): void {
+    config()->set('auth.guards.users.check_denylist', 'disabled');
+    app(GuardRegistry::class)->flush();
+
+    app(GuardRegistry::class)->get('users');
+})->throws(AuthenticationMisconfigured::class, 'Configuration value [auth.guards.users.check_denylist] must be a boolean');
 
 it('names the jwt reason when the jwt guard cannot be resolved', function (): void {
     config()->set('auth.guards.users.token_version', ['not', 'callable']);

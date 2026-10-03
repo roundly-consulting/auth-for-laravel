@@ -184,8 +184,10 @@ one table is authorization, not a guard) or an audience.
 ### Per-guard keys (`defaults.*`)
 
 Every on/off key accepts the usual env spellings — `true`/`false`, `1`/`0`, `on`/`off`, `yes`/`no` —
-so `AUTHENTICATION_LOGIN_PASSWORD=off` really turns password login off; anything unrecognised falls
-back to the default shown.
+so `AUTHENTICATION_LOGIN_PASSWORD=off` really turns password login off. An absent or `null` key
+reads as the default shown; anything else (a typo such as `disabled`) throws
+`AuthenticationMisconfigured` naming the key when the guard resolves, and `authentication:check`
+lists it. The two-way string keys (`identifier.normalize`, `risk.deny_response`) are just as strict.
 
 | Key | Default | Purpose |
 |---|---|---|

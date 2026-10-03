@@ -28,6 +28,7 @@ use RoundlyConsulting\Auth\Enums\TwoFactorMode;
 use RoundlyConsulting\Auth\Enums\UrlKind;
 use RoundlyConsulting\Auth\Enums\VerificationChannel;
 use RoundlyConsulting\Auth\Exceptions\AuthenticationMisconfigured;
+use RoundlyConsulting\PackageToolkit\Exceptions\InvalidConfigurationException;
 use RoundlyConsulting\PackageToolkit\Support\Config;
 
 /**
@@ -120,12 +121,12 @@ final readonly class GuardConfig
 
     public function lowercasesIdentifiers(): bool
     {
-        return ($this->settings['identifier']['normalize'] ?? 'lowercase') === 'lowercase';
+        return $this->choice($this->settings['identifier']['normalize'] ?? null, 'identifier.normalize', 'lowercase', 'none', true);
     }
 
     public function caseInsensitiveLookup(): bool
     {
-        return $this->flag($this->settings['identifier']['case_insensitive_lookup'] ?? null, false);
+        return $this->flag($this->settings['identifier']['case_insensitive_lookup'] ?? null, 'identifier.case_insensitive_lookup', false);
     }
 
     // ── Login methods ────────────────────────────────────────────────────
@@ -133,17 +134,17 @@ final readonly class GuardConfig
     public function loginMethodEnabled(LoginMethod $method): bool
     {
         return match ($method) {
-            LoginMethod::Password => $this->flag($this->settings['login']['password'] ?? null, true),
-            LoginMethod::MagicLink => $this->flag($this->settings['login']['magic_link'] ?? null, false),
-            LoginMethod::EmailOtp => $this->flag($this->settings['login']['email_otp'] ?? null, false),
-            LoginMethod::Passkey => $this->flag($this->settings['login']['passkey'] ?? null, false),
+            LoginMethod::Password => $this->flag($this->settings['login']['password'] ?? null, 'login.password', true),
+            LoginMethod::MagicLink => $this->flag($this->settings['login']['magic_link'] ?? null, 'login.magic_link', false),
+            LoginMethod::EmailOtp => $this->flag($this->settings['login']['email_otp'] ?? null, 'login.email_otp', false),
+            LoginMethod::Passkey => $this->flag($this->settings['login']['passkey'] ?? null, 'login.passkey', false),
             default => true,
         };
     }
 
     public function revealAccountState(): bool
     {
-        return $this->flag($this->settings['login']['reveal_account_state'] ?? null, true);
+        return $this->flag($this->settings['login']['reveal_account_state'] ?? null, 'login.reveal_account_state', true);
     }
 
     // ── Challenge ────────────────────────────────────────────────────────
@@ -165,27 +166,27 @@ final readonly class GuardConfig
 
     public function allowsEnrolmentInChallenge(): bool
     {
-        return $this->flag($this->settings['challenge']['allow_enrolment'] ?? null, true);
+        return $this->flag($this->settings['challenge']['allow_enrolment'] ?? null, 'challenge.allow_enrolment', true);
     }
 
     public function enrolmentRequiresVerifiedEmail(): bool
     {
-        return $this->flag($this->settings['challenge']['enrolment_requires_verified_email'] ?? null, true);
+        return $this->flag($this->settings['challenge']['enrolment_requires_verified_email'] ?? null, 'challenge.enrolment_requires_verified_email', true);
     }
 
     public function bindsChallengeToUserAgent(): bool
     {
-        return $this->flag($this->settings['challenge']['bind']['user_agent'] ?? null, true);
+        return $this->flag($this->settings['challenge']['bind']['user_agent'] ?? null, 'challenge.bind.user_agent', true);
     }
 
     public function bindsChallengeToIp(): bool
     {
-        return $this->flag($this->settings['challenge']['bind']['ip'] ?? null, false);
+        return $this->flag($this->settings['challenge']['bind']['ip'] ?? null, 'challenge.bind.ip', false);
     }
 
     public function bindsChallengeToDeviceHeader(): bool
     {
-        return $this->flag($this->settings['challenge']['bind']['device_header'] ?? null, true);
+        return $this->flag($this->settings['challenge']['bind']['device_header'] ?? null, 'challenge.bind.device_header', true);
     }
 
     public function maxActiveChallenges(): int
@@ -202,17 +203,17 @@ final readonly class GuardConfig
 
     public function twoFactorAfterEmailLogin(): bool
     {
-        return $this->flag($this->settings['two_factor']['after_email_login'] ?? null, true);
+        return $this->flag($this->settings['two_factor']['after_email_login'] ?? null, 'two_factor.after_email_login', true);
     }
 
     public function twoFactorRequiredWithPasskey(): bool
     {
-        return $this->flag($this->settings['two_factor']['required_with_passkey'] ?? null, false);
+        return $this->flag($this->settings['two_factor']['required_with_passkey'] ?? null, 'two_factor.required_with_passkey', false);
     }
 
     public function passkeySatisfiesRequiredTwoFactor(): bool
     {
-        return $this->flag($this->settings['two_factor']['passkey_satisfies_required'] ?? null, true);
+        return $this->flag($this->settings['two_factor']['passkey_satisfies_required'] ?? null, 'two_factor.passkey_satisfies_required', true);
     }
 
     public function twoFactorIssuer(): ?string
@@ -222,7 +223,7 @@ final readonly class GuardConfig
 
     public function rendersQrCode(): bool
     {
-        return $this->flag($this->settings['two_factor']['qr']['enabled'] ?? null, true);
+        return $this->flag($this->settings['two_factor']['qr']['enabled'] ?? null, 'two_factor.qr.enabled', true);
     }
 
     public function qrSize(): int
@@ -244,7 +245,7 @@ final readonly class GuardConfig
 
     public function passkeySatisfiesMfa(): bool
     {
-        return $this->flag($this->settings['passkeys']['satisfies_mfa'] ?? null, true);
+        return $this->flag($this->settings['passkeys']['satisfies_mfa'] ?? null, 'passkeys.satisfies_mfa', true);
     }
 
     // ── Tokens & sessions ────────────────────────────────────────────────
@@ -275,7 +276,7 @@ final readonly class GuardConfig
 
     public function includesEmailClaim(): bool
     {
-        return $this->flag($this->settings['tokens']['include_email'] ?? null, true);
+        return $this->flag($this->settings['tokens']['include_email'] ?? null, 'tokens.include_email', true);
     }
 
     public function maxActiveSessions(): ?int
@@ -309,13 +310,15 @@ final readonly class GuardConfig
 
     public function registrationRequiresPassword(): bool
     {
-        return $this->loginMethodEnabled(LoginMethod::Password)
-            && $this->flag($this->settings['registration']['require_password'] ?? null, true);
+        // Read before the password gate, so a typo fails even while password login is off.
+        $required = $this->flag($this->settings['registration']['require_password'] ?? null, 'registration.require_password', true);
+
+        return $this->loginMethodEnabled(LoginMethod::Password) && $required;
     }
 
     public function loginAfterRegistration(): bool
     {
-        return $this->flag($this->settings['registration']['login_after'] ?? null, true);
+        return $this->flag($this->settings['registration']['login_after'] ?? null, 'registration.login_after', true);
     }
 
     public function registrationRules(): ?string
@@ -330,7 +333,7 @@ final readonly class GuardConfig
 
     public function invitationsEnabled(): bool
     {
-        return $this->flag($this->settings['invitations']['enabled'] ?? null, false);
+        return $this->flag($this->settings['invitations']['enabled'] ?? null, 'invitations.enabled', false);
     }
 
     public function invitationTtl(): int
@@ -340,17 +343,17 @@ final readonly class GuardConfig
 
     public function invitationLocksEmail(): bool
     {
-        return $this->flag($this->settings['invitations']['lock_email'] ?? null, true);
+        return $this->flag($this->settings['invitations']['lock_email'] ?? null, 'invitations.lock_email', true);
     }
 
     public function invitationReplacesPending(): bool
     {
-        return $this->flag($this->settings['invitations']['replace_pending'] ?? null, true);
+        return $this->flag($this->settings['invitations']['replace_pending'] ?? null, 'invitations.replace_pending', true);
     }
 
     public function invitationAllowsExistingEmail(): bool
     {
-        return $this->flag($this->settings['invitations']['allow_existing_email'] ?? null, false);
+        return $this->flag($this->settings['invitations']['allow_existing_email'] ?? null, 'invitations.allow_existing_email', false);
     }
 
     public function invitationResendCooldown(): int
@@ -395,27 +398,27 @@ final readonly class GuardConfig
 
     public function verifiesEmailOnEmailLogin(): bool
     {
-        return $this->flag($this->settings['verification']['verify_on_email_login'] ?? null, true);
+        return $this->flag($this->settings['verification']['verify_on_email_login'] ?? null, 'verification.verify_on_email_login', true);
     }
 
     public function emailChangeEnabled(): bool
     {
-        return $this->flag($this->settings['email_change']['enabled'] ?? null, true);
+        return $this->flag($this->settings['email_change']['enabled'] ?? null, 'email_change.enabled', true);
     }
 
     public function emailChangeNotifiesOldAddress(): bool
     {
-        return $this->flag($this->settings['email_change']['notify_old'] ?? null, true);
+        return $this->flag($this->settings['email_change']['notify_old'] ?? null, 'email_change.notify_old', true);
     }
 
     public function emailChangeRequiresReauthentication(): bool
     {
-        return $this->flag($this->settings['email_change']['require_reauthentication'] ?? null, true);
+        return $this->flag($this->settings['email_change']['require_reauthentication'] ?? null, 'email_change.require_reauthentication', true);
     }
 
     public function magicLinkSameDevice(): bool
     {
-        return $this->flag($this->settings['magic_link']['same_device'] ?? null, false);
+        return $this->flag($this->settings['magic_link']['same_device'] ?? null, 'magic_link.same_device', false);
     }
 
     // ── One-time secrets ─────────────────────────────────────────────────
@@ -469,23 +472,31 @@ final readonly class GuardConfig
 
     public function passwordResetEnabled(): bool
     {
-        return $this->loginMethodEnabled(LoginMethod::Password)
-            && $this->flag($this->settings['passwords']['reset']['enabled'] ?? null, true);
+        return $this->passwordResetSwitchedOn() && $this->loginMethodEnabled(LoginMethod::Password);
+    }
+
+    /**
+     * The `passwords.reset.enabled` switch itself, before `login.password` gates it (the
+     * doctor warns when it is on but ignored).
+     */
+    public function passwordResetSwitchedOn(): bool
+    {
+        return $this->flag($this->settings['passwords']['reset']['enabled'] ?? null, 'passwords.reset.enabled', true);
     }
 
     public function loginAfterPasswordReset(): bool
     {
-        return $this->flag($this->settings['passwords']['reset']['login_after'] ?? null, false);
+        return $this->flag($this->settings['passwords']['reset']['login_after'] ?? null, 'passwords.reset.login_after', false);
     }
 
     public function passwordChangeEnabled(): bool
     {
-        return $this->flag($this->settings['passwords']['change']['enabled'] ?? null, true);
+        return $this->flag($this->settings['passwords']['change']['enabled'] ?? null, 'passwords.change.enabled', true);
     }
 
     public function rehashesPasswordsOnLogin(): bool
     {
-        return $this->flag($this->settings['passwords']['rehash_on_login'] ?? null, true);
+        return $this->flag($this->settings['passwords']['rehash_on_login'] ?? null, 'passwords.rehash_on_login', true);
     }
 
     public function passwordMinLength(): int
@@ -500,32 +511,32 @@ final readonly class GuardConfig
 
     public function passwordRequiresLetters(): bool
     {
-        return $this->flag($this->settings['passwords']['policy']['letters'] ?? null, false);
+        return $this->flag($this->settings['passwords']['policy']['letters'] ?? null, 'passwords.policy.letters', false);
     }
 
     public function passwordRequiresMixedCase(): bool
     {
-        return $this->flag($this->settings['passwords']['policy']['mixed_case'] ?? null, false);
+        return $this->flag($this->settings['passwords']['policy']['mixed_case'] ?? null, 'passwords.policy.mixed_case', false);
     }
 
     public function passwordRequiresNumbers(): bool
     {
-        return $this->flag($this->settings['passwords']['policy']['numbers'] ?? null, false);
+        return $this->flag($this->settings['passwords']['policy']['numbers'] ?? null, 'passwords.policy.numbers', false);
     }
 
     public function passwordRequiresSymbols(): bool
     {
-        return $this->flag($this->settings['passwords']['policy']['symbols'] ?? null, false);
+        return $this->flag($this->settings['passwords']['policy']['symbols'] ?? null, 'passwords.policy.symbols', false);
     }
 
     public function passwordMustNotContainIdentifier(): bool
     {
-        return $this->flag($this->settings['passwords']['policy']['not_identifier'] ?? null, true);
+        return $this->flag($this->settings['passwords']['policy']['not_identifier'] ?? null, 'passwords.policy.not_identifier', true);
     }
 
     public function breachCheckEnabled(): bool
     {
-        return $this->flag($this->settings['passwords']['policy']['uncompromised']['enabled'] ?? null, false);
+        return $this->flag($this->settings['passwords']['policy']['uncompromised']['enabled'] ?? null, 'passwords.policy.uncompromised.enabled', false);
     }
 
     public function breachThreshold(): int
@@ -540,7 +551,7 @@ final readonly class GuardConfig
 
     public function breachCheckFailsClosed(): bool
     {
-        return $this->flag($this->settings['passwords']['policy']['uncompromised']['fail_closed'] ?? null, false);
+        return $this->flag($this->settings['passwords']['policy']['uncompromised']['fail_closed'] ?? null, 'passwords.policy.uncompromised.fail_closed', false);
     }
 
     // ── Throttling & lockout ─────────────────────────────────────────────
@@ -563,7 +574,7 @@ final readonly class GuardConfig
 
     public function lockoutEnabled(): bool
     {
-        return $this->flag($this->settings['lockout']['enabled'] ?? null, false);
+        return $this->flag($this->settings['lockout']['enabled'] ?? null, 'lockout.enabled', false);
     }
 
     public function lockoutThreshold(): int
@@ -578,7 +589,7 @@ final readonly class GuardConfig
 
     public function passwordResetUnlocks(): bool
     {
-        return $this->flag($this->settings['lockout']['reset_unlocks'] ?? null, true);
+        return $this->flag($this->settings['lockout']['reset_unlocks'] ?? null, 'lockout.reset_unlocks', true);
     }
 
     // ── Re-authentication ────────────────────────────────────────────────
@@ -598,12 +609,12 @@ final readonly class GuardConfig
 
     public function reauthenticationRequiresSecondFactorWhenEnrolled(): bool
     {
-        return $this->flag($this->settings['reauthentication']['require_second_factor_when_enrolled'] ?? null, true);
+        return $this->flag($this->settings['reauthentication']['require_second_factor_when_enrolled'] ?? null, 'reauthentication.require_second_factor_when_enrolled', true);
     }
 
     public function freshLoginCountsAsReauthentication(): bool
     {
-        return $this->flag($this->settings['reauthentication']['fresh_login_counts'] ?? null, true);
+        return $this->flag($this->settings['reauthentication']['fresh_login_counts'] ?? null, 'reauthentication.fresh_login_counts', true);
     }
 
     /**
@@ -634,7 +645,7 @@ final readonly class GuardConfig
 
     public function activityEnabled(): bool
     {
-        return $this->flag($this->settings['activity']['enabled'] ?? null, true);
+        return $this->flag($this->settings['activity']['enabled'] ?? null, 'activity.enabled', true);
     }
 
     public function identifierStorage(): IdentifierStorage
@@ -649,7 +660,7 @@ final readonly class GuardConfig
 
     public function newDeviceDetectionEnabled(): bool
     {
-        return $this->flag($this->settings['activity']['new_device']['enabled'] ?? null, true);
+        return $this->flag($this->settings['activity']['new_device']['enabled'] ?? null, 'activity.new_device.enabled', true);
     }
 
     public function newDeviceHeader(): string
@@ -659,7 +670,7 @@ final readonly class GuardConfig
 
     public function newDeviceSkipsFirstLogin(): bool
     {
-        return $this->flag($this->settings['activity']['new_device']['skip_first_login'] ?? null, true);
+        return $this->flag($this->settings['activity']['new_device']['skip_first_login'] ?? null, 'activity.new_device.skip_first_login', true);
     }
 
     public function riskAssessor(): ?string
@@ -678,7 +689,7 @@ final readonly class GuardConfig
 
     public function riskDenialIsUniform(): bool
     {
-        return ($this->settings['risk']['deny_response'] ?? 'uniform') !== 'explicit';
+        return $this->choice($this->settings['risk']['deny_response'] ?? null, 'risk.deny_response', 'uniform', 'explicit', true);
     }
 
     // ── Locale ───────────────────────────────────────────────────────────
@@ -706,17 +717,17 @@ final readonly class GuardConfig
 
     public function storesLocaleOnRegistration(): bool
     {
-        return $this->flag($this->settings['locale']['store_on_registration'] ?? null, true);
+        return $this->flag($this->settings['locale']['store_on_registration'] ?? null, 'locale.store_on_registration', true);
     }
 
     public function fillsLocaleOnLogin(): bool
     {
-        return $this->flag($this->settings['locale']['fill_on_login'] ?? null, true);
+        return $this->flag($this->settings['locale']['fill_on_login'] ?? null, 'locale.fill_on_login', true);
     }
 
     public function timezonesEnabled(): bool
     {
-        return $this->flag($this->settings['locale']['timezone'] ?? null, true);
+        return $this->flag($this->settings['locale']['timezone'] ?? null, 'locale.timezone', true);
     }
 
     // ── Notifications ────────────────────────────────────────────────────
@@ -803,7 +814,7 @@ final readonly class GuardConfig
 
     public function routesEnabled(): bool
     {
-        return $this->flag($this->settings['routes']['enabled'] ?? null, false);
+        return $this->flag($this->settings['routes']['enabled'] ?? null, 'routes.enabled', false);
     }
 
     public function routePrefix(): string
@@ -838,7 +849,7 @@ final readonly class GuardConfig
 
     public function invitationManagementRoutes(): bool
     {
-        return $this->flag($this->settings['routes']['invitations_management'] ?? null, false);
+        return $this->flag($this->settings['routes']['invitations_management'] ?? null, 'routes.invitations_management', false);
     }
 
     public function accountResource(): ?string
@@ -910,11 +921,38 @@ final readonly class GuardConfig
     /**
      * A switch read the way env values arrive: env() only converts "true"/"false", so
      * "1"/"on"/"yes" and "0"/"off"/"no" are parsed as booleans here rather than cast (a
-     * `(bool) 'off'` is true). null or anything unrecognised is the default.
+     * `(bool) 'off'` is true). Absent or null is the default; anything else throws,
+     * naming the guard's key, so a typo can never quietly flip a switch to its default.
+     *
+     * @param  string  $key  the leaf's path under the guard, matching the offset chain read
+     *
+     * @throws AuthenticationMisconfigured
      */
-    private function flag(mixed $value, bool $default): bool
+    private function flag(mixed $value, string $key, bool $default): bool
     {
-        return Config::for(['value' => $value])->boolean('value', $default);
+        $key = "authentication.guards.{$this->name}.{$key}";
+
+        try {
+            return Config::for([$key => $value])->boolean($key, $default);
+        } catch (InvalidConfigurationException $e) {
+            throw AuthenticationMisconfigured::because($e->getMessage());
+        }
+    }
+
+    /**
+     * A two-way string switch (`identifier.normalize`, `risk.deny_response`). Absent or
+     * null is the default; an unknown spelling throws rather than silently picking a side.
+     *
+     * @throws AuthenticationMisconfigured
+     */
+    private function choice(mixed $value, string $key, string $on, string $off, bool $default): bool
+    {
+        return match ($value) {
+            null => $default,
+            $on => true,
+            $off => false,
+            default => throw AuthenticationMisconfigured::because("authentication.guards.{$this->name}.{$key} must be {$on} or {$off}."),
+        };
     }
 
     private function nullableString(mixed $value): ?string
