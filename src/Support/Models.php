@@ -16,41 +16,34 @@ use RoundlyConsulting\PackageToolkit\Support\ModelResolver;
  * and write goes through here, so a host subclass configured under
  * `authentication.models.*` is the class the package creates and queries.
  *
- * A configured class that is a model but not a subclass of the packaged one falls back
- * to the packaged model (everything is typed against it); a non-model throws.
+ * Absent config resolves the packaged model; anything else must be that model or a subclass of
+ * it, or the toolkit's ModelResolver throws InvalidConfigurationException naming the key — a
+ * foreign class is never silently replaced.
  */
 final class Models
 {
     /** @return class-string<LoginChallenge> */
     public static function challenge(): string
     {
-        $class = ModelResolver::for('authentication.models.challenge', LoginChallenge::class);
-
-        return is_a($class, LoginChallenge::class, true) ? $class : LoginChallenge::class;
+        return ModelResolver::for('authentication.models.challenge', LoginChallenge::class);
     }
 
     /** @return class-string<OneTimeToken> */
     public static function oneTimeToken(): string
     {
-        $class = ModelResolver::for('authentication.models.one_time_token', OneTimeToken::class);
-
-        return is_a($class, OneTimeToken::class, true) ? $class : OneTimeToken::class;
+        return ModelResolver::for('authentication.models.one_time_token', OneTimeToken::class);
     }
 
     /** @return class-string<Invitation> */
     public static function invitation(): string
     {
-        $class = ModelResolver::for('authentication.models.invitation', Invitation::class);
-
-        return is_a($class, Invitation::class, true) ? $class : Invitation::class;
+        return ModelResolver::for('authentication.models.invitation', Invitation::class);
     }
 
     /** @return class-string<LoginActivity> */
     public static function loginActivity(): string
     {
-        $class = ModelResolver::for('authentication.models.login_activity', LoginActivity::class);
-
-        return is_a($class, LoginActivity::class, true) ? $class : LoginActivity::class;
+        return ModelResolver::for('authentication.models.login_activity', LoginActivity::class);
     }
 
     /** @return Builder<LoginChallenge> */
