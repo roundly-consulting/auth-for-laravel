@@ -17,6 +17,7 @@ use RoundlyConsulting\Auth\Guards\ConfigMerger;
 use RoundlyConsulting\Auth\Guards\GuardConfig;
 use RoundlyConsulting\Auth\Notifications\AuthenticationNotification;
 use RoundlyConsulting\Auth\Tests\Fixtures\Models\User;
+use RoundlyConsulting\Auth\Tests\PublishSandboxTestCase;
 use RoundlyConsulting\Auth\Tests\SwappedModelsTestCase;
 use RoundlyConsulting\Auth\Tests\TestCase;
 use RoundlyConsulting\Crypto\Codec\Base64Url;
@@ -36,6 +37,10 @@ uses(TestCase::class)->in('Arch', 'Commands', 'Concurrency', 'Config', 'Feature'
 
 // The swap suite boots with the four models swapped for host subclasses.
 uses(SwappedModelsTestCase::class)->in('Swaps');
+
+// Publishing writes files: into a throwaway config/ and database/ set before boot, never the
+// testbench skeleton every parallel process loads its configuration from.
+uses(PublishSandboxTestCase::class)->in('Publish');
 
 /**
  * @param  array<string, mixed>  $overrides
