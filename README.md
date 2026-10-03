@@ -189,6 +189,25 @@ reads as the default shown; anything else (a typo such as `disabled`) throws
 `AuthenticationMisconfigured` naming the key when the guard resolves, and `authentication:check`
 lists it. The two-way string keys (`identifier.normalize`, `risk.deny_response`) are just as strict.
 
+Every other key is read just as strictly, and checked when the guard resolves:
+
+- integers (TTLs, attempt caps, throttles, lengths) take an int or a canonical integer string, so
+  `'five'`, `'1.5'` or `''` throws instead of reading as the default — and so does a value out of
+  range (TTLs and caps at least 1; `email_otp.length` / `verification.code_length` 6–8; code
+  attempts 1–100; `passwords.policy.max` at least `policy.min`). `0` is accepted only where it
+  means something: `tokens.refresh_absolute_ttl` (no cap), `invitations.resend_cooldown`,
+  `verification.resend_decay`, `passwords.policy.uncompromised.threshold`. `tokens.access_ttl` and
+  `sessions.max_active` are `null` (jwt's TTL / no cap) or at least 1;
+- string keys with a default (`identifier.email_column`, `invitations.ability`,
+  `activity.new_device.header`, `routes.prefix`, `routes.name`, every `notifications.urls.*`
+  template) throw when blank or not a string; optional ones (`laravel_guard`, `two_factor.issuer`,
+  queues, `frontend_url`, class-strings) throw when not a string, and read a blank as unset;
+- list keys (`identifier.columns`, `routes.middleware`, `locale.supported`, …) must be lists of
+  non-empty strings — a bad entry throws, it is never dropped.
+
+The global `tables.*` and `columns.*` names throw when blank or not a string;
+`hash_key` and `reauthentication_store` throw when not a string (blank reads as unset).
+
 | Key | Default | Purpose |
 |---|---|---|
 | `model` | — (required) | `class-string<Model&Account>` |
