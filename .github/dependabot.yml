@@ -1,6 +1,4 @@
 version: 2
-# composer resolves the private roundly-consulting/* VCS deps; Dependabot has
-# org access granted to those repos so the composer job can build the graph.
 updates:
   - package-ecosystem: "composer"
     directory: "/"
