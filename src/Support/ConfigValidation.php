@@ -17,11 +17,14 @@ use RoundlyConsulting\Auth\Enums\EmailVerificationMode;
 use RoundlyConsulting\Auth\Enums\InvalidationReason;
 use RoundlyConsulting\Auth\Enums\LoginMethod;
 use RoundlyConsulting\Auth\Enums\NotificationType;
+use RoundlyConsulting\Auth\Enums\OneTimeTokenPurpose;
 use RoundlyConsulting\Auth\Enums\PasskeyMode;
 use RoundlyConsulting\Auth\Enums\PasskeySecondFactor;
 use RoundlyConsulting\Auth\Enums\RegistrationMode;
 use RoundlyConsulting\Auth\Enums\RiskLevel;
+use RoundlyConsulting\Auth\Enums\ThrottleKind;
 use RoundlyConsulting\Auth\Enums\TwoFactorMode;
+use RoundlyConsulting\Auth\Enums\UrlKind;
 use RoundlyConsulting\Auth\Exceptions\AuthenticationMisconfigured;
 use RoundlyConsulting\Auth\Guards\GuardConfig;
 use RoundlyConsulting\Auth\Guards\GuardRegistry;
@@ -169,6 +172,71 @@ final class ConfigValidation
         }
 
         self::resolveSwitches($guard);
+        self::resolveScalars($guard);
+    }
+
+    /**
+     * Every integer, string and list leaf, for the same reason as the switches: a junk TTL,
+     * a blanked route name or a mistyped middleware list throws naming its key when the
+     * guard resolves, never mid-flow.
+     *
+     * @throws AuthenticationMisconfigured
+     */
+    private static function resolveScalars(GuardConfig $guard): void
+    {
+        $guard->laravelGuard();
+        $guard->identifierColumns();
+        $guard->challengeTtl();
+        $guard->challengeEnrolmentTtl();
+        $guard->challengeMaxAttempts();
+        $guard->maxActiveChallenges();
+        $guard->twoFactorIssuer();
+        $guard->qrSize();
+        $guard->accessTtl();
+        $guard->refreshTtl();
+        $guard->refreshAbsoluteTtl();
+        $guard->maxActiveSessions();
+        $guard->invitationTtl();
+        $guard->invitationResendCooldown();
+        $guard->invitationMaxSends();
+        $guard->invitationPreviewPayloadKeys();
+        $guard->invitationAbility();
+        $guard->verificationResendDecay();
+        $guard->passwordMaxLength();
+        $guard->breachThreshold();
+        $guard->breachCheckTimeout();
+        $guard->lockoutThreshold();
+        $guard->lockoutDuration();
+        $guard->reauthenticationTimeout();
+        $guard->activityRetentionDays();
+        $guard->newDeviceHeader();
+        $guard->localeHeader();
+        $guard->supportedLocales();
+        $guard->notificationConnection();
+        $guard->notificationQueue();
+        $guard->frontendUrl();
+        $guard->routePrefix();
+        $guard->routeName();
+        $guard->routeMiddleware();
+        $guard->authenticatedRouteMiddleware();
+
+        foreach (OneTimeTokenPurpose::cases() as $purpose) {
+            $guard->ttl($purpose);
+            $guard->codeLength($purpose);
+            $guard->codeMaxAttempts($purpose);
+        }
+
+        foreach (ThrottleKind::cases() as $kind) {
+            $guard->throttle($kind);
+        }
+
+        foreach (NotificationType::cases() as $type) {
+            $guard->notificationClass($type);
+        }
+
+        foreach (UrlKind::cases() as $kind) {
+            $guard->urlTemplate($kind);
+        }
     }
 
     /**

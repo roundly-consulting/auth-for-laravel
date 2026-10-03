@@ -206,11 +206,14 @@ it('substitutes the guard into the route prefix and name and uses frontend_url',
         ->and($guard->accessTtl())->toBe(600);
 });
 
-it('falls back to the shipped url template when one is blanked', function (UrlKind $kind): void {
-    /** @var array<string, string> $shipped */
-    $shipped = config('authentication.defaults.notifications.urls');
+it('refuses a blanked url template instead of the shipped one (strict config)', function (UrlKind $kind): void {
+    expect(fn (): string => guardConfig(['notifications' => ['urls' => [$kind->value => '']]])->urlTemplate($kind))
+        ->toThrow(AuthenticationMisconfigured::class, "authentication.guards.users.notifications.urls.{$kind->value}");
+})->with(UrlKind::cases());
 
-    expect(guardConfig(['notifications' => ['urls' => [$kind->value => '']]])->urlTemplate($kind))->toBe($shipped[$kind->value]);
+it('uses the shipped url template when one is unset (strict config)', function (UrlKind $kind): void {
+    expect(guardConfig(['notifications' => ['urls' => [$kind->value => null]]])->urlTemplate($kind))
+        ->toContain('{frontend}/auth/');
 })->with(UrlKind::cases());
 
 it('disables a notification configured as null', function (): void {

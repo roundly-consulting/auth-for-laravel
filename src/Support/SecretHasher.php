@@ -63,7 +63,7 @@ final class SecretHasher
 
     public function usesDerivedKey(): bool
     {
-        return ! is_string(config('authentication.hash_key')) || trim((string) config('authentication.hash_key')) === '';
+        return self::configuredKey() === null;
     }
 
     private function mac(#[SensitiveParameter] string $message): string
@@ -77,13 +77,31 @@ final class SecretHasher
             return $this->key;
         }
 
-        $configured = config('authentication.hash_key');
+        $configured = self::configuredKey();
 
-        if (is_string($configured) && trim($configured) !== '') {
+        if ($configured !== null) {
             return $this->key = $configured;
         }
 
         return $this->key = (new Hmac(HashAlgorithm::Sha256))->sign('authentication-secrets', $this->appKey());
+    }
+
+    /**
+     * The configured `authentication.hash_key`, or null when unset or blank (then derived
+     * from APP_KEY). A key that is not a string throws rather than being silently swapped
+     * for the derived one.
+     *
+     * @throws AuthenticationMisconfigured
+     */
+    private static function configuredKey(): ?string
+    {
+        $configured = config('authentication.hash_key');
+
+        if ($configured !== null && ! is_string($configured)) {
+            throw AuthenticationMisconfigured::because('authentication.hash_key must be a string or null.');
+        }
+
+        return $configured === null || trim($configured) === '' ? null : $configured;
     }
 
     private function appKey(): string

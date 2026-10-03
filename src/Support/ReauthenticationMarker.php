@@ -9,6 +9,7 @@ use Illuminate\Contracts\Cache\Factory as CacheFactory;
 use Illuminate\Contracts\Cache\Repository;
 use RoundlyConsulting\Auth\DataTransferObjects\ReauthenticationProof;
 use RoundlyConsulting\Auth\Enums\ReauthenticationMethod;
+use RoundlyConsulting\Auth\Exceptions\AuthenticationMisconfigured;
 
 /**
  * The "recently re-authenticated" marker of one session (`sid`), kept in the
@@ -67,6 +68,11 @@ final readonly class ReauthenticationMarker
     {
         $store = config('authentication.reauthentication_store');
 
-        return $this->cache->store(is_string($store) && $store !== '' ? $store : null);
+        // Null or blank (an empty env var) is the default store; anything but a string throws.
+        if ($store !== null && ! is_string($store)) {
+            throw AuthenticationMisconfigured::because('authentication.reauthentication_store must be a cache store name or null.');
+        }
+
+        return $this->cache->store($store === null || trim($store) === '' ? null : $store);
     }
 }

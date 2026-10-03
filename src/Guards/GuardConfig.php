@@ -99,7 +99,7 @@ final readonly class GuardConfig
      */
     public function laravelGuard(): string
     {
-        return $this->nullableString($this->settings['laravel_guard'] ?? null) ?? $this->name;
+        return $this->optionalString($this->settings['laravel_guard'] ?? null, 'laravel_guard') ?? $this->name;
     }
 
     // ── Identifier ───────────────────────────────────────────────────────
@@ -109,14 +109,14 @@ final readonly class GuardConfig
      */
     public function identifierColumns(): array
     {
-        $columns = $this->stringList($this->settings['identifier']['columns'] ?? null);
+        $columns = $this->stringList($this->settings['identifier']['columns'] ?? null, 'identifier.columns');
 
         return $columns === [] ? [$this->emailColumn()] : $columns;
     }
 
     public function emailColumn(): string
     {
-        return $this->nullableString($this->settings['identifier']['email_column'] ?? null) ?? 'email';
+        return $this->requiredString($this->settings['identifier']['email_column'] ?? null, 'identifier.email_column', 'email');
     }
 
     public function lowercasesIdentifiers(): bool
@@ -151,17 +151,17 @@ final readonly class GuardConfig
 
     public function challengeTtl(): int
     {
-        return $this->positiveInt($this->settings['challenge']['ttl'] ?? null, 300);
+        return $this->integer($this->settings['challenge']['ttl'] ?? null, 'challenge.ttl', 300);
     }
 
     public function challengeEnrolmentTtl(): int
     {
-        return $this->positiveInt($this->settings['challenge']['enrolment_ttl'] ?? null, 900);
+        return $this->integer($this->settings['challenge']['enrolment_ttl'] ?? null, 'challenge.enrolment_ttl', 900);
     }
 
     public function challengeMaxAttempts(): int
     {
-        return min($this->positiveInt($this->settings['challenge']['max_attempts'] ?? null, 5), 1000);
+        return $this->integer($this->settings['challenge']['max_attempts'] ?? null, 'challenge.max_attempts', 5, max: 1000);
     }
 
     public function allowsEnrolmentInChallenge(): bool
@@ -191,7 +191,7 @@ final readonly class GuardConfig
 
     public function maxActiveChallenges(): int
     {
-        return $this->positiveInt($this->settings['challenge']['max_active_per_account'] ?? null, 3);
+        return $this->integer($this->settings['challenge']['max_active_per_account'] ?? null, 'challenge.max_active_per_account', 3);
     }
 
     // ── Two-factor ───────────────────────────────────────────────────────
@@ -218,7 +218,7 @@ final readonly class GuardConfig
 
     public function twoFactorIssuer(): ?string
     {
-        return $this->nullableString($this->settings['two_factor']['issuer'] ?? null);
+        return $this->optionalString($this->settings['two_factor']['issuer'] ?? null, 'two_factor.issuer');
     }
 
     public function rendersQrCode(): bool
@@ -228,7 +228,7 @@ final readonly class GuardConfig
 
     public function qrSize(): int
     {
-        return $this->positiveInt($this->settings['two_factor']['qr']['size'] ?? null, 240);
+        return $this->integer($this->settings['two_factor']['qr']['size'] ?? null, 'two_factor.qr.size', 240);
     }
 
     // ── Passkeys ─────────────────────────────────────────────────────────
@@ -254,24 +254,22 @@ final readonly class GuardConfig
     {
         $ttl = $this->settings['tokens']['access_ttl'] ?? null;
 
-        return is_numeric($ttl) && (int) $ttl > 0 ? (int) $ttl : null;
+        return $ttl === null ? null : $this->integer($ttl, 'tokens.access_ttl', 0, min: 1);
     }
 
     public function refreshTtl(): int
     {
-        return $this->positiveInt($this->settings['tokens']['refresh_ttl'] ?? null, 2_592_000);
+        return $this->integer($this->settings['tokens']['refresh_ttl'] ?? null, 'tokens.refresh_ttl', 2_592_000);
     }
 
     public function refreshAbsoluteTtl(): int
     {
-        $ttl = $this->settings['tokens']['refresh_absolute_ttl'] ?? null;
-
-        return is_numeric($ttl) && (int) $ttl >= 0 ? (int) $ttl : 7_776_000;
+        return $this->integer($this->settings['tokens']['refresh_absolute_ttl'] ?? null, 'tokens.refresh_absolute_ttl', 7_776_000, min: 0);
     }
 
     public function claimsResolver(): ?string
     {
-        return $this->nullableString($this->settings['tokens']['claims_resolver'] ?? null);
+        return $this->optionalString($this->settings['tokens']['claims_resolver'] ?? null, 'tokens.claims_resolver');
     }
 
     public function includesEmailClaim(): bool
@@ -283,7 +281,7 @@ final readonly class GuardConfig
     {
         $max = $this->settings['sessions']['max_active'] ?? null;
 
-        return is_numeric($max) && (int) $max > 0 ? (int) $max : null;
+        return $max === null ? null : $this->integer($max, 'sessions.max_active', 0, min: 1);
     }
 
     public function invalidationScope(InvalidationReason $reason): InvalidationScope
@@ -323,12 +321,12 @@ final readonly class GuardConfig
 
     public function registrationRules(): ?string
     {
-        return $this->nullableString($this->settings['registration']['rules'] ?? null);
+        return $this->optionalString($this->settings['registration']['rules'] ?? null, 'registration.rules');
     }
 
     public function accountCreator(): ?string
     {
-        return $this->nullableString($this->settings['registration']['creator'] ?? null);
+        return $this->optionalString($this->settings['registration']['creator'] ?? null, 'registration.creator');
     }
 
     public function invitationsEnabled(): bool
@@ -338,7 +336,7 @@ final readonly class GuardConfig
 
     public function invitationTtl(): int
     {
-        return $this->positiveInt($this->settings['invitations']['ttl'] ?? null, 604_800);
+        return $this->integer($this->settings['invitations']['ttl'] ?? null, 'invitations.ttl', 604_800);
     }
 
     public function invitationLocksEmail(): bool
@@ -358,12 +356,12 @@ final readonly class GuardConfig
 
     public function invitationResendCooldown(): int
     {
-        return max(0, (int) ($this->settings['invitations']['resend_cooldown'] ?? 60));
+        return $this->integer($this->settings['invitations']['resend_cooldown'] ?? null, 'invitations.resend_cooldown', 60, min: 0);
     }
 
     public function invitationMaxSends(): int
     {
-        return min($this->positiveInt($this->settings['invitations']['max_sends'] ?? null, 5), 1000);
+        return $this->integer($this->settings['invitations']['max_sends'] ?? null, 'invitations.max_sends', 5, max: 1000);
     }
 
     /**
@@ -371,12 +369,12 @@ final readonly class GuardConfig
      */
     public function invitationPreviewPayloadKeys(): array
     {
-        return $this->stringList($this->settings['invitations']['preview_payload_keys'] ?? null);
+        return $this->stringList($this->settings['invitations']['preview_payload_keys'] ?? null, 'invitations.preview_payload_keys');
     }
 
     public function invitationAbility(): string
     {
-        return $this->nullableString($this->settings['invitations']['ability'] ?? null) ?? 'authentication.invitations.manage';
+        return $this->requiredString($this->settings['invitations']['ability'] ?? null, 'invitations.ability', 'authentication.invitations.manage');
     }
 
     // ── Email verification & change ──────────────────────────────────────
@@ -393,7 +391,7 @@ final readonly class GuardConfig
 
     public function verificationResendDecay(): int
     {
-        return max(0, (int) ($this->settings['verification']['resend_decay'] ?? 60));
+        return $this->integer($this->settings['verification']['resend_decay'] ?? null, 'verification.resend_decay', 60, min: 0);
     }
 
     public function verifiesEmailOnEmailLogin(): bool
@@ -430,11 +428,11 @@ final readonly class GuardConfig
     public function ttl(OneTimeTokenPurpose $purpose): int
     {
         return match ($purpose) {
-            OneTimeTokenPurpose::MagicLink => $this->positiveInt($this->settings['magic_link']['ttl'] ?? null, 900),
-            OneTimeTokenPurpose::EmailOtp, OneTimeTokenPurpose::Reauthentication => $this->positiveInt($this->settings['email_otp']['ttl'] ?? null, 600),
-            OneTimeTokenPurpose::EmailVerification => $this->positiveInt($this->settings['verification']['ttl'] ?? null, 86_400),
-            OneTimeTokenPurpose::PasswordReset => $this->positiveInt($this->settings['passwords']['reset']['ttl'] ?? null, 3_600),
-            OneTimeTokenPurpose::EmailChange => $this->positiveInt($this->settings['email_change']['ttl'] ?? null, 3_600),
+            OneTimeTokenPurpose::MagicLink => $this->integer($this->settings['magic_link']['ttl'] ?? null, 'magic_link.ttl', 900),
+            OneTimeTokenPurpose::EmailOtp, OneTimeTokenPurpose::Reauthentication => $this->integer($this->settings['email_otp']['ttl'] ?? null, 'email_otp.ttl', 600),
+            OneTimeTokenPurpose::EmailVerification => $this->integer($this->settings['verification']['ttl'] ?? null, 'verification.ttl', 86_400),
+            OneTimeTokenPurpose::PasswordReset => $this->integer($this->settings['passwords']['reset']['ttl'] ?? null, 'passwords.reset.ttl', 3_600),
+            OneTimeTokenPurpose::EmailChange => $this->integer($this->settings['email_change']['ttl'] ?? null, 'email_change.ttl', 3_600),
         };
     }
 
@@ -452,20 +450,16 @@ final readonly class GuardConfig
 
     public function codeLength(OneTimeTokenPurpose $purpose): int
     {
-        $length = $purpose === OneTimeTokenPurpose::EmailVerification
-            ? ($this->settings['verification']['code_length'] ?? 6)
-            : ($this->settings['email_otp']['length'] ?? 6);
-
-        return max(6, min(8, (int) $length));
+        return $purpose === OneTimeTokenPurpose::EmailVerification
+            ? $this->integer($this->settings['verification']['code_length'] ?? null, 'verification.code_length', 6, min: 6, max: 8)
+            : $this->integer($this->settings['email_otp']['length'] ?? null, 'email_otp.length', 6, min: 6, max: 8);
     }
 
     public function codeMaxAttempts(OneTimeTokenPurpose $purpose): int
     {
-        $attempts = $purpose === OneTimeTokenPurpose::EmailVerification
-            ? ($this->settings['verification']['max_attempts'] ?? 5)
-            : ($this->settings['email_otp']['max_attempts'] ?? 5);
-
-        return max(1, min(100, (int) $attempts));
+        return $purpose === OneTimeTokenPurpose::EmailVerification
+            ? $this->integer($this->settings['verification']['max_attempts'] ?? null, 'verification.max_attempts', 5, min: 1, max: 100)
+            : $this->integer($this->settings['email_otp']['max_attempts'] ?? null, 'email_otp.max_attempts', 5, min: 1, max: 100);
     }
 
     // ── Passwords ────────────────────────────────────────────────────────
@@ -501,12 +495,12 @@ final readonly class GuardConfig
 
     public function passwordMinLength(): int
     {
-        return $this->positiveInt($this->settings['passwords']['policy']['min'] ?? null, 10);
+        return $this->integer($this->settings['passwords']['policy']['min'] ?? null, 'passwords.policy.min', 10);
     }
 
     public function passwordMaxLength(): int
     {
-        return max($this->passwordMinLength(), $this->positiveInt($this->settings['passwords']['policy']['max'] ?? null, 128));
+        return $this->integer($this->settings['passwords']['policy']['max'] ?? null, 'passwords.policy.max', 128, min: $this->passwordMinLength());
     }
 
     public function passwordRequiresLetters(): bool
@@ -541,12 +535,12 @@ final readonly class GuardConfig
 
     public function breachThreshold(): int
     {
-        return max(0, (int) ($this->settings['passwords']['policy']['uncompromised']['threshold'] ?? 0));
+        return $this->integer($this->settings['passwords']['policy']['uncompromised']['threshold'] ?? null, 'passwords.policy.uncompromised.threshold', 0, min: 0);
     }
 
     public function breachCheckTimeout(): int
     {
-        return $this->positiveInt($this->settings['passwords']['policy']['uncompromised']['timeout'] ?? null, 3);
+        return $this->integer($this->settings['passwords']['policy']['uncompromised']['timeout'] ?? null, 'passwords.policy.uncompromised.timeout', 3);
     }
 
     public function breachCheckFailsClosed(): bool
@@ -559,16 +553,16 @@ final readonly class GuardConfig
     public function throttle(ThrottleKind $kind): ThrottleLimit
     {
         return match ($kind) {
-            ThrottleKind::Login => $this->limit($this->settings['throttle']['login']['max'] ?? null, $this->settings['throttle']['login']['decay'] ?? null, 5, 60),
-            ThrottleKind::LoginIp => $this->limit($this->settings['throttle']['login_ip']['max'] ?? null, $this->settings['throttle']['login_ip']['decay'] ?? null, 50, 600),
-            ThrottleKind::LoginAccount => $this->limit($this->settings['throttle']['login_account']['max'] ?? null, $this->settings['throttle']['login_account']['decay'] ?? null, 20, 3_600),
-            ThrottleKind::EmailRequest => $this->limit($this->settings['throttle']['email_request']['max'] ?? null, $this->settings['throttle']['email_request']['decay'] ?? null, 3, 600),
-            ThrottleKind::EmailRequestIp => $this->limit($this->settings['throttle']['email_request_ip']['max'] ?? null, $this->settings['throttle']['email_request_ip']['decay'] ?? null, 20, 600),
-            ThrottleKind::EmailRequestAccount => $this->limit($this->settings['throttle']['email_request_account']['max'] ?? null, $this->settings['throttle']['email_request_account']['decay'] ?? null, 10, 3_600),
-            ThrottleKind::Refresh => $this->limit($this->settings['throttle']['refresh']['max'] ?? null, $this->settings['throttle']['refresh']['decay'] ?? null, 30, 60),
-            ThrottleKind::Registration => $this->limit($this->settings['throttle']['registration']['max'] ?? null, $this->settings['throttle']['registration']['decay'] ?? null, 5, 3_600),
-            ThrottleKind::Verification => $this->limit($this->settings['throttle']['verification']['max'] ?? null, $this->settings['throttle']['verification']['decay'] ?? null, 5, 600),
-            ThrottleKind::Reauthentication => $this->limit($this->settings['throttle']['reauthentication']['max'] ?? null, $this->settings['throttle']['reauthentication']['decay'] ?? null, 5, 300),
+            ThrottleKind::Login => $this->limit('login', $this->settings['throttle']['login']['max'] ?? null, $this->settings['throttle']['login']['decay'] ?? null, 5, 60),
+            ThrottleKind::LoginIp => $this->limit('login_ip', $this->settings['throttle']['login_ip']['max'] ?? null, $this->settings['throttle']['login_ip']['decay'] ?? null, 50, 600),
+            ThrottleKind::LoginAccount => $this->limit('login_account', $this->settings['throttle']['login_account']['max'] ?? null, $this->settings['throttle']['login_account']['decay'] ?? null, 20, 3_600),
+            ThrottleKind::EmailRequest => $this->limit('email_request', $this->settings['throttle']['email_request']['max'] ?? null, $this->settings['throttle']['email_request']['decay'] ?? null, 3, 600),
+            ThrottleKind::EmailRequestIp => $this->limit('email_request_ip', $this->settings['throttle']['email_request_ip']['max'] ?? null, $this->settings['throttle']['email_request_ip']['decay'] ?? null, 20, 600),
+            ThrottleKind::EmailRequestAccount => $this->limit('email_request_account', $this->settings['throttle']['email_request_account']['max'] ?? null, $this->settings['throttle']['email_request_account']['decay'] ?? null, 10, 3_600),
+            ThrottleKind::Refresh => $this->limit('refresh', $this->settings['throttle']['refresh']['max'] ?? null, $this->settings['throttle']['refresh']['decay'] ?? null, 30, 60),
+            ThrottleKind::Registration => $this->limit('registration', $this->settings['throttle']['registration']['max'] ?? null, $this->settings['throttle']['registration']['decay'] ?? null, 5, 3_600),
+            ThrottleKind::Verification => $this->limit('verification', $this->settings['throttle']['verification']['max'] ?? null, $this->settings['throttle']['verification']['decay'] ?? null, 5, 600),
+            ThrottleKind::Reauthentication => $this->limit('reauthentication', $this->settings['throttle']['reauthentication']['max'] ?? null, $this->settings['throttle']['reauthentication']['decay'] ?? null, 5, 300),
         };
     }
 
@@ -579,12 +573,12 @@ final readonly class GuardConfig
 
     public function lockoutThreshold(): int
     {
-        return min($this->positiveInt($this->settings['lockout']['threshold'] ?? null, 10), 1_000_000);
+        return $this->integer($this->settings['lockout']['threshold'] ?? null, 'lockout.threshold', 10, max: 1_000_000);
     }
 
     public function lockoutDuration(): int
     {
-        return $this->positiveInt($this->settings['lockout']['duration'] ?? null, 900);
+        return $this->integer($this->settings['lockout']['duration'] ?? null, 'lockout.duration', 900);
     }
 
     public function passwordResetUnlocks(): bool
@@ -596,7 +590,7 @@ final readonly class GuardConfig
 
     public function reauthenticationTimeout(): int
     {
-        return $this->positiveInt($this->settings['reauthentication']['timeout'] ?? null, 900);
+        return $this->integer($this->settings['reauthentication']['timeout'] ?? null, 'reauthentication.timeout', 900);
     }
 
     /**
@@ -655,7 +649,7 @@ final readonly class GuardConfig
 
     public function activityRetentionDays(): int
     {
-        return $this->positiveInt($this->settings['activity']['retention_days'] ?? null, 90);
+        return $this->integer($this->settings['activity']['retention_days'] ?? null, 'activity.retention_days', 90);
     }
 
     public function newDeviceDetectionEnabled(): bool
@@ -665,7 +659,7 @@ final readonly class GuardConfig
 
     public function newDeviceHeader(): string
     {
-        return $this->nullableString($this->settings['activity']['new_device']['header'] ?? null) ?? 'X-Device-Id';
+        return $this->requiredString($this->settings['activity']['new_device']['header'] ?? null, 'activity.new_device.header', 'X-Device-Id');
     }
 
     public function newDeviceSkipsFirstLogin(): bool
@@ -675,7 +669,7 @@ final readonly class GuardConfig
 
     public function riskAssessor(): ?string
     {
-        return $this->nullableString($this->settings['risk']['assessor'] ?? null);
+        return $this->optionalString($this->settings['risk']['assessor'] ?? null, 'risk.assessor');
     }
 
     public function riskReaction(RiskLevel $level): RiskReaction
@@ -696,7 +690,7 @@ final readonly class GuardConfig
 
     public function localeHeader(): ?string
     {
-        return $this->nullableString($this->settings['locale']['header'] ?? null);
+        return $this->optionalString($this->settings['locale']['header'] ?? null, 'locale.header');
     }
 
     /**
@@ -704,7 +698,7 @@ final readonly class GuardConfig
      */
     public function supportedLocales(): array
     {
-        $supported = $this->stringList($this->settings['locale']['supported'] ?? null);
+        $supported = $this->stringList($this->settings['locale']['supported'] ?? null, 'locale.supported');
 
         if ($supported !== []) {
             return $supported;
@@ -739,12 +733,12 @@ final readonly class GuardConfig
 
     public function notificationConnection(): ?string
     {
-        return $this->nullableString($this->settings['notifications']['connection'] ?? null);
+        return $this->optionalString($this->settings['notifications']['connection'] ?? null, 'notifications.connection');
     }
 
     public function notificationQueue(): ?string
     {
-        return $this->nullableString($this->settings['notifications']['queue'] ?? null);
+        return $this->optionalString($this->settings['notifications']['queue'] ?? null, 'notifications.queue');
     }
 
     /**
@@ -752,7 +746,7 @@ final readonly class GuardConfig
      */
     public function notificationClass(NotificationType $type): ?string
     {
-        return $this->nullableString(match ($type) {
+        return $this->optionalString(match ($type) {
             NotificationType::MagicLink => $this->settings['notifications']['classes']['magic_link'] ?? null,
             NotificationType::EmailOtp => $this->settings['notifications']['classes']['email_otp'] ?? null,
             NotificationType::VerifyEmail => $this->settings['notifications']['classes']['verify_email'] ?? null,
@@ -771,12 +765,12 @@ final readonly class GuardConfig
             NotificationType::PasskeyRemoved => $this->settings['notifications']['classes']['passkey_removed'] ?? null,
             NotificationType::AccountLocked => $this->settings['notifications']['classes']['account_locked'] ?? null,
             NotificationType::RefreshTokenReuse => $this->settings['notifications']['classes']['refresh_token_reuse'] ?? null,
-        });
+        }, 'notifications.classes.'.$type->value);
     }
 
     public function frontendUrl(): string
     {
-        $url = $this->nullableString($this->settings['notifications']['frontend_url'] ?? null) ?? $this->appUrl();
+        $url = $this->optionalString($this->settings['notifications']['frontend_url'] ?? null, 'notifications.frontend_url') ?? $this->appUrl();
 
         return rtrim($url, '/');
     }
@@ -798,7 +792,8 @@ final readonly class GuardConfig
             UrlKind::Invitation => $this->settings['notifications']['urls']['invitation'] ?? null,
         };
 
-        // Blanked (e.g. an empty env var): the shipped default's path, never a guessed one.
+        // Unset: the shipped default's path, never a guessed one. Blanked (an empty env var)
+        // or not a string, it throws — a link nobody can open is not a default.
         $path = match ($kind) {
             UrlKind::MagicLink => 'magic-link',
             UrlKind::VerifyEmail => 'verify-email',
@@ -807,7 +802,7 @@ final readonly class GuardConfig
             UrlKind::Invitation => 'invitation',
         };
 
-        return $this->nullableString($template) ?? '{frontend}/auth/'.$path.'?guard={guard}#token={token}';
+        return $this->requiredString($template, 'notifications.urls.'.$kind->value, '{frontend}/auth/'.$path.'?guard={guard}#token={token}');
     }
 
     // ── Routes & resources ───────────────────────────────────────────────
@@ -819,14 +814,14 @@ final readonly class GuardConfig
 
     public function routePrefix(): string
     {
-        $prefix = $this->nullableString($this->settings['routes']['prefix'] ?? null) ?? '{guard}/auth';
+        $prefix = $this->requiredString($this->settings['routes']['prefix'] ?? null, 'routes.prefix', '{guard}/auth');
 
         return trim(str_replace('{guard}', $this->name, $prefix), '/');
     }
 
     public function routeName(): string
     {
-        $name = $this->nullableString($this->settings['routes']['name'] ?? null) ?? 'authentication.{guard}.';
+        $name = $this->requiredString($this->settings['routes']['name'] ?? null, 'routes.name', 'authentication.{guard}.');
 
         return str_replace('{guard}', $this->name, $name);
     }
@@ -836,7 +831,7 @@ final readonly class GuardConfig
      */
     public function routeMiddleware(): array
     {
-        return $this->stringList($this->settings['routes']['middleware'] ?? null);
+        return $this->stringList($this->settings['routes']['middleware'] ?? null, 'routes.middleware');
     }
 
     /**
@@ -844,7 +839,7 @@ final readonly class GuardConfig
      */
     public function authenticatedRouteMiddleware(): array
     {
-        return $this->stringList($this->settings['routes']['authenticated_middleware'] ?? null);
+        return $this->stringList($this->settings['routes']['authenticated_middleware'] ?? null, 'routes.authenticated_middleware');
     }
 
     public function invitationManagementRoutes(): bool
@@ -854,7 +849,7 @@ final readonly class GuardConfig
 
     public function accountResource(): ?string
     {
-        return $this->nullableString($this->settings['resources']['account'] ?? null);
+        return $this->optionalString($this->settings['resources']['account'] ?? null, 'resources.account');
     }
 
     // ── Helpers ──────────────────────────────────────────────────────────
@@ -895,7 +890,7 @@ final readonly class GuardConfig
     {
         $cases = [];
 
-        foreach ($this->stringList($values) as $value) {
+        foreach ($this->stringList($values, $key) as $value) {
             $case = $enum::tryFrom($value) ?? throw AuthenticationMisconfigured::because("authentication.guards.{$this->name}.{$key} contains the unknown value [{$value}].");
 
             if (! in_array($case, $cases, true)) {
@@ -907,15 +902,31 @@ final readonly class GuardConfig
     }
 
     /**
+     * A list leaf: absent or null is `[]`; anything but a list of non-empty strings throws
+     * naming the key — a stray non-string entry is never silently dropped (dropping one from
+     * `routes.authenticated_middleware` would silently remove a middleware).
+     *
      * @return list<string>
+     *
+     * @throws AuthenticationMisconfigured
      */
-    private function stringList(mixed $value): array
+    private function stringList(mixed $value, string $key): array
     {
-        if (! is_array($value)) {
+        if ($value === null) {
             return [];
         }
 
-        return array_values(array_filter($value, static fn (mixed $item): bool => is_string($item) && $item !== ''));
+        if (! is_array($value) || ! array_is_list($value)) {
+            throw AuthenticationMisconfigured::because("authentication.guards.{$this->name}.{$key} must be a list of strings.");
+        }
+
+        foreach ($value as $item) {
+            if (! is_string($item) || trim($item) === '') {
+                throw AuthenticationMisconfigured::because("authentication.guards.{$this->name}.{$key} must contain only non-empty strings.");
+            }
+        }
+
+        return $value;
     }
 
     /**
@@ -955,18 +966,70 @@ final readonly class GuardConfig
         };
     }
 
-    private function nullableString(mixed $value): ?string
+    /**
+     * An optional string leaf: absent, null or blank (an empty env var) reads as unset; a
+     * value that is not a string throws naming the key instead of silently reading as unset.
+     *
+     * @throws AuthenticationMisconfigured
+     */
+    private function optionalString(mixed $value, string $key): ?string
     {
-        return is_string($value) && trim($value) !== '' ? $value : null;
+        if ($value === null) {
+            return null;
+        }
+
+        if (! is_string($value)) {
+            throw AuthenticationMisconfigured::because("authentication.guards.{$this->name}.{$key} must be a string or null.");
+        }
+
+        return trim($value) === '' ? null : $value;
     }
 
-    private function positiveInt(mixed $value, int $default): int
+    /**
+     * A string leaf with a default: absent or null is the default; blank or not a string
+     * throws naming the key — a blanked column, header or route name never silently reads
+     * as the shipped one.
+     *
+     * @throws AuthenticationMisconfigured
+     */
+    private function requiredString(mixed $value, string $key, string $default): string
     {
-        return is_numeric($value) && (int) $value > 0 ? (int) $value : $default;
+        $value ??= $default;
+
+        if (! is_string($value) || trim($value) === '') {
+            throw AuthenticationMisconfigured::because("authentication.guards.{$this->name}.{$key} must be a non-empty string.");
+        }
+
+        return $value;
     }
 
-    private function limit(mixed $max, mixed $decay, int $defaultMax, int $defaultDecay): ThrottleLimit
+    /**
+     * An integer leaf: absent or null is the default; otherwise an int or a canonical integer
+     * string (env values arrive as strings) within the bounds — `$min` 1 unless the leaf gives
+     * 0 a meaning. `'five'`, `'1.5'`, `''` or an out-of-range value throws naming the guard's
+     * key: a junk TTL never reads as the default, and a 0 that would disable a limit never
+     * slips through.
+     *
+     * @param  string  $key  the leaf's path under the guard, matching the offset chain read
+     *
+     * @throws AuthenticationMisconfigured
+     */
+    private function integer(mixed $value, string $key, int $default, ?int $min = 1, ?int $max = null): int
     {
-        return new ThrottleLimit($this->positiveInt($max, $defaultMax), $this->positiveInt($decay, $defaultDecay));
+        $key = "authentication.guards.{$this->name}.{$key}";
+
+        try {
+            return Config::for([$key => $value])->integer($key, $default, $min, $max);
+        } catch (InvalidConfigurationException $e) {
+            throw AuthenticationMisconfigured::because($e->getMessage());
+        }
+    }
+
+    private function limit(string $kind, mixed $max, mixed $decay, int $defaultMax, int $defaultDecay): ThrottleLimit
+    {
+        return new ThrottleLimit(
+            $this->integer($max, "throttle.{$kind}.max", $defaultMax),
+            $this->integer($decay, "throttle.{$kind}.decay", $defaultDecay),
+        );
     }
 }

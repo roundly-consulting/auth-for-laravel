@@ -8,6 +8,7 @@ use Carbon\CarbonImmutable;
 use Illuminate\Container\Container;
 use RoundlyConsulting\Auth\Guards\GuardRegistry;
 use RoundlyConsulting\Jwt\Facades\Jwt;
+use RoundlyConsulting\PackageToolkit\Support\Config;
 use RoundlyConsulting\RefreshTokens\Contracts\AccessTokenRevoker;
 use SensitiveParameter;
 
@@ -31,13 +32,14 @@ final class JwtAccessTokenRevoker implements AccessTokenRevoker
 
     private function horizon(): int
     {
-        $default = (int) config('jwt.ttl', 900);
+        // jwt-for-laravel's own settings, read as strictly as jwt reads them.
+        $default = Config::integer('jwt.ttl', 900, min: 1);
         $longest = $default;
 
         foreach (Container::getInstance()->make(GuardRegistry::class)->all() as $guard) {
             $longest = max($longest, $guard->accessTtl() ?? $default);
         }
 
-        return $longest + max(0, (int) config('jwt.leeway', 0));
+        return $longest + Config::integer('jwt.leeway', 10, min: 0);
     }
 }

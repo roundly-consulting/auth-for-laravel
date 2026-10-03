@@ -76,9 +76,13 @@ final class GuardRegistry
 
     public function defaultGuard(): string
     {
-        $default = config('authentication.default');
+        $default = config('authentication.default') ?? 'users';
 
-        return is_string($default) && $default !== '' ? $default : 'users';
+        if (! is_string($default) || trim($default) === '') {
+            throw AuthenticationMisconfigured::because('authentication.default must be a guard name.');
+        }
+
+        return $default;
     }
 
     /**
@@ -92,18 +96,30 @@ final class GuardRegistry
             return $this->unvalidated;
         }
 
-        $defaults = config('authentication.defaults');
-        $guards = config('authentication.guards');
-        $defaults = is_array($defaults) ? $defaults : [];
+        $defaults = config('authentication.defaults') ?? [];
+        $guards = config('authentication.guards') ?? [];
         $built = [];
 
-        foreach (is_array($guards) ? $guards : [] as $name => $settings) {
+        // A mistyped section must not silently become "no defaults" or "no guards".
+        if (! is_array($defaults)) {
+            throw AuthenticationMisconfigured::because('authentication.defaults must be an array.');
+        }
+
+        if (! is_array($guards)) {
+            throw AuthenticationMisconfigured::because('authentication.guards must be an array keyed by guard name.');
+        }
+
+        foreach ($guards as $name => $settings) {
             if (! is_string($name) || $name === '') {
-                continue;
+                throw AuthenticationMisconfigured::because('authentication.guards must be keyed by guard name.');
+            }
+
+            if (! is_array($settings)) {
+                throw AuthenticationMisconfigured::because("authentication.guards.{$name} must be an array.");
             }
 
             /** @var array<string, mixed> $merged */
-            $merged = ConfigMerger::merge($defaults, is_array($settings) ? $settings : []);
+            $merged = ConfigMerger::merge($defaults, $settings);
 
             $built[$name] = new GuardConfig($name, $merged);
         }
