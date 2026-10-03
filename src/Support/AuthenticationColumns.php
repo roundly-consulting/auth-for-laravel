@@ -35,6 +35,8 @@ final class AuthenticationColumns
     public static function defaultTable(): string
     {
         $default = config('authentication.default');
+        // Not set (null or blank) is the shipped `users` guard, as GuardRegistry reads it.
+        $default = $default === null || (is_string($default) && trim($default) === '') ? 'users' : $default;
         $guards = config('authentication.guards');
         $model = is_string($default) && is_array($guards) && is_array($guards[$default] ?? null)
             ? ($guards[$default]['model'] ?? null)

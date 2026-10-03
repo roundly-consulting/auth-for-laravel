@@ -177,7 +177,7 @@ final class ConfigValidation
 
     /**
      * Every integer, string and list leaf, for the same reason as the switches: a junk TTL,
-     * a blanked route name or a mistyped middleware list throws naming its key when the
+     * a non-string route name or a mistyped middleware list throws naming its key when the
      * guard resolves, never mid-flow.
      *
      * @throws AuthenticationMisconfigured

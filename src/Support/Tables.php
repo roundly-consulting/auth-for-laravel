@@ -33,17 +33,20 @@ final class Tables
     }
 
     /**
-     * The configured name, or the default only when the key is absent; a blank or non-string
-     * name throws rather than silently reading as the shipped one.
+     * The configured name, or the default when the key is not set (absent, null or blank —
+     * an empty env var); a non-string name throws rather than silently reading as the
+     * shipped one.
      *
      * @throws AuthenticationMisconfigured
      */
     private static function name(string $key, mixed $configured, string $default): string
     {
-        $configured ??= $default;
+        if ($configured === null || (is_string($configured) && trim($configured) === '')) {
+            return $default;
+        }
 
-        if (! is_string($configured) || trim($configured) === '') {
-            throw AuthenticationMisconfigured::because("{$key} must be a non-empty string.");
+        if (! is_string($configured)) {
+            throw AuthenticationMisconfigured::because("{$key} must be a string.");
         }
 
         return $configured;

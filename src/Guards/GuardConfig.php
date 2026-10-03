@@ -91,7 +91,7 @@ final readonly class GuardConfig
     {
         $model = $this->settings['model'] ?? null;
 
-        return is_string($model) && $model !== '' ? $model : null;
+        return is_string($model) && trim($model) !== '' ? $model : null;
     }
 
     /**
@@ -198,7 +198,7 @@ final readonly class GuardConfig
 
     public function twoFactorMode(): TwoFactorMode
     {
-        return $this->enum(TwoFactorMode::class, $this->settings['two_factor']['mode'] ?? null, 'two_factor.mode');
+        return $this->enum(TwoFactorMode::class, $this->settings['two_factor']['mode'] ?? null, 'two_factor.mode', TwoFactorMode::Optional);
     }
 
     public function twoFactorAfterEmailLogin(): bool
@@ -235,12 +235,12 @@ final readonly class GuardConfig
 
     public function passkeyMode(): PasskeyMode
     {
-        return $this->enum(PasskeyMode::class, $this->settings['passkeys']['mode'] ?? null, 'passkeys.mode');
+        return $this->enum(PasskeyMode::class, $this->settings['passkeys']['mode'] ?? null, 'passkeys.mode', PasskeyMode::Optional);
     }
 
     public function passkeySecondFactor(): PasskeySecondFactor
     {
-        return $this->enum(PasskeySecondFactor::class, $this->settings['passkeys']['second_factor'] ?? null, 'passkeys.second_factor');
+        return $this->enum(PasskeySecondFactor::class, $this->settings['passkeys']['second_factor'] ?? null, 'passkeys.second_factor', PasskeySecondFactor::Allowed);
     }
 
     public function passkeySatisfiesMfa(): bool
@@ -254,7 +254,7 @@ final readonly class GuardConfig
     {
         $ttl = $this->settings['tokens']['access_ttl'] ?? null;
 
-        return $ttl === null ? null : $this->integer($ttl, 'tokens.access_ttl', 0, min: 1);
+        return self::notSet($ttl) ? null : $this->integer($ttl, 'tokens.access_ttl', 0, min: 1);
     }
 
     public function refreshTtl(): int
@@ -281,29 +281,29 @@ final readonly class GuardConfig
     {
         $max = $this->settings['sessions']['max_active'] ?? null;
 
-        return $max === null ? null : $this->integer($max, 'sessions.max_active', 0, min: 1);
+        return self::notSet($max) ? null : $this->integer($max, 'sessions.max_active', 0, min: 1);
     }
 
     public function invalidationScope(InvalidationReason $reason): InvalidationScope
     {
         $configured = match ($reason) {
-            InvalidationReason::PasswordChanged => $this->settings['invalidation']['password_changed'] ?? 'others',
-            InvalidationReason::PasswordReset => $this->settings['invalidation']['password_reset'] ?? 'all',
-            InvalidationReason::EmailChanged => $this->settings['invalidation']['email_changed'] ?? 'others',
-            InvalidationReason::TwoFactorChanged => $this->settings['invalidation']['two_factor_changed'] ?? 'others',
-            InvalidationReason::PasskeyChanged => $this->settings['invalidation']['passkey_changed'] ?? 'none',
+            InvalidationReason::PasswordChanged => [$this->settings['invalidation']['password_changed'] ?? null, InvalidationScope::Others],
+            InvalidationReason::PasswordReset => [$this->settings['invalidation']['password_reset'] ?? null, InvalidationScope::All],
+            InvalidationReason::EmailChanged => [$this->settings['invalidation']['email_changed'] ?? null, InvalidationScope::Others],
+            InvalidationReason::TwoFactorChanged => [$this->settings['invalidation']['two_factor_changed'] ?? null, InvalidationScope::Others],
+            InvalidationReason::PasskeyChanged => [$this->settings['invalidation']['passkey_changed'] ?? null, InvalidationScope::None],
             // Never configurable below `all`.
-            InvalidationReason::AccountDisabled, InvalidationReason::Logout, InvalidationReason::Security => 'all',
+            InvalidationReason::AccountDisabled, InvalidationReason::Logout, InvalidationReason::Security => [InvalidationScope::All, InvalidationScope::All],
         };
 
-        return $this->enum(InvalidationScope::class, $configured, 'invalidation.'.$reason->value);
+        return $this->enum(InvalidationScope::class, $configured[0], 'invalidation.'.$reason->value, $configured[1]);
     }
 
     // ── Registration & invitations ───────────────────────────────────────
 
     public function registrationMode(): RegistrationMode
     {
-        return $this->enum(RegistrationMode::class, $this->settings['registration']['mode'] ?? null, 'registration.mode');
+        return $this->enum(RegistrationMode::class, $this->settings['registration']['mode'] ?? null, 'registration.mode', RegistrationMode::Closed);
     }
 
     public function registrationRequiresPassword(): bool
@@ -381,12 +381,12 @@ final readonly class GuardConfig
 
     public function verificationMode(): EmailVerificationMode
     {
-        return $this->enum(EmailVerificationMode::class, $this->settings['verification']['mode'] ?? null, 'verification.mode');
+        return $this->enum(EmailVerificationMode::class, $this->settings['verification']['mode'] ?? null, 'verification.mode', EmailVerificationMode::Optional);
     }
 
     public function verificationChannel(): VerificationChannel
     {
-        return $this->enum(VerificationChannel::class, $this->settings['verification']['channel'] ?? null, 'verification.channel');
+        return $this->enum(VerificationChannel::class, $this->settings['verification']['channel'] ?? null, 'verification.channel', VerificationChannel::Link);
     }
 
     public function verificationResendDecay(): int
@@ -644,7 +644,7 @@ final readonly class GuardConfig
 
     public function identifierStorage(): IdentifierStorage
     {
-        return $this->enum(IdentifierStorage::class, $this->settings['activity']['store_identifier'] ?? null, 'activity.store_identifier');
+        return $this->enum(IdentifierStorage::class, $this->settings['activity']['store_identifier'] ?? null, 'activity.store_identifier', IdentifierStorage::Plain);
     }
 
     public function activityRetentionDays(): int
@@ -676,8 +676,8 @@ final readonly class GuardConfig
     {
         return match ($level) {
             RiskLevel::Low => RiskReaction::Allow,
-            RiskLevel::Elevated => $this->enum(RiskReaction::class, $this->settings['risk']['reactions']['elevated'] ?? 'notify', 'risk.reactions.elevated'),
-            RiskLevel::High => $this->enum(RiskReaction::class, $this->settings['risk']['reactions']['high'] ?? 'require_second_factor', 'risk.reactions.high'),
+            RiskLevel::Elevated => $this->enum(RiskReaction::class, $this->settings['risk']['reactions']['elevated'] ?? null, 'risk.reactions.elevated', RiskReaction::Notify),
+            RiskLevel::High => $this->enum(RiskReaction::class, $this->settings['risk']['reactions']['high'] ?? null, 'risk.reactions.high', RiskReaction::RequireSecondFactor),
         };
     }
 
@@ -728,7 +728,7 @@ final readonly class GuardConfig
 
     public function notificationDelivery(): NotificationDelivery
     {
-        return $this->enum(NotificationDelivery::class, $this->settings['notifications']['delivery'] ?? null, 'notifications.delivery');
+        return $this->enum(NotificationDelivery::class, $this->settings['notifications']['delivery'] ?? null, 'notifications.delivery', NotificationDelivery::AfterResponse);
     }
 
     public function notificationConnection(): ?string
@@ -792,8 +792,8 @@ final readonly class GuardConfig
             UrlKind::Invitation => $this->settings['notifications']['urls']['invitation'] ?? null,
         };
 
-        // Unset: the shipped default's path, never a guessed one. Blanked (an empty env var)
-        // or not a string, it throws — a link nobody can open is not a default.
+        // Not set (absent, null or blank — an empty env var): the shipped default's path,
+        // never a guessed one. Not a string, it throws.
         $path = match ($kind) {
             UrlKind::MagicLink => 'magic-link',
             UrlKind::VerifyEmail => 'verify-email',
@@ -855,15 +855,23 @@ final readonly class GuardConfig
     // ── Helpers ──────────────────────────────────────────────────────────
 
     /**
+     * An enum leaf: not set (absent, null or blank — an empty env var) is the shipped
+     * default; an unknown value throws naming the key rather than reading as the default.
+     *
      * @template TEnum of BackedEnum
      *
      * @param  class-string<TEnum>  $enum
+     * @param  TEnum  $default
      * @return TEnum
      */
-    private function enum(string $enum, mixed $value, string $key): BackedEnum
+    private function enum(string $enum, mixed $value, string $key, BackedEnum $default): BackedEnum
     {
         if ($value instanceof $enum) {
             return $value;
+        }
+
+        if (self::notSet($value)) {
+            return $default;
         }
 
         $case = is_string($value) ? $enum::tryFrom($value) : null;
@@ -902,9 +910,9 @@ final readonly class GuardConfig
     }
 
     /**
-     * A list leaf: absent or null is `[]`; anything but a list of non-empty strings throws
-     * naming the key — a stray non-string entry is never silently dropped (dropping one from
-     * `routes.authenticated_middleware` would silently remove a middleware).
+     * A list leaf: not set (absent, null or blank) is `[]`; anything but a list of non-empty
+     * strings throws naming the key — a stray entry is never silently dropped (dropping one
+     * from `routes.authenticated_middleware` would silently remove a middleware).
      *
      * @return list<string>
      *
@@ -912,7 +920,7 @@ final readonly class GuardConfig
      */
     private function stringList(mixed $value, string $key): array
     {
-        if ($value === null) {
+        if (self::notSet($value)) {
             return [];
         }
 
@@ -932,8 +940,9 @@ final readonly class GuardConfig
     /**
      * A switch read the way env values arrive: env() only converts "true"/"false", so
      * "1"/"on"/"yes" and "0"/"off"/"no" are parsed as booleans here rather than cast (a
-     * `(bool) 'off'` is true). Absent or null is the default; anything else throws,
-     * naming the guard's key, so a typo can never quietly flip a switch to its default.
+     * `(bool) 'off'` is true). Not set (absent, null or blank) is the default; anything
+     * else throws, naming the guard's key, so a typo can never quietly flip a switch to
+     * its default.
      *
      * @param  string  $key  the leaf's path under the guard, matching the offset chain read
      *
@@ -951,15 +960,19 @@ final readonly class GuardConfig
     }
 
     /**
-     * A two-way string switch (`identifier.normalize`, `risk.deny_response`). Absent or
-     * null is the default; an unknown spelling throws rather than silently picking a side.
+     * A two-way string switch (`identifier.normalize`, `risk.deny_response`). Not set
+     * (absent, null or blank) is the default; an unknown spelling throws rather than
+     * silently picking a side.
      *
      * @throws AuthenticationMisconfigured
      */
     private function choice(mixed $value, string $key, string $on, string $off, bool $default): bool
     {
+        if (self::notSet($value)) {
+            return $default;
+        }
+
         return match ($value) {
-            null => $default,
             $on => true,
             $off => false,
             default => throw AuthenticationMisconfigured::because("authentication.guards.{$this->name}.{$key} must be {$on} or {$off}."),
@@ -986,29 +999,39 @@ final readonly class GuardConfig
     }
 
     /**
-     * A string leaf with a default: absent or null is the default; blank or not a string
-     * throws naming the key — a blanked column, header or route name never silently reads
-     * as the shipped one.
+     * A string leaf with a default: not set (absent, null or blank — an empty env var) is
+     * the default; a value that is not a string throws naming the key.
      *
      * @throws AuthenticationMisconfigured
      */
     private function requiredString(mixed $value, string $key, string $default): string
     {
-        $value ??= $default;
+        if (self::notSet($value)) {
+            return $default;
+        }
 
-        if (! is_string($value) || trim($value) === '') {
-            throw AuthenticationMisconfigured::because("authentication.guards.{$this->name}.{$key} must be a non-empty string.");
+        if (! is_string($value)) {
+            throw AuthenticationMisconfigured::because("authentication.guards.{$this->name}.{$key} must be a string.");
         }
 
         return $value;
     }
 
     /**
-     * An integer leaf: absent or null is the default; otherwise an int or a canonical integer
-     * string (env values arrive as strings) within the bounds — `$min` 1 unless the leaf gives
-     * 0 a meaning. `'five'`, `'1.5'`, `''` or an out-of-range value throws naming the guard's
-     * key: a junk TTL never reads as the default, and a 0 that would disable a limit never
-     * slips through.
+     * Absent, null or blank (`''` or whitespace — what a host's `KEY=` puts in config):
+     * the leaf is not set, so its default applies.
+     */
+    private static function notSet(mixed $value): bool
+    {
+        return $value === null || (is_string($value) && trim($value) === '');
+    }
+
+    /**
+     * An integer leaf: not set (absent, null or blank) is the default; otherwise an int or a
+     * canonical integer string (env values arrive as strings) within the bounds — `$min` 1
+     * unless the leaf gives 0 a meaning. `'five'`, `'1.5'` or an out-of-range value throws
+     * naming the guard's key: a junk TTL never reads as the default, and a 0 that would
+     * disable a limit never slips through.
      *
      * @param  string  $key  the leaf's path under the guard, matching the offset chain read
      *

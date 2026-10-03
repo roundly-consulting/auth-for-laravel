@@ -29,3 +29,10 @@ it('targets the default guard model table, else users', function (): void {
     config()->set('authentication.guards.clients.model', 'App\\Models\\Missing');
     expect(AuthenticationColumns::defaultTable())->toBe('users');
 });
+
+it('reads a blank default guard as the users guard when picking the table (strict config)', function (): void {
+    config()->set('authentication.guards.users.model', Client::class);
+    config()->set('authentication.default', '');
+
+    expect(AuthenticationColumns::defaultTable())->toBe((new Client)->getTable());
+});

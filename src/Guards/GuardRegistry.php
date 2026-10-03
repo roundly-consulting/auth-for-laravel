@@ -76,9 +76,14 @@ final class GuardRegistry
 
     public function defaultGuard(): string
     {
-        $default = config('authentication.default') ?? 'users';
+        $default = config('authentication.default');
 
-        if (! is_string($default) || trim($default) === '') {
+        // Not set (absent, null or blank — an empty AUTHENTICATION_GUARD=) is the shipped guard.
+        if ($default === null || (is_string($default) && trim($default) === '')) {
+            return 'users';
+        }
+
+        if (! is_string($default)) {
             throw AuthenticationMisconfigured::because('authentication.default must be a guard name.');
         }
 
