@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 return [
     'code_line' => 'Váš kód: :code',
-    'expiry' => '{1} Platnosť vyprší o :minutes minútu.|[2,4] Platnosť vyprší o :minutes minúty.|[5,*] Platnosť vyprší o :minutes minút.',
+    'expiry' => '{1} Platnosť vyprší o :minutes minútu.|[2,4] Platnosť vyprší o :minutes minúty.|[0,*] Platnosť vyprší o :minutes minút.',
 
     'magic_link' => [
         'subject' => 'Váš prihlasovací odkaz do aplikácie :app',

@@ -6,6 +6,10 @@ All notable changes to `auth-for-laravel` are documented in this file. The forma
 
 ## Unreleased
 
+### Fixed
+
+- The `notifications.expiry` plural line also covers a count of 0, so it never renders with a leading space.
+
 ## 1.0.2 - 2026-10-04
 
 ### Fixed

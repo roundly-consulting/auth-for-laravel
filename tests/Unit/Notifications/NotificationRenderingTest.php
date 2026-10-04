@@ -42,6 +42,15 @@ it('pluralises the expiry line in english and slovak', function (string $locale,
     'sk, 15 minutes' => ['sk', 15, 'Platnosť vyprší o 15 minút.'],
 ]);
 
+it('renders a zero-minute expiry without stray whitespace', function (string $locale, string $line): void {
+    app()->setLocale($locale);
+
+    expect(trans_choice('authentication::notifications.expiry', 0, ['minutes' => 0]))->toBe($line);
+})->with([
+    'en' => ['en', 'This expires in 0 minutes.'],
+    'sk' => ['sk', 'Platnosť vyprší o 0 minút.'],
+]);
+
 it('keeps a published single-form expiry override working', function (): void {
     $this->freezeTime();
     trans('authentication::notifications.expiry');
