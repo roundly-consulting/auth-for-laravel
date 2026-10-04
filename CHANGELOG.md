@@ -6,6 +6,8 @@ All notable changes to `auth-for-laravel` are documented in this file. The forma
 
 ## Unreleased
 
+## 1.0.2 - 2026-10-04
+
 ### Fixed
 
 - Notification emails now say "1 minute" instead of "1 minutes" in the link and code expiry line, with the correct Slovak plural forms; published `notifications.expiry` overrides without plural forms keep working.
