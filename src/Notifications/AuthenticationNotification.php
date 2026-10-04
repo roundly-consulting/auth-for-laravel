@@ -50,7 +50,7 @@ abstract class AuthenticationNotification extends Notification
         }
 
         if ($this->data->expiresAt !== null) {
-            $mail->line($this->translate('authentication::notifications.expiry', $replacements));
+            $mail->line(trans_choice('authentication::notifications.expiry', (int) ($replacements['minutes'] ?? $this->minutesLeft()), $replacements));
         }
 
         return $mail->line($this->translate("{$key}.outro", $replacements));
@@ -68,8 +68,17 @@ abstract class AuthenticationNotification extends Notification
             'app' => is_string($appName) ? $appName : 'Laravel',
             'guard' => $this->data->guard,
             'code' => $this->data->code ?? '',
-            'minutes' => $this->data->expiresAt === null ? 0 : max(1, (int) ceil(now()->diffInSeconds($this->data->expiresAt, false) / 60)),
+            'minutes' => $this->minutesLeft(),
         ];
+    }
+
+    /**
+     * Whole minutes until the link or code expires, rounded up and never below one (0
+     * without an expiry). The `expiry` line picks its plural form from the same value.
+     */
+    protected function minutesLeft(): int
+    {
+        return $this->data->expiresAt === null ? 0 : max(1, (int) ceil(now()->diffInSeconds($this->data->expiresAt, false) / 60));
     }
 
     /**

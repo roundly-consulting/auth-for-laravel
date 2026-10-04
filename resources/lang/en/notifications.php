@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 return [
     'code_line' => 'Your code: :code',
-    'expiry' => 'This expires in :minutes minutes.',
+    'expiry' => '{1} This expires in :minutes minute.|[2,*] This expires in :minutes minutes.',
 
     'magic_link' => [
         'subject' => 'Your sign-in link for :app',
