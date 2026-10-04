@@ -28,6 +28,26 @@ it('reports reuse of a rotated refresh token with the guard and account, and tel
     Notification::assertSentTo($user, SuspiciousSessionNotification::class);
 });
 
+it('keeps the reuse reason machine-readable and renders it in slovak without english', function (): void {
+    Notification::fake();
+    Event::listen(RefreshTokenReuseDetected::class, ReportRefreshTokenReuse::class);
+    $user = User::factory()->create();
+    $pair = issuePair($user);
+
+    Authentication::guard('users')->refresh($pair->refreshToken, sessionContext());
+    expect(fn () => Authentication::guard('users')->refresh($pair->refreshToken, sessionContext()))->toThrow(InvalidRefreshToken::class);
+
+    Notification::assertSentTo($user, SuspiciousSessionNotification::class, function (SuspiciousSessionNotification $sent, array $channels, object $notifiable): bool {
+        app()->setLocale('sk');
+        $intro = $sent->toMail($notifiable)->introLines[0];
+        app()->setLocale('en');
+
+        return $sent->data->replacements['reason'] === 'refresh_token_reuse'
+            && str_contains($intro, '(opätovne použitý token relácie)')
+            && ! str_contains($intro, 'refresh_token_reuse');
+    });
+});
+
 it('ignores reuse on owners it does not know', function (): void {
     Event::fake([RefreshTokenReuseReported::class]);
 

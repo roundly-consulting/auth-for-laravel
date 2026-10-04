@@ -20,6 +20,17 @@ use RoundlyConsulting\Auth\Enums\NotificationType;
  */
 abstract class AuthenticationNotification extends Notification
 {
+    /**
+     * The machine-readable `:reason` values the package sends, and the
+     * `notifications.refresh_token_reuse.reasons.*` line each renders as. Any other
+     * value is shown as given.
+     */
+    private const array REASONS = [
+        'refresh_token_reuse' => 'token_reuse',
+        'blocked sign-in' => 'blocked_sign_in',
+        'unusual sign-in' => 'unusual_sign_in',
+    ];
+
     public function __construct(public readonly NotificationData $data) {}
 
     abstract public function type(): NotificationType;
@@ -62,14 +73,32 @@ abstract class AuthenticationNotification extends Notification
     protected function replacements(): array
     {
         $appName = config('app.name');
-
-        return [
+        $replacements = [
             ...$this->data->replacements,
             'app' => is_string($appName) ? $appName : 'Laravel',
             'guard' => $this->data->guard,
             'code' => $this->data->code ?? '',
             'minutes' => $this->minutesLeft(),
         ];
+
+        if (isset($replacements['reason'])) {
+            $replacements['reason'] = $this->reason($replacements['reason']);
+        }
+
+        return $replacements;
+    }
+
+    /**
+     * A reason the package sent, in the notification's locale (rendering runs inside it);
+     * anything else unchanged. `data->replacements` keeps the machine-readable value.
+     */
+    private function reason(string|int $reason): string|int
+    {
+        if (! is_string($reason) || ! isset(self::REASONS[$reason])) {
+            return $reason;
+        }
+
+        return $this->translate('authentication::notifications.refresh_token_reuse.reasons.'.self::REASONS[$reason], []);
     }
 
     /**

@@ -9,6 +9,7 @@ use RoundlyConsulting\Auth\Enums\NotificationType;
 use RoundlyConsulting\Auth\Guards\GuardRegistry;
 use RoundlyConsulting\Auth\Notifications\AuthenticationNotification;
 use RoundlyConsulting\Auth\Notifications\MagicLinkNotification;
+use RoundlyConsulting\Auth\Notifications\SuspiciousSessionNotification;
 
 it('renders every notification from its own copy', function (NotificationType $type): void {
     $class = app(GuardRegistry::class)->get('users')->notificationClass($type);
@@ -50,4 +51,27 @@ it('keeps a published single-form expiry override working', function (): void {
         ->toMail(new AnonymousNotifiable);
 
     expect($mail->outroLines)->toContain('Valid for 1 min.');
+});
+
+it('renders the suspicious-activity reason in the mail locale', function (string $locale, string $reason, string $intro): void {
+    app()->setLocale($locale);
+
+    $mail = (new SuspiciousSessionNotification(new NotificationData('users', replacements: ['reason' => $reason])))
+        ->toMail(new AnonymousNotifiable);
+
+    expect($mail->introLines[0])->toBe($intro);
+})->with([
+    'en, refresh token reuse' => ['en', 'refresh_token_reuse', 'We noticed suspicious activity on your account (a reused session token) and signed the affected session out.'],
+    'en, blocked sign-in' => ['en', 'blocked sign-in', 'We noticed suspicious activity on your account (a blocked sign-in attempt) and signed the affected session out.'],
+    'en, unusual sign-in' => ['en', 'unusual sign-in', 'We noticed suspicious activity on your account (an unusual sign-in) and signed the affected session out.'],
+    'sk, refresh token reuse' => ['sk', 'refresh_token_reuse', 'Vo vašom účte sme zaznamenali podozrivú aktivitu (opätovne použitý token relácie) a dotknutú reláciu sme odhlásili.'],
+    'sk, blocked sign-in' => ['sk', 'blocked sign-in', 'Vo vašom účte sme zaznamenali podozrivú aktivitu (zablokovaný pokus o prihlásenie) a dotknutú reláciu sme odhlásili.'],
+    'sk, unusual sign-in' => ['sk', 'unusual sign-in', 'Vo vašom účte sme zaznamenali podozrivú aktivitu (nezvyčajné prihlásenie) a dotknutú reláciu sme odhlásili.'],
+]);
+
+it('passes a reason it does not know through unchanged', function (): void {
+    $mail = (new SuspiciousSessionNotification(new NotificationData('users', replacements: ['reason' => 'a host-supplied reason'])))
+        ->toMail(new AnonymousNotifiable);
+
+    expect($mail->introLines[0])->toContain('(a host-supplied reason)');
 });

@@ -113,5 +113,10 @@ return [
         'intro' => 'Vo vašom účte sme zaznamenali podozrivú aktivitu (:reason) a dotknutú reláciu sme odhlásili.',
         'action' => 'Skontrolovať relácie',
         'outro' => 'Ak ste to neboli vy, odhláste sa na všetkých zariadeniach a zmeňte si heslo.',
+        'reasons' => [
+            'token_reuse' => 'opätovne použitý token relácie',
+            'blocked_sign_in' => 'zablokovaný pokus o prihlásenie',
+            'unusual_sign_in' => 'nezvyčajné prihlásenie',
+        ],
     ],
 ];

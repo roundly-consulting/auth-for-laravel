@@ -113,5 +113,10 @@ return [
         'intro' => 'We noticed suspicious activity on your account (:reason) and signed the affected session out.',
         'action' => 'Review your sessions',
         'outro' => 'If this was not you, sign out everywhere and change your password.',
+        'reasons' => [
+            'token_reuse' => 'a reused session token',
+            'blocked_sign_in' => 'a blocked sign-in attempt',
+            'unusual_sign_in' => 'an unusual sign-in',
+        ],
     ],
 ];

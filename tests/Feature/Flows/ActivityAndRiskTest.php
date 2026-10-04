@@ -140,11 +140,11 @@ it('applies the configured risk reactions', function (RiskLevel $level, string $
 
     if ($outcome === 'denied') {
         expect(fn () => login($user))->toThrow(InvalidCredentials::class);
-        Notification::assertSentTo($user, SuspiciousSessionNotification::class);
+        Notification::assertSentTo($user, SuspiciousSessionNotification::class, fn (SuspiciousSessionNotification $sent): bool => $sent->data->replacements['reason'] === 'blocked sign-in');
         Event::assertDispatched(SuspiciousLoginDetected::class);
     } elseif ($outcome === 'notified') {
         expect(login($user)->isAuthenticated())->toBeTrue();
-        Notification::assertSentTo($user, SuspiciousSessionNotification::class);
+        Notification::assertSentTo($user, SuspiciousSessionNotification::class, fn (SuspiciousSessionNotification $sent): bool => $sent->data->replacements['reason'] === 'unusual sign-in');
     } else {
         expect(login($user)->isAuthenticated())->toBeTrue();
         Notification::assertNothingSentTo($user);

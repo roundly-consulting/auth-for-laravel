@@ -9,6 +9,7 @@ All notable changes to `auth-for-laravel` are documented in this file. The forma
 ### Fixed
 
 - Notification emails now say "1 minute" instead of "1 minutes" in the link and code expiry line, with the correct Slovak plural forms; published `notifications.expiry` overrides without plural forms keep working.
+- The suspicious-activity email (`SuspiciousSessionNotification`) now describes the reason in the recipient's language — Slovak mail no longer contains English reason text such as `refresh_token_reuse` or `blocked sign-in`. The machine-readable `reason` value in the notification data is unchanged; the wording lives in `notifications.refresh_token_reuse.reasons.*`.
 
 ## 1.0.1 - 2026-10-04
 
