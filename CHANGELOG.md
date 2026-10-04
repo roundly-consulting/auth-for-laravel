@@ -6,6 +6,16 @@ All notable changes to `auth-for-laravel` are documented in this file. The forma
 
 ## Unreleased
 
+## 1.0.1 - 2026-10-04
+
+### Changed
+
+- Maintenance: `composer.json` `homepage` and `support.docs` now point to the documentation site.
+
+### Fixed
+
+- Slovak (`sk`) translations now ship alongside English for every language file.
+
 ## 1.0.0 - 2026-10-03
 
 Initial public release.
