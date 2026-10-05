@@ -12,6 +12,7 @@ use RoundlyConsulting\Auth\Enums\UrlKind;
 use RoundlyConsulting\Auth\Events\InvitationSent;
 use RoundlyConsulting\Auth\Exceptions\InvalidInvitation;
 use RoundlyConsulting\Auth\Exceptions\InvitationNotFound;
+use RoundlyConsulting\Auth\Exceptions\InvitationSendLimitReached;
 use RoundlyConsulting\Auth\Guards\GuardRegistry;
 use RoundlyConsulting\Auth\Models\Invitation;
 use RoundlyConsulting\Auth\Support\Models;
@@ -25,7 +26,8 @@ use RoundlyConsulting\Crypto\Random\Token;
  * invitation's locale, and returns the link once — an admin UI may also show it as a
  * copyable link. With `$notify = false` nothing is mailed: the host delivers the link
  * itself, and no send is counted (`send_count`, `last_sent_at`, the resend cooldown and
- * {@see InvitationSent} track real mails only). Only a pending invitation gets a link;
+ * {@see InvitationSent} track real mails only), and a mail past `max_sends` is refused
+ * ({@see InvitationSendLimitReached}). Only a pending invitation gets a link;
  * another guard's is unknown here ({@see InvitationNotFound}). The plaintext is never
  * stored or logged.
  */
@@ -49,13 +51,21 @@ final readonly class SendInvitation
 
         $config = $this->guards->get($guard);
         $token = Token::urlSafe(64);
+        $row = Models::invitations()->whereKey($invitation->getKey())->where('guard', $guard);
+        $hash = $this->hasher->link($guard, 'invitation', $token);
 
-        $sent = $notify ? ['send_count' => $invitation->send_count + 1, 'last_sent_at' => CarbonImmutable::now()] : [];
+        if ($notify) {
+            // Counted in SQL and capped at `max_sends`: concurrent sends never mail past the
+            // cap, and the count is never a value read before them.
+            $sent = $row->where('send_count', '<', $config->invitationMaxSends())
+                ->increment('send_count', 1, ['token_hash' => $hash, 'last_sent_at' => CarbonImmutable::now()]);
 
-        Models::invitations()->whereKey($invitation->getKey())->where('guard', $guard)->update([
-            'token_hash' => $this->hasher->link($guard, 'invitation', $token),
-            ...$sent,
-        ]);
+            if ($sent === 0) {
+                throw $invitation->refresh()->send_count >= $config->invitationMaxSends() ? new InvitationSendLimitReached : new InvalidInvitation;
+            }
+        } else {
+            $row->update(['token_hash' => $hash]);
+        }
 
         $invitation->refresh();
         $url = UrlTemplate::render($config, UrlKind::Invitation, $token, $invitation->email);

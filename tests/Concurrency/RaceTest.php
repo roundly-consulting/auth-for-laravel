@@ -14,6 +14,7 @@ use RoundlyConsulting\Auth\Actions\Registration\CreateAccount;
 use RoundlyConsulting\Auth\Contracts\Account;
 use RoundlyConsulting\Auth\Contracts\CreatesAccounts;
 use RoundlyConsulting\Auth\DataTransferObjects\ChallengeFactorData;
+use RoundlyConsulting\Auth\DataTransferObjects\InvitationData;
 use RoundlyConsulting\Auth\DataTransferObjects\NewAccountData;
 use RoundlyConsulting\Auth\DataTransferObjects\PasswordCredentials;
 use RoundlyConsulting\Auth\DataTransferObjects\PendingChallenge;
@@ -27,13 +28,16 @@ use RoundlyConsulting\Auth\Exceptions\ChallengeFactorFailed;
 use RoundlyConsulting\Auth\Exceptions\ChallengeInvalid;
 use RoundlyConsulting\Auth\Exceptions\InvalidCode;
 use RoundlyConsulting\Auth\Exceptions\InvalidOneTimeToken;
+use RoundlyConsulting\Auth\Exceptions\InvitationSendLimitReached;
 use RoundlyConsulting\Auth\Exceptions\TooManyAttempts;
 use RoundlyConsulting\Auth\Facades\Authentication;
 use RoundlyConsulting\Auth\Guards\GuardConfig;
+use RoundlyConsulting\Auth\Models\Invitation;
 use RoundlyConsulting\Auth\Models\LoginChallenge;
 use RoundlyConsulting\Auth\Models\OneTimeToken;
 use RoundlyConsulting\Auth\Notifications\AccountLockedNotification;
 use RoundlyConsulting\Auth\Notifications\EmailOtpNotification;
+use RoundlyConsulting\Auth\Notifications\InvitationNotification;
 use RoundlyConsulting\Auth\Notifications\MagicLinkNotification;
 use RoundlyConsulting\Auth\Support\Tables;
 use RoundlyConsulting\Auth\Tests\Fixtures\Models\User;
@@ -345,3 +349,26 @@ it('reports the attempts actually left when a concurrent wrong guess spends the 
         ->attempts->toBe(5)
         ->invalidated_at->not->toBeNull();
 });
+
+it('keeps the cooldown, the cap and the count when two resends read the invitation before either wrote', function (int $maxSends, int $cooldown, ?string $refused, int $mails): void {
+    Notification::fake();
+    $this->configureGuard('users', ['invitations.max_sends' => $maxSends, 'invitations.resend_cooldown' => $cooldown]);
+    Authentication::guard('users')->invitations()->create(new InvitationData('invitee@example.com'));
+    $this->travel(5)->minutes();
+
+    // Both requests loaded the row (one send, five minutes ago) before either resent.
+    $first = Invitation::query()->sole();
+    $second = Invitation::query()->sole();
+
+    Authentication::guard('users')->invitations()->resend($first);
+    $resend = static fn () => Authentication::guard('users')->invitations()->resend($second);
+
+    $refused === null ? $resend() : expect($resend)->toThrow($refused);
+
+    Notification::assertSentOnDemandTimes(InvitationNotification::class, $mails);
+    expect(Invitation::query()->sole()->send_count)->toBe($mails);
+})->with([
+    'the cooldown' => [5, 60, TooManyAttempts::class, 2],
+    'the cap' => [2, 0, InvitationSendLimitReached::class, 2],
+    'neither: both count' => [5, 0, null, 3],
+]);
