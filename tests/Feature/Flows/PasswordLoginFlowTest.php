@@ -153,6 +153,16 @@ it('stores the identifier hashed or not at all when configured', function (strin
     'none' => ['none', null],
 ]);
 
+it('hashes the composed and decomposed spellings of an identifier alike', function (): void {
+    $this->configureGuard('users', ['activity.store_identifier' => 'hash']);
+
+    foreach (["Jos\u{00E9}@example.com", " jose\u{0301}@example.com "] as $spelling) {
+        expect(fn () => Authentication::guard('users')->attempt(new PasswordCredentials($spelling, 'x'), sessionContext()))->toThrow(InvalidCredentials::class);
+    }
+
+    expect(LoginActivity::query()->pluck('identifier')->unique()->all())->toHaveCount(1);
+});
+
 it('writes no activity when the log is off', function (): void {
     $this->configureGuard('users', ['activity.enabled' => false]);
 

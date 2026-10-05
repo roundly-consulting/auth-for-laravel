@@ -9,6 +9,7 @@ use RoundlyConsulting\Auth\Contracts\FingerprintsDevices;
 use RoundlyConsulting\Auth\DataTransferObjects\LoginActivityData;
 use RoundlyConsulting\Auth\Enums\IdentifierStorage;
 use RoundlyConsulting\Auth\Events\LoginActivityRecorded;
+use RoundlyConsulting\Auth\Guards\AccountRepository;
 use RoundlyConsulting\Auth\Guards\GuardRegistry;
 use RoundlyConsulting\Auth\Models\LoginActivity;
 use RoundlyConsulting\Auth\Support\Models;
@@ -39,7 +40,8 @@ final readonly class RecordLoginActivity
         $identifier = match (true) {
             $data->identifier === null || $data->identifier === '' => null,
             $guard->identifierStorage() === IdentifierStorage::Plain => mb_substr($data->identifier, 0, 255),
-            $guard->identifierStorage() === IdentifierStorage::Hash => $this->hasher->identifier($guard->name(), mb_strtolower(trim($data->identifier))),
+            // Normalised exactly like the throttle key: one address, one hash, however it was typed.
+            $guard->identifierStorage() === IdentifierStorage::Hash => $this->hasher->identifier($guard->name(), mb_strtolower(AccountRepository::compose(trim($data->identifier)))),
             default => null,
         };
 
