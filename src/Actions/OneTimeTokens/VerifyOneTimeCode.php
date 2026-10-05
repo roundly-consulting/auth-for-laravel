@@ -62,14 +62,17 @@ final readonly class VerifyOneTimeCode
             ->usable($now)
             ->increment('attempts');
 
-        $attemptsLeft = max(0, $record->max_attempts - $record->attempts - 1);
-
         if ($counted === 0 || ! ConstantTime::equals((string) $record->code_hash, $candidate)) {
-            if ($counted === 0 || $attemptsLeft === 0) {
+            // The count as it stands now, concurrent guesses included — never the row as read
+            // before our increment.
+            $attemptsLeft = $counted === 0 ? 0 : max(0, $record->max_attempts
+                - (int) Models::oneTimeTokens()->whereKey($record->getKey())->value('attempts'));
+
+            if ($attemptsLeft === 0) {
                 Models::oneTimeTokens()->whereKey($record->getKey())->whereNull('invalidated_at')->update(['invalidated_at' => $now]);
             }
 
-            throw $revealAttempts ? InvalidCode::withAttemptsLeft($counted === 0 ? 0 : $attemptsLeft) : new InvalidCode;
+            throw $revealAttempts ? InvalidCode::withAttemptsLeft($attemptsLeft) : new InvalidCode;
         }
 
         $claimed = Models::oneTimeTokens()->whereKey($record->getKey())->usable($now)->update(['consumed_at' => $now]);

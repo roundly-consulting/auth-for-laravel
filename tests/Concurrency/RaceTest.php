@@ -9,6 +9,7 @@ use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Notification;
 use Illuminate\Validation\ValidationException;
 use RoundlyConsulting\Auth\Actions\OneTimeTokens\ConsumeOneTimeToken;
+use RoundlyConsulting\Auth\Actions\OneTimeTokens\VerifyOneTimeCode;
 use RoundlyConsulting\Auth\Actions\Registration\CreateAccount;
 use RoundlyConsulting\Auth\Contracts\Account;
 use RoundlyConsulting\Auth\Contracts\CreatesAccounts;
@@ -24,6 +25,7 @@ use RoundlyConsulting\Auth\Events\AccountLocked;
 use RoundlyConsulting\Auth\Exceptions\AuthException;
 use RoundlyConsulting\Auth\Exceptions\ChallengeFactorFailed;
 use RoundlyConsulting\Auth\Exceptions\ChallengeInvalid;
+use RoundlyConsulting\Auth\Exceptions\InvalidCode;
 use RoundlyConsulting\Auth\Exceptions\InvalidOneTimeToken;
 use RoundlyConsulting\Auth\Exceptions\TooManyAttempts;
 use RoundlyConsulting\Auth\Facades\Authentication;
@@ -31,7 +33,9 @@ use RoundlyConsulting\Auth\Guards\GuardConfig;
 use RoundlyConsulting\Auth\Models\LoginChallenge;
 use RoundlyConsulting\Auth\Models\OneTimeToken;
 use RoundlyConsulting\Auth\Notifications\AccountLockedNotification;
+use RoundlyConsulting\Auth\Notifications\EmailOtpNotification;
 use RoundlyConsulting\Auth\Notifications\MagicLinkNotification;
+use RoundlyConsulting\Auth\Support\Tables;
 use RoundlyConsulting\Auth\Tests\Fixtures\Models\User;
 use RoundlyConsulting\Jwt\Events\UserTokenIssued;
 use RoundlyConsulting\Jwt\Facades\Jwt;
@@ -309,3 +313,35 @@ it('never writes a counter it read back over a concurrent failure', function (in
 
     expect($user->fresh()?->getAttribute('failed_login_count'))->toBe(2);
 })->with([1, 2, 3]);
+
+it('reports the attempts actually left when a concurrent wrong guess spends the last one', function (): void {
+    Notification::fake();
+    $user = User::factory()->create();
+    Authentication::guard('users')->requestEmailOtp($user->email, sessionContext());
+    $code = (string) sentNotification($user, EmailOtpNotification::class)->data->code;
+    $wrong = $code === '000000' ? '111111' : '000000';
+    OneTimeToken::query()->update(['attempts' => 3]);
+
+    $guess = static function () use ($user, $wrong): int {
+        try {
+            app(VerifyOneTimeCode::class)->execute('users', OneTimeTokenPurpose::EmailOtp, (string) $user->email, $wrong, revealAttempts: true);
+        } catch (InvalidCode $e) {
+            return (int) $e->extra()['attempts_left'];
+        }
+
+        return -1;
+    };
+    $left = [];
+
+    // The concurrent guess runs between this one's read of the row and its own count.
+    interleaveAfterQuery(Tables::oneTimeTokens(), 1, static function () use ($guess, &$left): void {
+        $left['first'] = $guess();
+    }, static function () use ($guess, &$left): void {
+        $left['concurrent'] = $guess();
+    });
+
+    expect($left)->toBe(['concurrent' => 1, 'first' => 0])
+        ->and(OneTimeToken::query()->sole())
+        ->attempts->toBe(5)
+        ->invalidated_at->not->toBeNull();
+});
