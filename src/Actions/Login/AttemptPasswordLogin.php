@@ -19,7 +19,6 @@ use RoundlyConsulting\Auth\Enums\ThrottleKind;
 use RoundlyConsulting\Auth\Events\LoginFailed;
 use RoundlyConsulting\Auth\Exceptions\InvalidCredentials;
 use RoundlyConsulting\Auth\Exceptions\LoginMethodDisabled;
-use RoundlyConsulting\Auth\Exceptions\TooManyAttempts;
 use RoundlyConsulting\Auth\Guards\AccountRepository;
 use RoundlyConsulting\Auth\Guards\GuardRegistry;
 use RoundlyConsulting\Auth\Support\Lockout;
@@ -30,7 +29,9 @@ use RoundlyConsulting\Auth\Support\Throttle;
  * hashing — the attempt is taken first and given back only when the password proves
  * valid, so concurrent guesses are counted while they hash; the password is always checked — against a dummy hash for unknown or
  * passwordless accounts — so neither the response nor its timing reveals whether the
- * account exists. A hard-locked account answers every attempt with `too_many_attempts`.
+ * account exists. A hard-locked account answers every attempt exactly like a wrong
+ * password (`invalid_credentials`, the attempt counted) — a lock never confirms a
+ * password nor an account; its owner learns of it from the `AccountLockedNotification`.
  */
 final readonly class AttemptPasswordLogin
 {
@@ -58,11 +59,12 @@ final readonly class AttemptPasswordLogin
         $account = (new AccountRepository($config))->findForLogin($credentials->identifier);
 
         if ($account !== null && $account->isLocked()) {
+            // Same cost, answer and throttle accounting as a wrong password: a lock is neither
+            // a way around the buckets nor an account-exists oracle. Its owner was mailed.
             $this->verifyPassword->execute(null, $credentials->password);
-            $this->throttle->release($config, $kinds, $credentials->identifier, $context->ipAddress);
             $this->fail($guard, $account, $credentials, $context, ActivityOutcome::Locked);
 
-            throw TooManyAttempts::retryAfter(Lockout::secondsRemaining($account));
+            throw new InvalidCredentials;
         }
 
         $valid = $this->verifyPassword->execute($account, $credentials->password);

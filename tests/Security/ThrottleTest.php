@@ -25,6 +25,7 @@ use RoundlyConsulting\Auth\Facades\Authentication;
 use RoundlyConsulting\Auth\Models\LoginActivity;
 use RoundlyConsulting\Auth\Notifications\AccountExistsNotification;
 use RoundlyConsulting\Auth\Notifications\VerifyEmailNotification;
+use RoundlyConsulting\Auth\Tests\Fixtures\CountingHasher;
 use RoundlyConsulting\Auth\Tests\Fixtures\Models\User;
 use RoundlyConsulting\Auth\Tests\Fixtures\ReentrantHasher;
 use RoundlyConsulting\Auth\Tests\Fixtures\ReentrantRateLimiter;
@@ -201,3 +202,21 @@ it('lets exactly one of two concurrent requests through a per-account cooldown',
         ? Notification::assertSentOnDemandTimes(AccountExistsNotification::class, 1)
         : Notification::assertSentToTimes($user, VerifyEmailNotification::class, 1);
 })->with(['signed-in verification', 'guest verification resend', 'registration of a taken address']);
+
+it('counts guesses against a locked account like any other, so a lock is no way around the limit', function (): void {
+    $user = User::factory()->create(['locked_until' => now()->addHour()]);
+    $hasher = new CountingHasher(app(HashManager::class)->driver('bcrypt'));
+    Hash::swap($hasher);
+
+    foreach (range(1, 20) as $attempt) {
+        try {
+            Authentication::guard('users')->attempt(new PasswordCredentials($user->email, "guess-{$attempt}"), sessionContext());
+        } catch (AuthException) {
+            // wrong-looking, or throttled
+        }
+    }
+
+    // `login` allows 5 per identifier+IP: the rest are refused before any hashing.
+    expect($hasher->checked)->toHaveCount(5)
+        ->and(fn () => Authentication::guard('users')->attempt(new PasswordCredentials($user->email, 'correct-horse-battery'), sessionContext()))->toThrow(TooManyAttempts::class);
+});

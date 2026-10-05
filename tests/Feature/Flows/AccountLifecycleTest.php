@@ -13,7 +13,7 @@ use RoundlyConsulting\Auth\Events\AccountDisabled;
 use RoundlyConsulting\Auth\Events\AccountEnabled;
 use RoundlyConsulting\Auth\Events\AccountLocked;
 use RoundlyConsulting\Auth\Events\AccountUnlocked;
-use RoundlyConsulting\Auth\Exceptions\TooManyAttempts;
+use RoundlyConsulting\Auth\Exceptions\InvalidCredentials;
 use RoundlyConsulting\Auth\Facades\Authentication;
 use RoundlyConsulting\Auth\Tests\Fixtures\Models\User;
 
@@ -44,7 +44,7 @@ it('locks and unlocks an account', function (): void {
     $user = User::factory()->create();
 
     app(LockAccount::class)->execute('users', $user, 60);
-    expect(fn () => Authentication::guard('users')->attempt(new PasswordCredentials($user->email, 'correct-horse-battery'), sessionContext()))->toThrow(TooManyAttempts::class);
+    expect(fn () => Authentication::guard('users')->attempt(new PasswordCredentials($user->email, 'correct-horse-battery'), sessionContext()))->toThrow(InvalidCredentials::class);
     $this->assertLoginActivity('users', ActivityType::PasswordLogin, ActivityOutcome::Locked);
 
     Authentication::guard('users')->unlock($user);

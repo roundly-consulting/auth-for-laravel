@@ -9,7 +9,6 @@ use RoundlyConsulting\Auth\Actions\Account\LockAccount;
 use RoundlyConsulting\Auth\DataTransferObjects\PasswordCredentials;
 use RoundlyConsulting\Auth\Events\AccountLocked;
 use RoundlyConsulting\Auth\Exceptions\InvalidCredentials;
-use RoundlyConsulting\Auth\Exceptions\TooManyAttempts;
 use RoundlyConsulting\Auth\Facades\Authentication;
 use RoundlyConsulting\Auth\Notifications\AccountLockedNotification;
 use RoundlyConsulting\Auth\Tests\Fixtures\Models\User;
@@ -26,7 +25,7 @@ it('never touches the counter while lockout is off', function (): void {
         ->and($user->fresh()?->getAttribute('failed_login_count'))->toBe(0);
 });
 
-it('locks after the threshold and answers too_many_attempts even for the right password', function (): void {
+it('locks after the threshold and answers like a wrong password even for the right one', function (): void {
     Event::fake([AccountLocked::class]);
     Notification::fake();
     CarbonImmutable::setTestNow('2026-09-26 10:00:00');
@@ -40,9 +39,10 @@ it('locks after the threshold and answers too_many_attempts even for the right p
         ->and($user->fresh()?->getAttribute('failed_login_count'))->toBe(0);
 
     $this->postJson('/users/auth/login', ['identifier' => $user->email, 'password' => 'correct-horse-battery'])
-        ->assertStatus(429)
-        ->assertJsonPath('code', 'too_many_attempts')
-        ->assertJsonPath('retry_after', 600);
+        ->assertStatus(422)
+        ->assertJsonPath('code', 'invalid_credentials')
+        ->assertJsonMissingPath('retry_after')
+        ->assertHeaderMissing('Retry-After');
 
     Event::assertDispatched(AccountLocked::class);
     Notification::assertSentTo($user, AccountLockedNotification::class);
@@ -52,7 +52,7 @@ it('locks after the threshold and answers too_many_attempts even for the right p
 it('does not count failures while locked, and unlocks lazily', function (): void {
     $user = User::factory()->create(['locked_until' => CarbonImmutable::now()->addMinute()]);
 
-    expect(fn () => Authentication::guard('users')->attempt(new PasswordCredentials($user->email, 'bad'), sessionContext()))->toThrow(TooManyAttempts::class)
+    expect(fn () => Authentication::guard('users')->attempt(new PasswordCredentials($user->email, 'bad'), sessionContext()))->toThrow(InvalidCredentials::class)
         ->and($user->fresh()?->getAttribute('failed_login_count'))->toBe(0);
 
     CarbonImmutable::setTestNow(CarbonImmutable::now()->addMinutes(2));

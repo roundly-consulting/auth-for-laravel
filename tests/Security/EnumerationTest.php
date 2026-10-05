@@ -7,7 +7,7 @@ use RoundlyConsulting\Auth\Notifications\MagicLinkNotification;
 use RoundlyConsulting\Auth\Tests\Fixtures\Models\User;
 
 /**
- * Identical status, body and `code` for known, unknown, disabled and unverified
+ * Identical status, body and `code` for known, unknown, disabled, unverified and locked
  * accounts on every guest endpoint that names an account; mail only for the real,
  * active one.
  */
@@ -36,7 +36,15 @@ dataset('endpoints', [
 it('answers every account state identically', function (string $uri, Closure $payload): void {
     $responses = [];
 
-    foreach (['known' => User::factory()->create()->email, 'unknown' => 'ghost@example.com', 'disabled' => User::factory()->disabled()->create()->email, 'unverified' => User::factory()->unverified()->create()->email] as $state => $email) {
+    $states = [
+        'known' => User::factory()->create()->email,
+        'unknown' => 'ghost@example.com',
+        'disabled' => User::factory()->disabled()->create()->email,
+        'unverified' => User::factory()->unverified()->create()->email,
+        'locked' => User::factory()->create(['locked_until' => now()->addHour()])->email,
+    ];
+
+    foreach ($states as $state => $email) {
         $response = $this->postJson($uri, $payload($email));
         $responses[$state] = [$response->status(), $response->json()];
     }
