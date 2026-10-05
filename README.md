@@ -1,7 +1,7 @@
 <!-- roundly-hero:start -->
 <p align="center">
   <a href="https://roundly-consulting.com/open-source/docs/auth-for-laravel?utm_source=github&utm_medium=readme&utm_campaign=open-source&utm_content=auth-for-laravel">
-    <img src="art/hero.png" alt="Auth for Laravel — Roundly open source" width="100%">
+    <img src="https://raw.githubusercontent.com/roundly-consulting/auth-for-laravel/main/art/hero.png" alt="Auth for Laravel — Roundly open source" width="100%">
   </a>
 </p>
 <!-- roundly-hero:end -->
