@@ -8,14 +8,16 @@ use Carbon\CarbonImmutable;
 use RoundlyConsulting\Auth\DataTransferObjects\InvitationLink;
 use RoundlyConsulting\Auth\Exceptions\InvalidInvitation;
 use RoundlyConsulting\Auth\Exceptions\InvitationNotFound;
+use RoundlyConsulting\Auth\Exceptions\InvitationSendLimitReached;
 use RoundlyConsulting\Auth\Exceptions\TooManyAttempts;
 use RoundlyConsulting\Auth\Guards\GuardRegistry;
 use RoundlyConsulting\Auth\Models\Invitation;
 
 /**
  * Re-sends a pending invitation (a fresh link; the old one dies), within the guard's
- * `resend_cooldown` and `max_sends`. Another guard's invitation is unknown here
- * ({@see InvitationNotFound}).
+ * `resend_cooldown` ({@see TooManyAttempts}, with the seconds left) and `max_sends`
+ * ({@see InvitationSendLimitReached} — final, the count never resets). Another guard's
+ * invitation is unknown here ({@see InvitationNotFound}).
  */
 final readonly class ResendInvitation
 {
@@ -38,7 +40,7 @@ final readonly class ResendInvitation
         }
 
         if ($invitation->send_count >= $config->invitationMaxSends()) {
-            throw TooManyAttempts::retryAfter($config->invitationTtl());
+            throw new InvitationSendLimitReached;
         }
 
         $available = $invitation->last_sent_at?->addSeconds($config->invitationResendCooldown());

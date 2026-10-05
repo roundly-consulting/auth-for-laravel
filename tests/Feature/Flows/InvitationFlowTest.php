@@ -14,6 +14,7 @@ use RoundlyConsulting\Auth\Enums\RegistrationStatus;
 use RoundlyConsulting\Auth\Events\InvitationAccepted;
 use RoundlyConsulting\Auth\Events\InvitationSent;
 use RoundlyConsulting\Auth\Exceptions\InvalidInvitation;
+use RoundlyConsulting\Auth\Exceptions\InvitationSendLimitReached;
 use RoundlyConsulting\Auth\Exceptions\TooManyAttempts;
 use RoundlyConsulting\Auth\Facades\Authentication;
 use RoundlyConsulting\Auth\Models\Invitation;
@@ -157,8 +158,24 @@ it('enforces the resend cooldown and the send cap', function (): void {
     expect($link->url)->toContain('#token=');
 
     CarbonImmutable::setTestNow('2026-09-26 10:05:00');
-    expect(fn () => Authentication::guard('users')->invitations()->resend((int) $invitation->getKey()))->toThrow(TooManyAttempts::class);
+    expect(fn () => Authentication::guard('users')->invitations()->resend((int) $invitation->getKey()))->toThrow(InvitationSendLimitReached::class);
     CarbonImmutable::setTestNow();
+});
+
+it('refuses a resend past the send cap for good, with no Retry-After to wait for', function (): void {
+    $this->configureGuard('users', ['invitations.max_sends' => 1]);
+    $admin = User::factory()->create();
+    $pair = issuePair($admin);
+    Gate::define('authentication.invitations.manage', fn (User $user): bool => $user->is($admin));
+    invite();
+    $id = Invitation::query()->sole()->getKey();
+    $this->travel(2)->minutes();
+
+    $this->postJson("/users/auth/invitations/{$id}/resend", [], bearer($pair))
+        ->assertStatus(422)
+        ->assertJsonPath('code', 'invitation_send_limit')
+        ->assertJsonMissingPath('retry_after')
+        ->assertHeaderMissing('Retry-After');
 });
 
 it('manages invitations over http behind the gate', function (): void {

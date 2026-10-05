@@ -19,6 +19,7 @@ return [
         'email_not_verified' => 'Najskôr overte svoju e-mailovú adresu.',
         'method_disabled' => 'Nenájdené.',
         'registration_closed' => 'Registrácia je uzavretá.',
+        'invitation_send_limit' => 'Táto pozvánka už bola odoslaná maximálny počet krát. Zrušte ju a pošlite novú.',
         'invitation_required' => 'Na registráciu je potrebná pozvánka.',
         'reauthentication_required' => 'Ak chcete pokračovať, potvrďte svoju totožnosť.',
         'two_factor_required' => 'Dvojfaktorové overenie je povinné a nie je možné ho vypnúť.',

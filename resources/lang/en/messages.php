@@ -19,6 +19,7 @@ return [
         'email_not_verified' => 'Please verify your email address first.',
         'method_disabled' => 'Not found.',
         'registration_closed' => 'Registration is closed.',
+        'invitation_send_limit' => 'This invitation was sent the maximum number of times. Revoke it and send a new one.',
         'invitation_required' => 'Registration requires an invitation.',
         'reauthentication_required' => 'Please confirm your identity to continue.',
         'two_factor_required' => 'Two-factor authentication is required and cannot be disabled.',

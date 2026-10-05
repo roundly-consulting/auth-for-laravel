@@ -15,6 +15,7 @@ dataset('exceptions', [
     [Exceptions\FactorNotAllowed::class, 422, 'factor_not_allowed', 'method'],
     [Exceptions\InvalidInvitation::class, 422, 'invalid_invitation', 'token'],
     [Exceptions\InvitationAddressTaken::class, 422, 'invalid_invitation', null],
+    [Exceptions\InvitationSendLimitReached::class, 422, 'invitation_send_limit', null],
     [Exceptions\InvalidRefreshToken::class, 401, 'refresh_invalid', null],
     [Exceptions\EnrolmentRequired::class, 403, 'enrolment_required', null],
     [Exceptions\TooManyAttempts::class, 429, 'too_many_attempts', null],
