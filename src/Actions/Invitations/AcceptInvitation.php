@@ -52,7 +52,7 @@ use RoundlyConsulting\Auth\Support\Throttle;
  * The invited address counts as verified (possession proven); with `lock_email = false`
  * another address may be used, stored unverified. An address that already has an
  * account rolls the claim back: uniform `invalid_invitation`, and a notice to that
- * address.
+ * address — at most one per address per cooldown, shared with registration.
  *
  * Like registration, the answer after the account exists is never an error: an
  * unverified address under `required_for_login`, or a forced enrolment the challenge
@@ -179,7 +179,9 @@ final readonly class AcceptInvitation
 
     private function exists(GuardConfig $guard, string $email, Invitation $invitation): void
     {
-        $this->notifications->sendTo($guard, NotificationType::AccountExists, $email, new NotificationData($guard->name()), $invitation->locale);
+        if ($this->throttle->accountExistsCooldown($guard, $email)) {
+            $this->notifications->sendTo($guard, NotificationType::AccountExists, $email, new NotificationData($guard->name()), $invitation->locale);
+        }
     }
 
     private function creator(GuardConfig $guard): CreatesAccounts

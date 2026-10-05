@@ -37,7 +37,6 @@ use RoundlyConsulting\Auth\Guards\GuardRegistry;
 use RoundlyConsulting\Auth\Support\AccountModels;
 use RoundlyConsulting\Auth\Support\NotificationDispatcher;
 use RoundlyConsulting\Auth\Support\RegistrationValidator;
-use RoundlyConsulting\Auth\Support\SecretHasher;
 use RoundlyConsulting\Auth\Support\Throttle;
 
 /**
@@ -60,7 +59,6 @@ final readonly class RegisterAccount
         private CompleteFirstFactor $completeFirstFactor,
         private NotificationDispatcher $notifications,
         private RecordLoginActivity $recordActivity,
-        private SecretHasher $hasher,
         private Hasher $passwords,
     ) {}
 
@@ -140,7 +138,7 @@ final readonly class RegisterAccount
             $this->passwords->make($data->password);
         }
 
-        if ($this->throttle->cooldown("authentication:{$guard->name()}:account-exists:".$this->hasher->identifier($guard->name(), $email), 600)) {
+        if ($this->throttle->accountExistsCooldown($guard, $email)) {
             $this->notifications->sendTo($guard, NotificationType::AccountExists, $email, new NotificationData($guard->name()), $data->context->locale);
         }
 

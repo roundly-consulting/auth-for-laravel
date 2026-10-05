@@ -9,6 +9,7 @@ use Illuminate\Support\Facades\Notification;
 use Illuminate\Validation\ValidationException;
 use RoundlyConsulting\Auth\DataTransferObjects\AcceptInvitationData;
 use RoundlyConsulting\Auth\DataTransferObjects\InvitationData;
+use RoundlyConsulting\Auth\DataTransferObjects\RegistrationData;
 use RoundlyConsulting\Auth\Enums\RegistrationStatus;
 use RoundlyConsulting\Auth\Events\InvitationAccepted;
 use RoundlyConsulting\Auth\Events\InvitationSent;
@@ -117,6 +118,24 @@ it('refuses an existing address with a uniform error and a notice', function ():
         ->and(Invitation::query()->sole()->accepted_at)->toBeNull();
 
     Notification::assertSentOnDemand(AccountExistsNotification::class);
+});
+
+it('mails a taken address chosen at acceptance once per cooldown, shared with registration', function (): void {
+    $this->configureGuard('users', ['invitations.lock_email' => false, 'registration.login_after' => false, 'throttle.registration.max' => 100]);
+    User::factory()->create(['email' => 'taken@example.com']);
+    $token = invite();
+    $accept = static fn () => Authentication::guard('users')->invitations()->accept(new AcceptInvitationData($token, 'a-long-enough-passphrase', sessionContext(), email: 'taken@example.com'));
+
+    expect($accept)->toThrow(InvalidInvitation::class)
+        ->and($accept)->toThrow(InvalidInvitation::class);
+    Authentication::guard('users')->register(new RegistrationData('taken@example.com', 'a-long-enough-passphrase', sessionContext()));
+
+    Notification::assertSentOnDemandTimes(AccountExistsNotification::class, 1);
+
+    $this->travel(601)->seconds();
+    expect($accept)->toThrow(InvalidInvitation::class);
+
+    Notification::assertSentOnDemandTimes(AccountExistsNotification::class, 2);
 });
 
 it('refuses to invite an existing address unless allowed', function (): void {

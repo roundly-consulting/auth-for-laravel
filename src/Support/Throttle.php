@@ -122,4 +122,13 @@ final readonly class Throttle
         return $this->limiter->increment($key, $seconds) === 1;
     }
 
+    /**
+     * True (and the 10-minute cooldown started) when an "account exists" notice may go to
+     * this address. Registration and invitation acceptance share it, so neither can be used
+     * to mail an address more often than the other.
+     */
+    public function accountExistsCooldown(GuardConfig $guard, #[SensitiveParameter] string $email): bool
+    {
+        return $this->cooldown($this->keys->accountExists($guard, $email), 600);
+    }
 }

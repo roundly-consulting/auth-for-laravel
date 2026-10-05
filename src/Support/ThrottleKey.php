@@ -30,4 +30,12 @@ final readonly class ThrottleKey
 
         return "authentication:{$guard->name()}:{$kind->value}:{$discriminator}";
     }
+
+    /**
+     * The per-address cooldown on "account exists" notices (`$email` already normalised).
+     */
+    public function accountExists(GuardConfig $guard, #[SensitiveParameter] string $email): string
+    {
+        return "authentication:{$guard->name()}:account-exists:".$this->hasher->identifier($guard->name(), $email);
+    }
 }
