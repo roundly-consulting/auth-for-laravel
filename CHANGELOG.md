@@ -6,9 +6,32 @@ All notable changes to `auth-for-laravel` are documented in this file. The forma
 
 ## Unreleased
 
+## 1.1.0 - 2026-10-05
+
+### Added
+
+- `SignInBlockedNotification` (`notifications.classes.sign_in_blocked`, risk reaction `deny`) and `UnusualSignInNotification` (`notifications.classes.unusual_sign_in`, risk reaction `notify`), with `NotificationType::SignInBlocked` / `UnusualSignIn` and English and Slovak copy. A published config that lacks the new keys still sends them; set one to `null` to switch it off.
+- `InvitationSendLimitReached` (422, `invitation_send_limit`) for a resend past `invitations.max_sends`.
+
+### Changed
+
+- Risk alerts no longer go out as the refresh-token-reuse email (`SuspiciousSessionNotification`), whose text said the affected session had been signed out — untrue for a blocked sign-in (no session existed) and for an unusual one (its session is live). A host that swapped or disabled `notifications.classes.refresh_token_reuse` to change the risk alerts now configures `sign_in_blocked` / `unusual_sign_in` instead. The `notifications.refresh_token_reuse.reasons.blocked_sign_in` / `unusual_sign_in` lines are gone.
+- Resending an invitation past `max_sends` throws `InvitationSendLimitReached` (422) instead of `TooManyAttempts` with a `Retry-After` of the whole invitation TTL — the count never resets, so no retry could succeed. Upgrade: catch `InvitationSendLimitReached` (code `invitation_send_limit`) wherever a resend's `TooManyAttempts` was handled.
+- Documentation: the README banner uses an absolute image URL, so it also renders on Packagist and other sites.
+
 ### Fixed
 
 - The `notifications.expiry` plural line also covers a count of 0, so it never renders with a leading space.
+- Concurrent requests could all pass a per-account cooldown (the verification resend and the "account exists" notice) and each send a mail; the cooldown is now one atomic increment.
+- Concurrent invitation resends could each mail, ignore the resend cooldown and `max_sends`, and under-count `send_count`; the count is now incremented in SQL, capped at `max_sends`, and the cooldown window is reserved atomically.
+- Accepting an invitation with a taken address (`invitations.lock_email = false`) mailed that address an "account exists" notice every time; it now shares registration's 10-minute per-address cooldown.
+- Two failed logins reaching `lockout.threshold` together both locked the account, dispatching `AccountLocked` and mailing the owner twice; a failure could also write a stale counter back over a concurrent one, so the lockout counted too few failures or re-locked after a single failure once a lock expired.
+- `attempts_left` on a failed code check (re-authentication) could be too high when another guess ran concurrently, and the exhausted code was not invalidated straight away.
+- With `activity.store_identifier = hash`, the same address typed with a decomposed accent produced a different hash; it is now NFC-composed first, like the throttle keys.
+
+### Security
+
+- A locked account's password login now answers exactly like a wrong password (`invalid_credentials`, 422) instead of `too_many_attempts` with the lock's `Retry-After`. Previously anyone could tell an existing account from an unknown address by failing `lockout.threshold` times, and requests against a locked account were never throttled, so one IP could force unlimited password hashing. The attempt now counts against the login throttle like any other guess; the owner still gets the `AccountLockedNotification`. Upgrade: a client that showed a lock countdown from that 429 now shows its usual wrong-credentials message.
 
 ## 1.0.2 - 2026-10-04
 
