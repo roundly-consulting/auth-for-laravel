@@ -9,7 +9,9 @@ use RoundlyConsulting\Auth\Enums\NotificationType;
 use RoundlyConsulting\Auth\Guards\GuardRegistry;
 use RoundlyConsulting\Auth\Notifications\AuthenticationNotification;
 use RoundlyConsulting\Auth\Notifications\MagicLinkNotification;
+use RoundlyConsulting\Auth\Notifications\SignInBlockedNotification;
 use RoundlyConsulting\Auth\Notifications\SuspiciousSessionNotification;
+use RoundlyConsulting\Auth\Notifications\UnusualSignInNotification;
 
 it('renders every notification from its own copy', function (NotificationType $type): void {
     $class = app(GuardRegistry::class)->get('users')->notificationClass($type);
@@ -71,11 +73,24 @@ it('renders the suspicious-activity reason in the mail locale', function (string
     expect($mail->introLines[0])->toBe($intro);
 })->with([
     'en, refresh token reuse' => ['en', 'refresh_token_reuse', 'We noticed suspicious activity on your account (a reused session token) and signed the affected session out.'],
-    'en, blocked sign-in' => ['en', 'blocked sign-in', 'We noticed suspicious activity on your account (a blocked sign-in attempt) and signed the affected session out.'],
-    'en, unusual sign-in' => ['en', 'unusual sign-in', 'We noticed suspicious activity on your account (an unusual sign-in) and signed the affected session out.'],
     'sk, refresh token reuse' => ['sk', 'refresh_token_reuse', 'Vo vašom účte sme zaznamenali podozrivú aktivitu (opätovne použitý token relácie) a dotknutú reláciu sme odhlásili.'],
-    'sk, blocked sign-in' => ['sk', 'blocked sign-in', 'Vo vašom účte sme zaznamenali podozrivú aktivitu (zablokovaný pokus o prihlásenie) a dotknutú reláciu sme odhlásili.'],
-    'sk, unusual sign-in' => ['sk', 'unusual sign-in', 'Vo vašom účte sme zaznamenali podozrivú aktivitu (nezvyčajné prihlásenie) a dotknutú reláciu sme odhlásili.'],
+]);
+
+it('says a blocked sign-in signed nobody in, an unusual one is live, and neither signed a session out', function (string $class, string $locale, string $intro): void {
+    app()->setLocale($locale);
+
+    $mail = (new $class(new NotificationData('users')))->toMail(new AnonymousNotifiable);
+    $text = implode(' ', [$mail->subject, ...$mail->introLines, ...$mail->outroLines]);
+
+    expect($mail->introLines[0])->toBe($intro)
+        ->and($text)->not->toContain('signed the affected session out')
+        ->and($text)->not->toContain('reláciu sme odhlásili')
+        ->and($text)->not->toContain(':');
+})->with([
+    'en, blocked' => [SignInBlockedNotification::class, 'en', 'We blocked an attempt to sign in to your account because it looked suspicious. Nobody was signed in.'],
+    'en, unusual' => [UnusualSignInNotification::class, 'en', 'Someone just signed in to your account in a way that looked unusual.'],
+    'sk, blocked' => [SignInBlockedNotification::class, 'sk', 'Zablokovali sme pokus o prihlásenie do vášho účtu, pretože vyzeral podozrivo. Nikto sa neprihlásil.'],
+    'sk, unusual' => [UnusualSignInNotification::class, 'sk', 'Do vášho účtu sa práve niekto prihlásil spôsobom, ktorý vyzeral nezvyčajne.'],
 ]);
 
 it('passes a reason it does not know through unchanged', function (): void {

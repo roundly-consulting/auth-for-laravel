@@ -22,8 +22,11 @@ use RoundlyConsulting\Auth\Enums\TwoFactorMode;
 use RoundlyConsulting\Auth\Enums\UrlKind;
 use RoundlyConsulting\Auth\Enums\VerificationChannel;
 use RoundlyConsulting\Auth\Exceptions\AuthenticationMisconfigured;
+use RoundlyConsulting\Auth\Guards\GuardConfig;
 use RoundlyConsulting\Auth\Guards\GuardRegistry;
 use RoundlyConsulting\Auth\Notifications\MagicLinkNotification;
+use RoundlyConsulting\Auth\Notifications\SignInBlockedNotification;
+use RoundlyConsulting\Auth\Notifications\UnusualSignInNotification;
 use RoundlyConsulting\Auth\Tests\Fixtures\Models\User;
 
 it('exposes the shipped defaults through typed accessors', function (): void {
@@ -219,6 +222,17 @@ it('uses the shipped url template when one is unset or blank (strict config)', f
 
 it('disables a notification configured as null', function (): void {
     expect(guardConfig(['notifications' => ['classes' => ['new_device' => null]]])->notificationClass(NotificationType::NewDevice))->toBeNull();
+});
+
+it('sends the risk alerts from a config published before they existed, unless disabled', function (): void {
+    // A published config/authentication.php replaces `defaults` whole: its `classes` lack the new keys.
+    $published = new GuardConfig('users', ['model' => User::class, 'notifications' => ['classes' => ['refresh_token_reuse' => null]]]);
+
+    expect($published->notificationClass(NotificationType::SignInBlocked))->toBe(SignInBlockedNotification::class)
+        ->and($published->notificationClass(NotificationType::UnusualSignIn))->toBe(UnusualSignInNotification::class)
+        ->and(guardConfig(['notifications' => ['classes' => ['sign_in_blocked' => null, 'unusual_sign_in' => null]]]))
+        ->notificationClass(NotificationType::SignInBlocked)->toBeNull()
+        ->notificationClass(NotificationType::UnusualSignIn)->toBeNull();
 });
 
 it('rejects an invalid enum value naming the exact key', function (): void {

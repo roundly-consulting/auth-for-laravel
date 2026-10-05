@@ -273,6 +273,8 @@ return [
                 'passkey_removed' => Notifications\PasskeyRemovedNotification::class,
                 'account_locked' => Notifications\AccountLockedNotification::class,
                 'refresh_token_reuse' => Notifications\SuspiciousSessionNotification::class,
+                'sign_in_blocked' => Notifications\SignInBlockedNotification::class,   // risk reaction deny
+                'unusual_sign_in' => Notifications\UnusualSignInNotification::class,   // risk reaction notify
             ],
             // Base URL of this guard's frontend; null → app.url. Substituted for {frontend}.
             'frontend_url' => env('AUTHENTICATION_FRONTEND_URL'),

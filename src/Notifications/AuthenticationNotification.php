@@ -27,8 +27,6 @@ abstract class AuthenticationNotification extends Notification
      */
     private const array REASONS = [
         'refresh_token_reuse' => 'token_reuse',
-        'blocked sign-in' => 'blocked_sign_in',
-        'unusual sign-in' => 'unusual_sign_in',
     ];
 
     public function __construct(public readonly NotificationData $data) {}

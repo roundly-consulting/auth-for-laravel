@@ -112,10 +112,7 @@ final readonly class CompleteFirstFactor
 
         if ($reaction === RiskReaction::Deny) {
             event(new SuspiciousLoginDetected($guard->name(), $account, $assessment, $context));
-            $this->notifications->send($guard, NotificationType::RefreshTokenReuse, $account, new NotificationData(
-                guard: $guard->name(),
-                replacements: ['reason' => 'blocked sign-in'],
-            ));
+            $this->notifications->send($guard, NotificationType::SignInBlocked, $account, new NotificationData($guard->name()));
             $this->deny($guard, $account, $method, $context, $identifier, 'risk');
         }
 

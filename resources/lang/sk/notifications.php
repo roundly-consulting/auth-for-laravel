@@ -115,8 +115,18 @@ return [
         'outro' => 'Ak ste to neboli vy, odhláste sa na všetkých zariadeniach a zmeňte si heslo.',
         'reasons' => [
             'token_reuse' => 'opätovne použitý token relácie',
-            'blocked_sign_in' => 'zablokovaný pokus o prihlásenie',
-            'unusual_sign_in' => 'nezvyčajné prihlásenie',
         ],
+    ],
+    'sign_in_blocked' => [
+        'subject' => 'Zablokovali sme prihlásenie do vášho účtu v aplikácii :app',
+        'intro' => 'Zablokovali sme pokus o prihlásenie do vášho účtu, pretože vyzeral podozrivo. Nikto sa neprihlásil.',
+        'action' => 'Skontrolovať relácie',
+        'outro' => 'Ak ste to boli vy, skúste to neskôr alebo zo zariadenia, ktoré bežne používate. Ak ste to neboli vy, zmeňte si heslo.',
+    ],
+    'unusual_sign_in' => [
+        'subject' => 'Nezvyčajné prihlásenie do vášho účtu v aplikácii :app',
+        'intro' => 'Do vášho účtu sa práve niekto prihlásil spôsobom, ktorý vyzeral nezvyčajne.',
+        'action' => 'Skontrolovať relácie',
+        'outro' => 'Ak ste to boli vy, nemusíte nič robiť. Ak ste to neboli vy, okamžite sa odhláste na všetkých zariadeniach a zmeňte si heslo.',
     ],
 ];

@@ -115,8 +115,18 @@ return [
         'outro' => 'If this was not you, sign out everywhere and change your password.',
         'reasons' => [
             'token_reuse' => 'a reused session token',
-            'blocked_sign_in' => 'a blocked sign-in attempt',
-            'unusual_sign_in' => 'an unusual sign-in',
         ],
+    ],
+    'sign_in_blocked' => [
+        'subject' => 'We blocked a sign-in to your :app account',
+        'intro' => 'We blocked an attempt to sign in to your account because it looked suspicious. Nobody was signed in.',
+        'action' => 'Review your sessions',
+        'outro' => 'If this was you, try again later or from a device you usually use. If it was not you, change your password.',
+    ],
+    'unusual_sign_in' => [
+        'subject' => 'Unusual sign-in to your :app account',
+        'intro' => 'Someone just signed in to your account in a way that looked unusual.',
+        'action' => 'Review your sessions',
+        'outro' => 'If this was you, no action is needed. If it was not you, sign out everywhere and change your password right away.',
     ],
 ];

@@ -19,7 +19,9 @@ use RoundlyConsulting\Auth\Facades\Authentication;
 use RoundlyConsulting\Auth\Models\LoginActivity;
 use RoundlyConsulting\Auth\Notifications\MagicLinkNotification;
 use RoundlyConsulting\Auth\Notifications\NewDeviceLoginNotification;
+use RoundlyConsulting\Auth\Notifications\SignInBlockedNotification;
 use RoundlyConsulting\Auth\Notifications\SuspiciousSessionNotification;
+use RoundlyConsulting\Auth\Notifications\UnusualSignInNotification;
 use RoundlyConsulting\Auth\Tests\Fixtures\Models\User;
 
 final class FixedRiskAssessor implements AssessesLoginRisk
@@ -140,11 +142,13 @@ it('applies the configured risk reactions', function (RiskLevel $level, string $
 
     if ($outcome === 'denied') {
         expect(fn () => login($user))->toThrow(InvalidCredentials::class);
-        Notification::assertSentTo($user, SuspiciousSessionNotification::class, fn (SuspiciousSessionNotification $sent): bool => $sent->data->replacements['reason'] === 'blocked sign-in');
+        Notification::assertSentTo($user, SignInBlockedNotification::class);
+        Notification::assertNotSentTo($user, SuspiciousSessionNotification::class);
         Event::assertDispatched(SuspiciousLoginDetected::class);
     } elseif ($outcome === 'notified') {
         expect(login($user)->isAuthenticated())->toBeTrue();
-        Notification::assertSentTo($user, SuspiciousSessionNotification::class, fn (SuspiciousSessionNotification $sent): bool => $sent->data->replacements['reason'] === 'unusual sign-in');
+        Notification::assertSentTo($user, UnusualSignInNotification::class);
+        Notification::assertNotSentTo($user, SuspiciousSessionNotification::class);
     } else {
         expect(login($user)->isAuthenticated())->toBeTrue();
         Notification::assertNothingSentTo($user);
@@ -156,6 +160,22 @@ it('applies the configured risk reactions', function (RiskLevel $level, string $
     'elevated → notify' => [RiskLevel::Elevated, 'notify', 'notified'],
     'high → allow' => [RiskLevel::High, 'allow', 'allowed'],
 ]);
+
+it('keeps the risk alerts apart from the refresh-token-reuse mail a host swapped or disabled', function (): void {
+    Notification::fake();
+    $this->configureGuard('users', ['risk.assessor' => FixedRiskAssessor::class, 'risk.reactions.high' => 'deny', 'risk.reactions.elevated' => 'notify', 'notifications.classes.refresh_token_reuse' => null]);
+    $user = User::factory()->create();
+
+    FixedRiskAssessor::$level = RiskLevel::High;
+    expect(fn () => login($user))->toThrow(InvalidCredentials::class);
+
+    FixedRiskAssessor::$level = RiskLevel::Elevated;
+    expect(login($user)->isAuthenticated())->toBeTrue();
+
+    Notification::assertSentToTimes($user, SignInBlockedNotification::class, 1);
+    Notification::assertSentToTimes($user, UnusualSignInNotification::class, 1);
+    FixedRiskAssessor::$level = RiskLevel::Low;
+});
 
 it('steps up to a second factor on high risk, or denies when there is none', function (): void {
     $this->configureGuard('users', ['risk.assessor' => FixedRiskAssessor::class]);

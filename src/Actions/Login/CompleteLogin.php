@@ -82,10 +82,7 @@ final readonly class CompleteLogin
         if ($login->notifyRisk) {
             event(new SuspiciousLoginDetected($guard->name(), $account, new RiskAssessment($login->riskLevel), $login->context));
 
-            $this->notifications->send($guard, NotificationType::RefreshTokenReuse, $account, new NotificationData(
-                guard: $guard->name(),
-                replacements: ['reason' => 'unusual sign-in'],
-            ));
+            $this->notifications->send($guard, NotificationType::UnusualSignIn, $account, new NotificationData($guard->name()));
         }
 
         return $tokens;

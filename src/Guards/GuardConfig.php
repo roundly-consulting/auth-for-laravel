@@ -28,6 +28,8 @@ use RoundlyConsulting\Auth\Enums\TwoFactorMode;
 use RoundlyConsulting\Auth\Enums\UrlKind;
 use RoundlyConsulting\Auth\Enums\VerificationChannel;
 use RoundlyConsulting\Auth\Exceptions\AuthenticationMisconfigured;
+use RoundlyConsulting\Auth\Notifications\SignInBlockedNotification;
+use RoundlyConsulting\Auth\Notifications\UnusualSignInNotification;
 use RoundlyConsulting\PackageToolkit\Exceptions\InvalidConfigurationException;
 use RoundlyConsulting\PackageToolkit\Support\Config;
 
@@ -742,10 +744,15 @@ final readonly class GuardConfig
     }
 
     /**
-     * The configured class for a notification, or null when the host disabled it.
+     * The configured class for a notification, or null when the host disabled it. A type
+     * added after 1.0 falls back to its shipped class when its key is ABSENT — a published
+     * config replaces `defaults` whole and predates it — and is off only when set to null.
      */
     public function notificationClass(NotificationType $type): ?string
     {
+        $classes = $this->settings['notifications']['classes'] ?? null;
+        $classes = is_array($classes) ? $classes : [];
+
         return $this->optionalString(match ($type) {
             NotificationType::MagicLink => $this->settings['notifications']['classes']['magic_link'] ?? null,
             NotificationType::EmailOtp => $this->settings['notifications']['classes']['email_otp'] ?? null,
@@ -765,6 +772,8 @@ final readonly class GuardConfig
             NotificationType::PasskeyRemoved => $this->settings['notifications']['classes']['passkey_removed'] ?? null,
             NotificationType::AccountLocked => $this->settings['notifications']['classes']['account_locked'] ?? null,
             NotificationType::RefreshTokenReuse => $this->settings['notifications']['classes']['refresh_token_reuse'] ?? null,
+            NotificationType::SignInBlocked => array_key_exists('sign_in_blocked', $classes) ? ($this->settings['notifications']['classes']['sign_in_blocked'] ?? null) : SignInBlockedNotification::class,
+            NotificationType::UnusualSignIn => array_key_exists('unusual_sign_in', $classes) ? ($this->settings['notifications']['classes']['unusual_sign_in'] ?? null) : UnusualSignInNotification::class,
         }, 'notifications.classes.'.$type->value);
     }
 

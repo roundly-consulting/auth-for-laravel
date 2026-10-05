@@ -31,4 +31,6 @@ enum NotificationType: string
     case PasskeyRemoved = 'passkey_removed';
     case AccountLocked = 'account_locked';
     case RefreshTokenReuse = 'refresh_token_reuse';
+    case SignInBlocked = 'sign_in_blocked';
+    case UnusualSignIn = 'unusual_sign_in';
 }
