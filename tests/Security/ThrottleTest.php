@@ -2,9 +2,11 @@
 
 declare(strict_types=1);
 
+use Illuminate\Cache\RateLimiter;
 use Illuminate\Hashing\HashManager;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Notification;
 use Illuminate\Validation\ValidationException;
 use RoundlyConsulting\Auth\Actions\Account\Reauthenticate;
 use RoundlyConsulting\Auth\Actions\Passwords\ChangePassword;
@@ -12,6 +14,7 @@ use RoundlyConsulting\Auth\DataTransferObjects\ChangePasswordData;
 use RoundlyConsulting\Auth\DataTransferObjects\CurrentToken;
 use RoundlyConsulting\Auth\DataTransferObjects\PasswordCredentials;
 use RoundlyConsulting\Auth\DataTransferObjects\ReauthenticationData;
+use RoundlyConsulting\Auth\DataTransferObjects\RegistrationData;
 use RoundlyConsulting\Auth\Enums\ReauthenticationMethod;
 use RoundlyConsulting\Auth\Enums\ThrottleKind;
 use RoundlyConsulting\Auth\Events\LoginThrottled;
@@ -20,8 +23,11 @@ use RoundlyConsulting\Auth\Exceptions\InvalidCredentials;
 use RoundlyConsulting\Auth\Exceptions\TooManyAttempts;
 use RoundlyConsulting\Auth\Facades\Authentication;
 use RoundlyConsulting\Auth\Models\LoginActivity;
+use RoundlyConsulting\Auth\Notifications\AccountExistsNotification;
+use RoundlyConsulting\Auth\Notifications\VerifyEmailNotification;
 use RoundlyConsulting\Auth\Tests\Fixtures\Models\User;
 use RoundlyConsulting\Auth\Tests\Fixtures\ReentrantHasher;
+use RoundlyConsulting\Auth\Tests\Fixtures\ReentrantRateLimiter;
 
 function failLogin(string $identifier, string $ip = '10.0.0.1'): void
 {
@@ -175,3 +181,23 @@ it('counts the composed and decomposed spellings of an identifier in one bucket'
 
     expect(fn () => Authentication::guard('users')->attempt(new PasswordCredentials($user->email, 'correct-horse-battery'), sessionContext()))->toThrow(TooManyAttempts::class);
 });
+
+it('lets exactly one of two concurrent requests through a per-account cooldown', function (string $flow): void {
+    Notification::fake();
+    $this->configureGuard('users', ['registration.login_after' => false]);
+    $user = User::factory()->unverified()->create();
+
+    [$key, $request] = match ($flow) {
+        'signed-in verification' => ['verification-resend', static fn () => Authentication::guard('users')->email()->requestVerification($user, sessionContext())],
+        'guest verification resend' => ['verification-resend', static fn () => Authentication::guard('users')->email()->resendVerification((string) $user->email, sessionContext())],
+        'registration of a taken address' => ['account-exists', static fn () => Authentication::guard('users')->register(new RegistrationData((string) $user->email, 'a-long-enough-passphrase', sessionContext()))],
+    };
+
+    // The second request checks the cooldown just as the first one did, before either starts it.
+    app()->instance(RateLimiter::class, new ReentrantRateLimiter(app('cache')->store(), $key, $request));
+    $request();
+
+    $flow === 'registration of a taken address'
+        ? Notification::assertSentOnDemandTimes(AccountExistsNotification::class, 1)
+        : Notification::assertSentToTimes($user, VerifyEmailNotification::class, 1);
+})->with(['signed-in verification', 'guest verification resend', 'registration of a taken address']);

@@ -110,6 +110,8 @@ final readonly class Throttle
 
     /**
      * A per-account cooldown: true (and started) when the key is free, false while it runs.
+     * One atomic `increment`, never a check-then-hit — of N concurrent callers exactly one
+     * sees the first hit. The window is fixed: hits inside it do not extend it.
      */
     public function cooldown(string $key, int $seconds): bool
     {
@@ -117,12 +119,7 @@ final readonly class Throttle
             return true;
         }
 
-        if ($this->limiter->tooManyAttempts($key, 1)) {
-            return false;
-        }
-
-        $this->limiter->hit($key, $seconds);
-
-        return true;
+        return $this->limiter->increment($key, $seconds) === 1;
     }
+
 }
