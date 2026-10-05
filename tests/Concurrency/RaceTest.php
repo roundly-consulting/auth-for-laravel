@@ -2,7 +2,9 @@
 
 declare(strict_types=1);
 
+use Illuminate\Database\Events\QueryExecuted;
 use Illuminate\Database\UniqueConstraintViolationException;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Notification;
 use Illuminate\Validation\ValidationException;
@@ -18,6 +20,8 @@ use RoundlyConsulting\Auth\DataTransferObjects\RegistrationData;
 use RoundlyConsulting\Auth\Enums\FactorMethod;
 use RoundlyConsulting\Auth\Enums\OneTimeTokenPurpose;
 use RoundlyConsulting\Auth\Enums\RegistrationStatus;
+use RoundlyConsulting\Auth\Events\AccountLocked;
+use RoundlyConsulting\Auth\Exceptions\AuthException;
 use RoundlyConsulting\Auth\Exceptions\ChallengeFactorFailed;
 use RoundlyConsulting\Auth\Exceptions\ChallengeInvalid;
 use RoundlyConsulting\Auth\Exceptions\InvalidOneTimeToken;
@@ -26,6 +30,7 @@ use RoundlyConsulting\Auth\Facades\Authentication;
 use RoundlyConsulting\Auth\Guards\GuardConfig;
 use RoundlyConsulting\Auth\Models\LoginChallenge;
 use RoundlyConsulting\Auth\Models\OneTimeToken;
+use RoundlyConsulting\Auth\Notifications\AccountLockedNotification;
 use RoundlyConsulting\Auth\Notifications\MagicLinkNotification;
 use RoundlyConsulting\Auth\Tests\Fixtures\Models\User;
 use RoundlyConsulting\Jwt\Events\UserTokenIssued;
@@ -243,3 +248,64 @@ it('takes the attempt before checking a forced-enrolment code too', function ():
     expect($confirm(totpCode($setup->secret))->isAuthenticated())->toBeTrue()
         ->and(LoginChallenge::query()->sole()->attempts)->toBe(1);
 });
+
+/**
+ * Runs `$concurrent` once, right after the `$after`-th query of `$request` whose SQL
+ * mentions `$needle` — or after `$request` returned, when it issued fewer. True when
+ * `$concurrent` ran while `$request` was still in flight.
+ */
+function interleaveAfterQuery(string $needle, int $after, Closure $request, Closure $concurrent): bool
+{
+    $seen = 0;
+    $fired = false;
+
+    DB::listen(static function (QueryExecuted $query) use ($needle, $after, $concurrent, &$seen, &$fired): void {
+        if (! $fired && str_contains($query->sql, $needle) && ++$seen === $after) {
+            $fired = true;
+            $concurrent();
+        }
+    });
+
+    $request();
+
+    if ($fired) {
+        return true;
+    }
+
+    $fired = true;
+    $concurrent();
+
+    return false;
+}
+
+function failPassword(User $user): void
+{
+    try {
+        Authentication::guard('users')->attempt(new PasswordCredentials($user->email, 'wrong-password'), sessionContext());
+    } catch (AuthException) {
+        // counted, or refused
+    }
+}
+
+it('locks and notifies once when concurrent failures reach the threshold together', function (int $start, int $after): void {
+    Event::fake([AccountLocked::class]);
+    Notification::fake();
+    $this->configureGuard('users', ['lockout.enabled' => true, 'lockout.threshold' => 3, 'throttle.login.max' => 100, 'throttle.login_account.max' => 100]);
+    $user = User::factory()->create(['failed_login_count' => $start]);
+
+    interleaveAfterQuery('failed_login_count', $after, static fn () => failPassword($user), static fn () => failPassword($user));
+
+    Event::assertDispatchedTimes(AccountLocked::class, 1);
+    expect(Notification::sent($user, AccountLockedNotification::class))->toHaveCount(1)
+        ->and($user->fresh()?->isLocked())->toBeTrue()
+        ->and($user->fresh()?->getAttribute('failed_login_count'))->toBe(0);
+})->with(['at threshold - 1' => 2, 'at threshold - 2' => 1])->with([1, 2, 3]);
+
+it('never writes a counter it read back over a concurrent failure', function (int $after): void {
+    $this->configureGuard('users', ['lockout.enabled' => true, 'lockout.threshold' => 10, 'throttle.login.max' => 100, 'throttle.login_account.max' => 100]);
+    $user = User::factory()->create();
+
+    interleaveAfterQuery('failed_login_count', $after, static fn () => failPassword($user), static fn () => failPassword($user));
+
+    expect($user->fresh()?->getAttribute('failed_login_count'))->toBe(2);
+})->with([1, 2, 3]);

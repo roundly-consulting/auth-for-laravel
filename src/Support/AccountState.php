@@ -45,9 +45,11 @@ final class AccountState
     }
 
     /**
+     * Mirror values already in the row onto the in-memory instance, without writing.
+     *
      * @param  array<string, mixed>  $attributes
      */
-    private static function reflect(Model $model, array $attributes): void
+    public static function reflect(Model $model, array $attributes): void
     {
         foreach ($attributes as $column => $value) {
             $model->setAttribute($column, $value);

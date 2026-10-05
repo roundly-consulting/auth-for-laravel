@@ -24,7 +24,10 @@ final readonly class Lockout
     public function __construct(private NotificationDispatcher $notifications) {}
 
     /**
-     * Count a failed password; true when this failure locked the account.
+     * Count a failed password; true when this failure locked the account. Locking is a
+     * claim — the counter's reset is conditional on it being at the threshold — so of N
+     * concurrent failures exactly one locks and notifies; a counter read back is only ever
+     * reflected onto the instance, never written over a concurrent increment.
      */
     public function recordFailure(GuardConfig $guard, Account $account): bool
     {
@@ -35,20 +38,20 @@ final readonly class Lockout
         $model = AccountModels::of($account);
         $column = Columns::failedLoginCount();
         $threshold = $guard->lockoutThreshold();
+        $row = static fn () => $model->newQuery()->whereKey($model->getKey());
 
-        $model->newQuery()->whereKey($model->getKey())->where($column, '<', $threshold)->increment($column);
+        $row()->where($column, '<', $threshold)->increment($column);
 
-        $count = (int) $model->newQuery()->whereKey($model->getKey())->value($column);
+        $until = CarbonImmutable::now()->addSeconds($guard->lockoutDuration());
+        $locked = $row()->where($column, '>=', $threshold)->update([$column => 0, Columns::lockedUntil() => $until]);
 
-        if ($count < $threshold) {
-            AccountState::write($account, [$column => $count]);
+        if ($locked === 0) {
+            AccountState::reflect($model, [$column => (int) $row()->value($column)]);
 
             return false;
         }
 
-        $until = CarbonImmutable::now()->addSeconds($guard->lockoutDuration());
-
-        AccountState::write($account, [$column => 0, Columns::lockedUntil() => $until]);
+        AccountState::reflect($model, [$column => 0, Columns::lockedUntil() => $until]);
 
         event(new AccountLocked($guard->name(), $account, $until));
 
