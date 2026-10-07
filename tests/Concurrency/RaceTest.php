@@ -10,6 +10,7 @@ use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Notification;
 use Illuminate\Validation\ValidationException;
+use RoundlyConsulting\Auth\Actions\Account\LockAccount;
 use RoundlyConsulting\Auth\Actions\OneTimeTokens\ConsumeOneTimeToken;
 use RoundlyConsulting\Auth\Actions\OneTimeTokens\VerifyOneTimeCode;
 use RoundlyConsulting\Auth\Actions\Registration\CreateAccount;
@@ -21,6 +22,7 @@ use RoundlyConsulting\Auth\DataTransferObjects\NewAccountData;
 use RoundlyConsulting\Auth\DataTransferObjects\PasswordCredentials;
 use RoundlyConsulting\Auth\DataTransferObjects\PendingChallenge;
 use RoundlyConsulting\Auth\DataTransferObjects\RegistrationData;
+use RoundlyConsulting\Auth\Enums\ActivityOutcome;
 use RoundlyConsulting\Auth\Enums\ChallengeStep;
 use RoundlyConsulting\Auth\Enums\FactorMethod;
 use RoundlyConsulting\Auth\Enums\OneTimeTokenPurpose;
@@ -30,18 +32,22 @@ use RoundlyConsulting\Auth\Exceptions\AuthException;
 use RoundlyConsulting\Auth\Exceptions\ChallengeFactorFailed;
 use RoundlyConsulting\Auth\Exceptions\ChallengeInvalid;
 use RoundlyConsulting\Auth\Exceptions\InvalidCode;
+use RoundlyConsulting\Auth\Exceptions\InvalidCredentials;
 use RoundlyConsulting\Auth\Exceptions\InvalidOneTimeToken;
 use RoundlyConsulting\Auth\Exceptions\InvitationSendLimitReached;
 use RoundlyConsulting\Auth\Exceptions\TooManyAttempts;
 use RoundlyConsulting\Auth\Facades\Authentication;
 use RoundlyConsulting\Auth\Guards\GuardConfig;
+use RoundlyConsulting\Auth\Guards\GuardRegistry;
 use RoundlyConsulting\Auth\Models\Invitation;
+use RoundlyConsulting\Auth\Models\LoginActivity;
 use RoundlyConsulting\Auth\Models\LoginChallenge;
 use RoundlyConsulting\Auth\Models\OneTimeToken;
 use RoundlyConsulting\Auth\Notifications\AccountLockedNotification;
 use RoundlyConsulting\Auth\Notifications\EmailOtpNotification;
 use RoundlyConsulting\Auth\Notifications\InvitationNotification;
 use RoundlyConsulting\Auth\Notifications\MagicLinkNotification;
+use RoundlyConsulting\Auth\Support\Lockout;
 use RoundlyConsulting\Auth\Support\Tables;
 use RoundlyConsulting\Auth\Tests\Fixtures\Models\User;
 use RoundlyConsulting\Auth\Tests\Fixtures\ReentrantHasher;
@@ -470,4 +476,87 @@ it('never lets a passkey enrolment that lost the race pop the enrolment after it
         ->and(LoginChallenge::query()->sole())
         ->completed_at->toBeNull()
         ->completed()->toBe([ChallengeStep::EnrolPasskey]);
+});
+
+/**
+ * Runs `$concurrent` once, while the first password check of the request under test is
+ * still hashing (against the account it loaded before).
+ */
+function whileHashing(Closure $concurrent): void
+{
+    $fired = false;
+    $hashing = app(HashManager::class);
+
+    Hash::swap(new ReentrantHasher($hashing->driver('bcrypt'), static function () use ($concurrent, &$fired): void {
+        if (! $fired) {
+            $fired = true;
+            $concurrent();
+        }
+    }, 2));
+}
+
+function lockConcurrently(User $user, string $how): void
+{
+    match ($how) {
+        'manual lock' => app(LockAccount::class)->execute('users', $user->fresh() ?? $user),
+        'automatic lock' => array_map(static fn () => failPassword($user), range(1, 3)),
+    };
+}
+
+it('refuses a correct password that was still hashing when the account got locked', function (string $how): void {
+    Notification::fake();
+    $this->configureGuard('users', ['lockout.enabled' => true, 'lockout.threshold' => 3, 'throttle.login.max' => 100, 'throttle.login_account.max' => 100]);
+    $user = User::factory()->create();
+    whileHashing(static fn () => lockConcurrently($user, $how));
+
+    expect(fn () => Authentication::guard('users')->attempt(new PasswordCredentials($user->email, 'correct-horse-battery'), sessionContext()))->toThrow(InvalidCredentials::class)
+        ->and(LoginActivity::query()->latest('id')->first()?->outcome)->toBe(ActivityOutcome::Locked)
+        ->and(RefreshTokens::sessions($user)->all())->toBeEmpty()
+        ->and($user->fresh()?->isLocked())->toBeTrue();
+})->with(['manual lock', 'automatic lock']);
+
+it('never counts a failure that was still hashing when the account got locked', function (): void {
+    Notification::fake();
+    $this->configureGuard('users', ['lockout.enabled' => true, 'lockout.threshold' => 3, 'throttle.login.max' => 100, 'throttle.login_account.max' => 100]);
+    $user = User::factory()->create();
+    whileHashing(static fn () => lockConcurrently($user, 'manual lock'));
+
+    failPassword($user);
+
+    expect($user->fresh()?->getAttribute('failed_login_count'))->toBe(0)
+        ->and(LoginActivity::query()->latest('id')->first()?->outcome)->toBe(ActivityOutcome::Locked);
+});
+
+it('never counts a failure against a stale unlocked copy of a locked account', function (): void {
+    Notification::fake();
+    $this->configureGuard('users', ['lockout.enabled' => true, 'lockout.threshold' => 3]);
+    $user = User::factory()->create(['failed_login_count' => 2]);
+    $stale = User::query()->findOrFail($user->getKey());
+
+    app(LockAccount::class)->execute('users', $user);
+
+    expect(app(Lockout::class)->recordFailure(app(GuardRegistry::class)->get('users'), $stale))->toBeFalse()
+        ->and($user->fresh()?->getAttribute('failed_login_count'))->toBe(0);
+});
+
+it('locks and notifies once when twice the threshold of failures are hashing together', function (): void {
+    Event::fake([AccountLocked::class]);
+    Notification::fake();
+    $this->configureGuard('users', ['lockout.enabled' => true, 'lockout.threshold' => 3, 'throttle.login.max' => 100, 'throttle.login_account.max' => 100]);
+    $user = User::factory()->create();
+    $hashing = app(HashManager::class);
+
+    // Every guess starts the next one before its own check returns: all six load the account
+    // unlocked, then record their failures one after another.
+    $guess = static function () use ($user): void {
+        failPassword($user);
+    };
+    Hash::swap(new ReentrantHasher($hashing->driver('bcrypt'), $guess, 6));
+
+    $guess();
+
+    Event::assertDispatchedTimes(AccountLocked::class, 1);
+    expect(Notification::sent($user, AccountLockedNotification::class))->toHaveCount(1)
+        ->and($user->fresh()?->isLocked())->toBeTrue()
+        ->and($user->fresh()?->getAttribute('failed_login_count'))->toBe(0);
 });

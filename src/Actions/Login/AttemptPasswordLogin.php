@@ -22,6 +22,9 @@ use RoundlyConsulting\Auth\Exceptions\InvalidCredentials;
 use RoundlyConsulting\Auth\Exceptions\LoginMethodDisabled;
 use RoundlyConsulting\Auth\Guards\AccountRepository;
 use RoundlyConsulting\Auth\Guards\GuardRegistry;
+use RoundlyConsulting\Auth\Support\AccountModels;
+use RoundlyConsulting\Auth\Support\AccountState;
+use RoundlyConsulting\Auth\Support\Columns;
 use RoundlyConsulting\Auth\Support\Lockout;
 use RoundlyConsulting\Auth\Support\Throttle;
 
@@ -36,6 +39,8 @@ use RoundlyConsulting\Auth\Support\Throttle;
  * account exists. A hard-locked account answers every attempt exactly like a wrong
  * password (`invalid_credentials`, the attempt counted) — a lock never confirms a
  * password nor an account; its owner learns of it from the `AccountLockedNotification`.
+ * `locked_until` is read again once the hash is checked, so a lock written while this
+ * request hashed holds the same way.
  */
 final readonly class AttemptPasswordLogin
 {
@@ -73,6 +78,14 @@ final readonly class AttemptPasswordLogin
 
         $valid = $this->verifyPassword->execute($account, $credentials->password);
 
+        if ($account !== null && $this->lockedMeanwhile($account)) {
+            // A lock written while this request hashed (another guess reached the threshold, an
+            // admin) answers exactly like the lock checked above — never a login, never a count.
+            $this->fail($guard, $account, $credentials, $context, ActivityOutcome::Locked);
+
+            throw new InvalidCredentials;
+        }
+
         if ($account === null || ! $valid) {
             if ($account !== null) {
                 $this->lockout->recordFailure($config, $account);
@@ -99,6 +112,20 @@ final readonly class AttemptPasswordLogin
         $this->throttle->release($config, $kinds, $credentials->identifier, $context->ipAddress);
 
         return $result;
+    }
+
+    /**
+     * Re-reads `locked_until` alone — the hash just checked stays the one loaded — onto the
+     * instance, so every later check sees the lock too.
+     */
+    private function lockedMeanwhile(Account $account): bool
+    {
+        $model = AccountModels::of($account);
+        $column = Columns::lockedUntil();
+
+        AccountState::reflect($model, [$column => $model->newQuery()->whereKey($model->getKey())->value($column)]);
+
+        return $account->isLocked();
     }
 
     private function fail(string $guard, ?Account $account, PasswordCredentials $credentials, SessionContext $context, ActivityOutcome $outcome): void

@@ -6,6 +6,7 @@ namespace RoundlyConsulting\Auth\Support;
 
 use Carbon\CarbonImmutable;
 use DateTimeInterface;
+use Illuminate\Database\Eloquent\Builder;
 use RoundlyConsulting\Auth\Contracts\Account;
 use RoundlyConsulting\Auth\DataTransferObjects\NotificationData;
 use RoundlyConsulting\Auth\Enums\NotificationType;
@@ -14,7 +15,8 @@ use RoundlyConsulting\Auth\Guards\GuardConfig;
 
 /**
  * The opt-in hard lock. The counter is only ever touched when `lockout.enabled`, and
- * only through a bounded conditional increment (`… WHERE count < threshold`), so an
+ * only through a bounded conditional increment (`… WHERE count < threshold AND not
+ * locked`, the lock compared with PHP `now` bound as a value), so an
  * attacker can neither overflow the column nor cause a write per attempt on guards
  * that do not use it. A lock never revokes existing sessions — an attacker can trigger
  * one, and it must not log the victim out.
@@ -40,9 +42,15 @@ final readonly class Lockout
         $threshold = $guard->lockoutThreshold();
         $row = static fn () => $model->newQuery()->whereKey($model->getKey());
 
-        $row()->where($column, '<', $threshold)->increment($column);
+        $now = CarbonImmutable::now();
 
-        $until = CarbonImmutable::now()->addSeconds($guard->lockoutDuration());
+        // `$account` may predate a lock written meanwhile: a failure landing during a lock is
+        // never counted, whatever the copy says.
+        $row()->where($column, '<', $threshold)
+            ->where(static fn (Builder $query) => $query->whereNull(Columns::lockedUntil())->orWhere(Columns::lockedUntil(), '<=', $now))
+            ->increment($column);
+
+        $until = $now->addSeconds($guard->lockoutDuration());
         $locked = $row()->where($column, '>=', $threshold)->update([$column => 0, Columns::lockedUntil() => $until]);
 
         if ($locked === 0) {
