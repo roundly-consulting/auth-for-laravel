@@ -6,6 +6,8 @@ All notable changes to `auth-for-laravel` are documented in this file. The forma
 
 ## Unreleased
 
+## 1.1.1 - 2026-10-07
+
 ### Added
 
 - `authentication:check` warns when `two-factor.attempts` is `null` on a guard with two-factor on: two-factor's per-account limiter is then off, the per-challenge `challenge.max_attempts` is the only bound on second-factor codes, and every new login opens a fresh budget.
