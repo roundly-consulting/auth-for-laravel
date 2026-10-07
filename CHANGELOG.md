@@ -6,6 +6,36 @@ All notable changes to `auth-for-laravel` are documented in this file. The forma
 
 ## Unreleased
 
+### Added
+
+- `authentication:check` warns when `two-factor.attempts` is `null` on a guard with two-factor on: two-factor's per-account limiter is then off, the per-challenge `challenge.max_attempts` is the only bound on second-factor codes, and every new login opens a fresh budget.
+
+### Changed
+
+- `two_factor.after_email_login = false` now exempts magic-link, email-code and invitation logins from the second-factor policy only; `passkeys.mode = required` still makes them enrol a passkey. Before, the setting skipped the mandated enrolment too, so `required` could never be enforced for accounts that only sign in by email.
+- Registering two guards on the same effective route prefix or route-name prefix (from `routes.*`, a manual `Authentication::routes()` call or `->prefix()` / `->name()`) now throws `AuthenticationMisconfigured` naming both guards. Before, Laravel silently kept only the last route per URL and `route:cache` refused the duplicate name. Upgrade: give each routed guard its own `routes.prefix` and `routes.name`.
+- Registration and invitation acceptance send the "account exists" notice in the address holder's `preferredLocale()`, falling back to the request's / invitation's locale.
+- Documentation: `EmailChangeRequested` fires only when a confirmation link was issued; it is server-side and must never be shown to the requester.
+
+### Fixed
+
+- `AUTHENTICATION_PASSKEYS=off` with the shipped config no longer fails validation for every guard on the defaults (every endpoint answered 500). `passkeys.second_factor = allowed` is accepted with passkeys off; `required` and `required_when_enrolled` are still refused.
+- A lock written while a password login was still hashing now refuses that login, even with the correct password. Failures checked against an account loaded before the lock no longer count, so concurrent failures lock and notify exactly once.
+- `challenge.max_active_per_account` now holds when logins race: older challenges are superseded again after the new one is inserted.
+- An email change to a taken address now also sends `EmailChangeRequestedNotification` to the old address (with `email_change.notify_old`), so the requester's own mailbox no longer shows whether the address is in use. Its "account exists" notice shares the 10-minute per-address cooldown with registration and invitation acceptance, and goes out in the holder's `preferredLocale()`, falling back to the requester's.
+- Removing a passkey locks the account row while it counts and revokes, so two concurrent removes can no longer delete an account's last way in.
+- An explicit re-authentication now satisfies `authentication.reauthenticated:N` routes whose window is longer than `reauthentication.timeout` (the proof is kept for the longer of the timeout and the refresh-token TTL); `confirmed_until` is unchanged.
+- `authentication:check` lists a wrongly typed config value (a non-string class key, `notifications.classes.* = false`, an invalid `*.key_type`, another guard's bad `laravel_guard`) as a problem instead of crashing and hiding the rest.
+- `authentication:guard`: a re-run no longer adds a second `create_<table>_table` migration (an existing one makes it refuse; `--force` overwrites it in place); `--table` is validated like the guard name, and an invalid one writes nothing; the migration, model and factory use the configured `authentication.columns.password` / `email_verified_at` names.
+- Models using `HasAuthentication` also hide the password column when `authentication.columns.password` is renamed.
+- `assertTokensInvalidated()` under scope `all` judges only the sessions active when `actingAsAccount()` signed the account in, so a login after the invalidation (`passwords.reset.login_after`) no longer fails it. Without a guard it resolves the guard like `actingAsAccount()`: an account of another guard throws instead of being judged by the default guard's scope, which could pass a missing invalidation.
+
+### Security
+
+- A login that raced a password reset, a disable or a logout everywhere no longer leaves a session that keeps refreshing. Sessions record the token version they were issued under; refreshing one the account has moved past revokes it and answers `refresh_invalid`. Sessions issued by 1.1.0 or earlier carry no version and are not checked.
+- A correct password that login refuses with the uniform `invalid_credentials` (a disabled or unverified account without `reveal_account_state`, a uniform risk denial, an unavailable step-up) now counts against the login throttle like a wrong one and leaves the lockout counter alone, so the throttle no longer reveals which guess was right.
+- A passkey second factor or forced passkey enrolment that loses a race to a restarted ceremony now answers `challenge_invalid` instead of skipping the next step; a passkey-plus-TOTP setup could finish without TOTP.
+
 ## 1.1.0 - 2026-10-05
 
 ### Added
