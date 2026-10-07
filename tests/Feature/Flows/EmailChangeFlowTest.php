@@ -63,6 +63,42 @@ it('answers a taken address the same way and notifies its owner instead', functi
     Notification::assertNotSentTo(new AnonymousNotifiable, ConfirmEmailChangeNotification::class);
 });
 
+it('tells the old address about the change whether or not the new address is taken', function (string $target): void {
+    $user = User::factory()->create(['email' => 'old@example.com']);
+    User::factory()->create(['email' => 'taken@example.com']);
+
+    $this->postJson('/users/auth/email/change', ['email' => $target], bearer(issuePair($user)))->assertStatus(202)->assertExactJson(['status' => 'sent']);
+
+    // The requester reads the old mailbox: a notice only for a free address would tell them the other is taken.
+    Notification::assertSentOnDemandTimes(EmailChangeRequestedNotification::class, 1);
+    Notification::assertSentOnDemand(EmailChangeRequestedNotification::class, fn ($n, $c, $notifiable): bool => $notifiable->routes['mail'] === 'old@example.com' && $n->data->replacements === ['new_email' => $target]);
+})->with(['free address' => 'free@example.com', 'taken address' => 'taken@example.com']);
+
+it('tells the old address nothing in either case when notify_old is off', function (string $target): void {
+    $this->configureGuard('users', ['email_change.notify_old' => false]);
+    $user = User::factory()->create(['email' => 'old@example.com']);
+    User::factory()->create(['email' => 'taken@example.com']);
+
+    $this->postJson('/users/auth/email/change', ['email' => $target], bearer(issuePair($user)))->assertStatus(202);
+
+    Notification::assertSentOnDemandTimes(EmailChangeRequestedNotification::class, 0);
+})->with(['free address' => 'free@example.com', 'taken address' => 'taken@example.com']);
+
+it('shares the account-exists cooldown with registration, so email changes cannot flood an address', function (): void {
+    $this->configureGuard('users', ['registration.login_after' => false]);
+    User::factory()->create(['email' => 'victim@example.com']);
+
+    foreach (User::factory()->count(2)->create() as $requester) {
+        $this->postJson('/users/auth/email/change', ['email' => 'victim@example.com'], bearer(issuePair($requester)))->assertStatus(202);
+    }
+
+    Notification::assertSentOnDemandTimes(AccountExistsNotification::class, 1);
+
+    $this->postJson('/users/auth/register', ['email' => 'victim@example.com', 'password' => 'a-long-enough-passphrase'])->assertStatus(202);
+
+    Notification::assertSentOnDemandTimes(AccountExistsNotification::class, 1);
+});
+
 it('refuses the unchanged address', function (): void {
     $user = User::factory()->create();
 

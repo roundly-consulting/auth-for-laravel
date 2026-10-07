@@ -17,6 +17,7 @@ use RoundlyConsulting\Auth\Enums\UrlKind;
 use RoundlyConsulting\Auth\Events\EmailChangeRequested;
 use RoundlyConsulting\Auth\Exceptions\LoginMethodDisabled;
 use RoundlyConsulting\Auth\Guards\AccountRepository;
+use RoundlyConsulting\Auth\Guards\GuardConfig;
 use RoundlyConsulting\Auth\Guards\GuardRegistry;
 use RoundlyConsulting\Auth\Support\NotificationDispatcher;
 use RoundlyConsulting\Auth\Support\Throttle;
@@ -25,7 +26,9 @@ use RoundlyConsulting\Auth\Support\UrlTemplate;
 /**
  * Starts an email change: nothing changes until the NEW address confirms, and the old
  * address is told. An address already in use gets an "account exists" notice instead —
- * with the same answer to the caller, so an email change cannot probe for accounts.
+ * at most one per address per cooldown, shared with registration and invitations — with
+ * the same answer to the caller and the same old-address notice, so an email change
+ * cannot probe for accounts.
  */
 final readonly class RequestEmailChange
 {
@@ -57,7 +60,12 @@ final readonly class RequestEmailChange
         $this->throttle->attempt($config, [ThrottleKind::EmailRequestAccount], $old, $data->context);
 
         if ($accounts->emailTaken($new)) {
-            $this->notifications->sendTo($config, NotificationType::AccountExists, $new, new NotificationData($guard), $account->preferredLocale());
+            // Shared with registration and invitations: no path mails an address more often.
+            if ($this->throttle->accountExistsCooldown($config, $new)) {
+                $this->notifications->sendTo($config, NotificationType::AccountExists, $new, new NotificationData($guard), $account->preferredLocale());
+            }
+
+            $this->notifyOldAddress($config, $guard, $account, $old, $new);
 
             return;
         }
@@ -70,13 +78,23 @@ final readonly class RequestEmailChange
             expiresAt: $secret->record->expires_at,
         ), $account->preferredLocale());
 
+        $this->notifyOldAddress($config, $guard, $account, $old, $new);
+
+        // Server-side only: it fires for an issued link, so surfacing it would reveal a taken address.
+        event(new EmailChangeRequested($guard, $account, $new));
+    }
+
+    /**
+     * The old mailbox hears about every request, taken address or not — the requester
+     * reads it, so a notice for a free address only would answer the probe.
+     */
+    private function notifyOldAddress(GuardConfig $config, string $guard, Account $account, string $old, string $new): void
+    {
         if ($config->emailChangeNotifiesOldAddress()) {
             $this->notifications->sendTo($config, NotificationType::EmailChangeRequested, $old, new NotificationData(
                 guard: $guard,
                 replacements: ['new_email' => $new],
             ), $account->preferredLocale());
         }
-
-        event(new EmailChangeRequested($guard, $account, $new));
     }
 }
