@@ -21,7 +21,10 @@ use RoundlyConsulting\Crypto\Random\Token;
  * still required, a snapshot of the account's token version (any invalidation before
  * the challenge finalizes kills it), and the device fingerprint. At most
  * `challenge.max_active_per_account` stay active — older ones are superseded, so a
- * password-holding attacker cannot farm parallel challenges for extra guesses.
+ * password-holding attacker cannot farm parallel challenges for extra guesses. The
+ * superseding runs again after the insert, keeping the newest `max` (this one included):
+ * concurrent logins that each listed the active challenges before either inserted cannot
+ * leave more than `max` active between them.
  *
  * @internal a login-pipeline step (`CompleteFirstFactor`).
  */
@@ -42,7 +45,7 @@ final readonly class StartLoginChallenge
         $account = AccountModels::of($login->account);
         $now = CarbonImmutable::now();
 
-        $this->supersedeOlder($login->guard, $account->getMorphClass(), $account->getKey(), $guard->maxActiveChallenges(), $now);
+        $this->supersedeOlder($login->guard, $account->getMorphClass(), $account->getKey(), $guard->maxActiveChallenges() - 1, $now);
 
         $enrols = array_filter($requirements, static fn (ChallengeRequirement $requirement): bool => $requirement->step->isEnrolment()) !== [];
         $expiresAt = $now->addSeconds($enrols ? $guard->challengeEnrolmentTtl() : $guard->challengeTtl());
@@ -74,6 +77,8 @@ final readonly class StartLoginChallenge
             'expires_at' => $expiresAt,
         ]);
 
+        $this->supersedeOlder($login->guard, $account->getMorphClass(), $account->getKey(), $guard->maxActiveChallenges(), $now);
+
         return new PendingChallenge(
             token: $token,
             expiresAt: $expiresAt,
@@ -85,7 +90,10 @@ final readonly class StartLoginChallenge
         );
     }
 
-    private function supersedeOlder(string $guard, string $accountType, mixed $accountId, int $maxActive, CarbonImmutable $now): void
+    /**
+     * Supersedes every active challenge of the account but the newest `$keep`.
+     */
+    private function supersedeOlder(string $guard, string $accountType, mixed $accountId, int $keep, CarbonImmutable $now): void
     {
         $active = Models::challenges()
             ->forGuard($guard)
@@ -96,7 +104,7 @@ final readonly class StartLoginChallenge
             ->pluck('id')
             ->all();
 
-        $stale = array_slice($active, max(0, $maxActive - 1));
+        $stale = array_slice($active, max(0, $keep));
 
         if ($stale !== []) {
             Models::challenges()->whereKey($stale)->update(['invalidated_at' => $now, 'invalidated_reason' => 'superseded']);

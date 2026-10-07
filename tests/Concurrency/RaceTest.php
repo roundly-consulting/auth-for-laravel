@@ -560,3 +560,20 @@ it('locks and notifies once when twice the threshold of failures are hashing tog
         ->and($user->fresh()?->isLocked())->toBeTrue()
         ->and($user->fresh()?->getAttribute('failed_login_count'))->toBe(0);
 });
+
+it('keeps at most max_active_per_account challenges active when logins race', function (int $max): void {
+    $this->configureGuard('users', ['challenge.max_active_per_account' => $max]);
+    $user = User::factory()->create();
+    enableTotp($user);
+
+    for ($login = 1; $login < $max; $login++) {
+        totpChallenge($user);
+    }
+
+    // The concurrent login runs right after this one listed the active challenges, before it inserts.
+    $raced = interleaveAfterQuery(Tables::challenges(), 1, static fn () => totpChallenge($user), static fn () => totpChallenge($user));
+
+    expect($raced)->toBeTrue()
+        ->and(LoginChallenge::query()->active()->count())->toBe($max)
+        ->and(LoginChallenge::query()->active()->max('id'))->toBe(LoginChallenge::query()->max('id'));
+})->with(['max 1' => 1, 'max 3' => 3]);
