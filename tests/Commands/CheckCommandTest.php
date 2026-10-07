@@ -42,6 +42,15 @@ it('fails on each broken piece of wiring', function (Closure $break, string $mes
     }, 'routes are not registered'],
 ]);
 
+it('lists a junk class leaf next to the other problems instead of crashing', function (): void {
+    $this->configureGuard('users', ['registration.rules' => 123, 'registration.mode' => 'invite_only', 'invitations.enabled' => false]);
+
+    $this->artisan('authentication:check', ['guard' => 'users'])
+        ->expectsOutputToContain('registration.mode is invite_only')
+        ->expectsOutputToContain('registration.rules must be a string')
+        ->assertExitCode(1);
+});
+
 it('passes after the documented install on a stock users table', function (): void {
     // Laravel's own users table, then the two published column stubs `migrate` runs.
     Schema::drop('users');

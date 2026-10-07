@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace RoundlyConsulting\Auth\Support;
 
+use Closure;
 use Illuminate\Database\Eloquent\Concerns\HasUlids;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Model;
@@ -32,6 +33,7 @@ use RoundlyConsulting\Auth\Notifications\AuthenticationNotification;
 use RoundlyConsulting\Jwt\Exceptions\JwtMisconfigured;
 use RoundlyConsulting\Jwt\Facades\Jwt;
 use RoundlyConsulting\PackageToolkit\Enums\KeyType;
+use RoundlyConsulting\PackageToolkit\Exceptions\InvalidConfigurationException;
 use RoundlyConsulting\Passkeys\Contracts\HasPasskeys;
 use RoundlyConsulting\TwoFactor\Contracts\TwoFactorAuthenticatable;
 
@@ -68,19 +70,39 @@ final class ConfigValidation
             return [$e->getMessage()];
         }
 
-        try {
+        // Each step stops at its first unreadable leaf, but never takes the others down with
+        // it: the doctor lists every problem instead of crashing on one.
+        self::collect($problems, static function (array &$problems) use ($guard, $model, $prefix): void {
             self::policyProblems($guard, $model, $prefix, $problems);
-        } catch (AuthenticationMisconfigured $e) {
-            $problems[] = $e->getMessage();
-        }
-
-        self::classProblems($guard, $prefix, $problems);
-
-        self::jwtProblems($guard, $prefix, $problems);
-        self::keyTypeProblems($model, $prefix, $problems);
+        });
+        self::collect($problems, static function (array &$problems) use ($guard, $prefix): void {
+            self::classProblems($guard, $prefix, $problems);
+        });
+        self::collect($problems, static function (array &$problems) use ($guard, $prefix): void {
+            self::jwtProblems($guard, $prefix, $problems);
+        });
+        self::collect($problems, static function (array &$problems) use ($model, $prefix): void {
+            self::keyTypeProblems($model, $prefix, $problems);
+        });
         self::crossGuardProblems($guard, $registry, $prefix, $problems);
 
-        return $problems;
+        // One unreadable leaf (e.g. laravel_guard) is met by several steps; report it once.
+        return array_values(array_unique($problems));
+    }
+
+    /**
+     * Run one validation step, turning an unreadable leaf into a listed problem.
+     *
+     * @param  list<string>  $problems
+     * @param  Closure(list<string>&): void  $step
+     */
+    private static function collect(array &$problems, Closure $step): void
+    {
+        try {
+            $step($problems);
+        } catch (AuthenticationMisconfigured|InvalidConfigurationException $e) {
+            $problems[] = $e->getMessage();
+        }
     }
 
     /**
@@ -396,26 +418,37 @@ final class ConfigValidation
                 continue;
             }
 
-            if ($other->laravelGuard() === $guard->laravelGuard()) {
-                $problems[] = "{$prefix}.laravel_guard must differ from guard [{$name}]'s.";
+            // One sibling's unreadable leaf must not hide the checks against the others.
+            self::collect($problems, static function (array &$problems) use ($guard, $other, $name, $prefix): void {
+                self::siblingProblems($guard, $other, $name, $prefix, $problems);
+            });
+        }
+    }
 
-                continue;
+    /**
+     * @param  list<string>  $problems
+     */
+    private static function siblingProblems(GuardConfig $guard, GuardConfig $other, string $name, string $prefix, array &$problems): void
+    {
+        if ($other->laravelGuard() === $guard->laravelGuard()) {
+            $problems[] = "{$prefix}.laravel_guard must differ from guard [{$name}]'s.";
+
+            return;
+        }
+
+        $otherModel = $other->configuredModel();
+
+        if ($otherModel !== null && is_subclass_of($otherModel, Model::class)
+            && (new $otherModel)->getMorphClass() === (new ($guard->model()))->getMorphClass()) {
+            $problems[] = "{$prefix}.model shares its morph class with guard [{$name}]; guards must use distinct models (a role on one table is authorization, not a guard).";
+        }
+
+        try {
+            if (Jwt::guard($other->laravelGuard())->audience() === Jwt::guard($guard->laravelGuard())->audience()) {
+                $problems[] = "The jwt guards of [{$guard->name()}] and [{$name}] share one audience; give each auth.guards entry its own `audience`, or one guard's tokens authenticate on the other.";
             }
-
-            $otherModel = $other->configuredModel();
-
-            if ($otherModel !== null && is_subclass_of($otherModel, Model::class)
-                && (new $otherModel)->getMorphClass() === (new ($guard->model()))->getMorphClass()) {
-                $problems[] = "{$prefix}.model shares its morph class with guard [{$name}]; guards must use distinct models (a role on one table is authorization, not a guard).";
-            }
-
-            try {
-                if (Jwt::guard($other->laravelGuard())->audience() === Jwt::guard($guard->laravelGuard())->audience()) {
-                    $problems[] = "The jwt guards of [{$guard->name()}] and [{$name}] share one audience; give each auth.guards entry its own `audience`, or one guard's tokens authenticate on the other.";
-                }
-            } catch (JwtMisconfigured) {
-                // Reported for that guard itself.
-            }
+        } catch (JwtMisconfigured) {
+            // Reported for that guard itself.
         }
     }
 

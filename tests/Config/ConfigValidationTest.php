@@ -81,6 +81,43 @@ it('accepts the shipped config with AUTHENTICATION_PASSKEYS=off', function (): v
         ->and($registry->get('users')->name())->toBe('users');
 });
 
+/**
+ * Regression (chat review C-11): only the policy step ran inside `try`, so a non-string
+ * class leaf, a junk `laravel_guard` (own or a sibling's) or an unknown `*.key_type` threw out
+ * of `problems()` and crashed `authentication:check` instead of being listed.
+ */
+it('lists a junk leaf of every later step instead of throwing', function (Closure $break, string $key): void {
+    $break();
+
+    $registry = app(GuardRegistry::class);
+    $problems = ConfigValidation::problems($registry->all()['users'], $registry);
+
+    expect(implode("\n", $problems))->toContain($key)
+        ->and($problems)->toBe(array_values(array_unique($problems)))
+        ->and(fn () => $registry->get('users'))->toThrow(AuthenticationMisconfigured::class);
+})->with([
+    'notifications.classes.magic_link' => [fn () => test()->configureGuard('users', ['notifications.classes.magic_link' => false]), 'authentication.guards.users.notifications.classes.magic_link'],
+    'registration.rules' => [fn () => test()->configureGuard('users', ['registration.rules' => 123]), 'authentication.guards.users.registration.rules'],
+    'registration.creator' => [fn () => test()->configureGuard('users', ['registration.creator' => 123]), 'authentication.guards.users.registration.creator'],
+    'risk.assessor' => [fn () => test()->configureGuard('users', ['risk.assessor' => 123]), 'authentication.guards.users.risk.assessor'],
+    'tokens.claims_resolver' => [fn () => test()->configureGuard('users', ['tokens.claims_resolver' => 123]), 'authentication.guards.users.tokens.claims_resolver'],
+    'resources.account' => [fn () => test()->configureGuard('users', ['resources.account' => 123]), 'authentication.guards.users.resources.account'],
+    'laravel_guard' => [fn () => test()->configureGuard('users', ['laravel_guard' => 123]), 'authentication.guards.users.laravel_guard'],
+    'a sibling\'s laravel_guard' => [fn () => test()->configureGuard('clients', ['laravel_guard' => 123]), 'authentication.guards.clients.laravel_guard'],
+    'authentication.key_type' => [function (): void {
+        config()->set('authentication.key_type', 'foo');
+        app(GuardRegistry::class)->flush();
+    }, '[authentication.key_type]'],
+    'passkeys.key_type' => [function (): void {
+        config()->set('passkeys.key_type', 'foo');
+        app(GuardRegistry::class)->flush();
+    }, '[passkeys.key_type]'],
+    'refresh-tokens.key_type' => [function (): void {
+        config()->set('refresh-tokens.key_type', 'foo');
+        app(GuardRegistry::class)->flush();
+    }, '[refresh-tokens.key_type]'],
+]);
+
 it('refuses to resolve a guard with a typo before any credential changes', function (): void {
     Notification::fake();
     $user = User::factory()->create();
