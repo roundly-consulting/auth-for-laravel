@@ -28,8 +28,9 @@ use RoundlyConsulting\Passkeys\Models\Passkey;
 /**
  * Removes one of the account's passkeys — unless it is the last one and the account
  * would be left without a way in, or the guard requires a passkey (409
- * `last_credential`). `invalidation.passkey_changed` defaults to `none`: removing a
- * lost key should not log out the device doing it.
+ * `last_credential`). The check and the revoke run under the account row lock, so of
+ * two concurrent removes the second sees the first. `invalidation.passkey_changed`
+ * defaults to `none`: removing a lost key should not log out the device doing it.
  */
 final readonly class RemovePasskey
 {
@@ -43,17 +44,25 @@ final readonly class RemovePasskey
     {
         $config = $this->guards->owning($guard, $account);
         $model = AccountModels::passkeys($account);
-        $passkey = $model->passkeys()->whereKey($passkeyId)->first();
 
-        if (! $passkey instanceof Passkey) {
-            throw new PasskeyNotFound;
-        }
+        // Count and revoke under the account row lock: the passkeys are separate rows, so
+        // only the shared parent serialises two removes — otherwise both pass the count
+        // and the account is left without its last way in.
+        $model->getConnection()->transaction(function () use ($config, $account, $model, $passkeyId): void {
+            $model->newQueryWithoutScopes()->whereKey($model->getKey())->lockForUpdate()->value($model->getKeyName());
 
-        if ($model->passkeys()->count() <= 1 && $this->lastOneIsNeeded($config, $account)) {
-            throw new LastCredential;
-        }
+            $passkey = $model->passkeys()->whereKey($passkeyId)->first();
 
-        Passkeys::for($model)->revoke($passkey);
+            if (! $passkey instanceof Passkey) {
+                throw new PasskeyNotFound;
+            }
+
+            if ($model->passkeys()->count() <= 1 && $this->lastOneIsNeeded($config, $account)) {
+                throw new LastCredential;
+            }
+
+            Passkeys::for($model)->revoke($passkey);
+        });
 
         event(new PasskeyRemoved($guard, $account, $passkeyId));
         $this->notifications->send($config, NotificationType::PasskeyRemoved, $account, new NotificationData($guard));
