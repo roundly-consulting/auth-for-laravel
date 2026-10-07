@@ -23,8 +23,8 @@ final class {{ class }}Factory extends Factory
         return [
             'name' => $this->faker->name(),
             'email' => strtolower($this->faker->unique()->safeEmail()),
-            'email_verified_at' => now(),
-            'password' => Hash::make('password'),
+            {{ email_verified_at_column }} => now(),
+            {{ password_column }} => Hash::make('password'),
         ];
     }
 }

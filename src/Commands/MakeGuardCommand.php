@@ -7,6 +7,7 @@ namespace RoundlyConsulting\Auth\Commands;
 use Illuminate\Console\Command;
 use Illuminate\Filesystem\Filesystem;
 use Illuminate\Support\Str;
+use RoundlyConsulting\Auth\Support\Columns;
 use RoundlyConsulting\PackageToolkit\Enums\KeyType;
 use RuntimeException;
 
@@ -166,6 +167,7 @@ final class MakeGuardCommand extends Command
             '{{ traits }}' => implode("\n", array_map(static fn (string $trait): string => "    use {$trait};", $traits)),
             '{{ table }}' => $table,
             '{{ casts }}' => $casts,
+            ...$this->columnLiterals(),
         ]);
     }
 
@@ -199,6 +201,7 @@ final class MakeGuardCommand extends Command
             '{{ id }}' => $id,
             '{{ password_nullable }}' => '->nullable()',
             '{{ extra_columns }}' => implode("\n", $extra),
+            ...$this->columnLiterals(),
         ]);
     }
 
@@ -208,7 +211,23 @@ final class MakeGuardCommand extends Command
             '{{ factory_namespace }}' => 'Database\Factories',
             '{{ namespace }}' => $namespace,
             '{{ class }}' => $class,
+            ...$this->columnLiterals(),
         ]);
+    }
+
+    /**
+     * The two columns the stubs name directly, under their configured
+     * `authentication.columns.*` names (the rest come from `authenticationColumns()`), as
+     * PHP string literals.
+     *
+     * @return array<string, string>
+     */
+    private function columnLiterals(): array
+    {
+        return [
+            '{{ password_column }}' => var_export(Columns::password(), true),
+            '{{ email_verified_at_column }}' => var_export(Columns::emailVerifiedAt(), true),
+        ];
     }
 
     private function stub(string $name): string

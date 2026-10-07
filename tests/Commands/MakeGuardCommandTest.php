@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use Database\Factories\AgentFactory;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Schema;
 use RoundlyConsulting\Auth\Guards\GuardRegistry;
@@ -164,4 +165,48 @@ it('prints a guard block that validates when two-factor and passkeys are left ou
     app(GuardRegistry::class)->flush();
 
     expect(ConfigValidation::problems(app(GuardRegistry::class)->all()['vendors'], app(GuardRegistry::class)))->toBe([]);
+});
+
+/**
+ * Regression (chat review C-14): the stubs hardcoded `password` / `email_verified_at`, so a host
+ * with renamed `authentication.columns.*` got a table the package never reads — `hasPassword()`
+ * and `hasVerifiedEmail()` false, password writes failing, the doctor flagging the columns.
+ */
+it('scaffolds the password and verification columns under their configured names', function (): void {
+    config()->set('authentication.columns.password', 'password_hash');
+    config()->set('authentication.columns.email_verified_at', 'verified_at');
+
+    $this->artisan('authentication:guard', ['name' => 'agents'])->assertSuccessful();
+
+    $model = $this->scaffold.'/app/Models/Agent.php';
+    $factory = $this->scaffold.'/database/factories/AgentFactory.php';
+    $migration = File::glob($this->scaffold.'/database/migrations/*_create_agents_table.php')[0];
+
+    foreach ([$model, $factory, $migration] as $file) {
+        lint($file);
+        expect(File::get($file))->toContain("'password_hash'")->toContain("'verified_at'")->not->toContain("'email_verified_at'");
+    }
+
+    require $model;
+    require $factory;
+    (require $migration)->up();
+
+    expect(Schema::hasColumns('agents', ['password_hash', 'verified_at']))->toBeTrue()
+        ->and(Schema::hasColumn('agents', 'password'))->toBeFalse()
+        ->and(Schema::hasColumn('agents', 'email_verified_at'))->toBeFalse();
+
+    $agent = AgentFactory::new()->create();
+
+    expect($agent->hasPassword())->toBeTrue()
+        ->and($agent->hasVerifiedEmail())->toBeTrue()
+        ->and($agent->toArray())->not->toHaveKey('password_hash');
+
+    config()->set('authentication.guards.agents', ['model' => 'App\\Models\\Agent']);
+    config()->set('auth.guards.agents', ['driver' => 'jwt', 'provider' => 'agents', 'audience' => 'app-agents']);
+    config()->set('auth.providers.agents', ['driver' => 'authentication', 'guard' => 'agents']);
+    app(GuardRegistry::class)->flush();
+
+    $this->artisan('authentication:check', ['guard' => 'agents'])
+        ->doesntExpectOutputToContain('missing columns')
+        ->assertSuccessful();
 });

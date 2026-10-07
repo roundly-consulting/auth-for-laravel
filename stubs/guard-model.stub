@@ -14,13 +14,13 @@ final class {{ class }} extends Model implements {{ interfaces }}
 
     protected $guarded = [];
 
-    protected $hidden = ['password'];
+    protected $hidden = [{{ password_column }}];
 
     /**
      * @return array<string, string>
      */
     protected function casts(): array
     {
-        return [{{ casts }}'email_verified_at' => 'datetime'];
+        return [{{ casts }}{{ email_verified_at_column }} => 'datetime'];
     }
 }
