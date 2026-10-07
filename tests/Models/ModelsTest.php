@@ -24,6 +24,20 @@ it('never serialises a secret hash', function (): void {
         ->and(User::factory()->create()->toArray())->not->toHaveKeys(['token_version', 'locked_until', 'disabled_reason', 'failed_login_count', 'password', 'two_factor_secret']);
 });
 
+/**
+ * Regression (chat review V-1): the trait hid four sensitive columns by their configured names
+ * but not the password, so a renamed `columns.password` serialised the hash next to a model's
+ * stock `$hidden = ['password']` (a host `return $user;`).
+ */
+it('never serialises the password hash under a renamed password column', function (): void {
+    config()->set('authentication.columns.password', 'password_hash');
+
+    $user = (new User)->forceFill(['email' => 'renamed@example.com', 'password_hash' => '$2y$04$hash']);
+
+    expect($user->toArray())->not->toHaveKey('password_hash')->toHaveKey('email', 'renamed@example.com')
+        ->and($user->hasPassword())->toBeTrue();
+});
+
 it('derives the invitation status and filters by it', function (): void {
     CarbonImmutable::setTestNow('2026-09-26 12:00:00');
     Invitation::factory()->create();

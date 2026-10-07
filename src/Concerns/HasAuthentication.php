@@ -36,6 +36,7 @@ trait HasAuthentication
     public function initializeHasAuthentication(): void
     {
         $this->makeHidden([
+            Columns::password(),
             Columns::tokenVersion(),
             Columns::lockedUntil(),
             Columns::disabledReason(),
