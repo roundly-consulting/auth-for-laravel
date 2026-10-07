@@ -77,3 +77,50 @@ it('registers on destruct with a custom prefix, name and middleware', function (
     expect($refresh?->uri())->toBe('admin/auth/refresh')
         ->and($me?->gatherMiddleware())->toContain('throttle:60,1')->toContain('auth:staff');
 });
+
+/**
+ * Regression (chat review C-18): two routed guards sharing a prefix or a name passed. Laravel
+ * keeps only the last route per URL (a users magic-link request was served by clients and sent
+ * no mail), and a shared name breaks `route:cache`. A fresh manager stands in for a fresh boot.
+ */
+it('refuses a second guard on a prefix another guard took', function (Closure $register): void {
+    $this->configureGuard('users', ['routes.prefix' => 'auth']);
+    $this->configureGuard('clients', ['routes.prefix' => 'auth']);
+    $manager = new AuthenticationManager;
+
+    $manager->routes('users')->register();
+
+    expect(fn () => $register($manager))->toThrow(AuthenticationMisconfigured::class, 'Routes for the authentication guard [clients] use the prefix [auth], already taken by guard [users]')
+        ->and($manager->routesRegistered('clients'))->toBeFalse();
+})->with([
+    'routes.enabled' => [fn (AuthenticationManager $manager) => $manager->routes('clients')->register()],
+    'destruct' => [function (AuthenticationManager $manager): void {
+        $manager->routes('clients');
+    }],
+]);
+
+it('refuses a second guard on a route name another guard took', function (): void {
+    $this->configureGuard('users', ['routes.name' => 'auth.']);
+    $this->configureGuard('clients', ['routes.name' => 'auth.']);
+    $manager = new AuthenticationManager;
+
+    $manager->routes('users')->register();
+
+    expect(fn () => $manager->routes('clients')->register())
+        ->toThrow(AuthenticationMisconfigured::class, 'Routes for the authentication guard [clients] use the name [auth.], already taken by guard [users]');
+});
+
+it('refuses a clash made through the fluent prefix and name overrides', function (): void {
+    $manager = new AuthenticationManager;
+
+    $manager->routes('users')->register();
+
+    expect(fn () => $manager->routes('clients')->prefix('/users/auth/')->register())
+        ->toThrow(AuthenticationMisconfigured::class, 'the prefix [users/auth], already taken by guard [users]')
+        ->and(fn () => $manager->routes('clients')->name('authentication.users.')->register())
+        ->toThrow(AuthenticationMisconfigured::class, 'the name [authentication.users.], already taken by guard [users]');
+
+    $manager->routes('clients')->prefix('partners/auth')->name('partners.')->register();
+
+    expect($manager->routesRegistered('clients'))->toBeTrue();
+});

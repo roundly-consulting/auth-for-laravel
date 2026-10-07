@@ -27,6 +27,11 @@ class AuthenticationMisconfigured extends AuthException
         return static::because("Routes for the authentication guard [{$guard}] are already registered (routes.enabled and a manual Authentication::routes() call?).");
     }
 
+    public static function routesShared(string $guard, string $what, string $value, string $owner): static
+    {
+        return static::because("Routes for the authentication guard [{$guard}] use the {$what} [{$value}], already taken by guard [{$owner}]; give each guard its own routes.{$what} (or ->{$what}()).");
+    }
+
     public function errorCode(): string
     {
         return 'misconfigured';

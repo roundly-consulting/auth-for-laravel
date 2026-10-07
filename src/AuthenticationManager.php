@@ -60,6 +60,12 @@ final class AuthenticationManager
     /** @var array<string, true> */
     private array $routedGuards = [];
 
+    /** @var array<string, string> effective route prefix → the guard that registered it */
+    private array $routePrefixes = [];
+
+    /** @var array<string, string> effective route-name prefix → the guard that registered it */
+    private array $routeNames = [];
+
     /**
      * One guard's API (null → `authentication.default`).
      */
@@ -107,15 +113,28 @@ final class AuthenticationManager
     }
 
     /**
-     * @internal called by the registrar; a second registration for a guard is a misconfiguration.
+     * @internal called by the registrar with the effective prefix and name (after the fluent
+     * overrides); a second registration for a guard, or a prefix / name another guard already
+     * took, is a misconfiguration — Laravel would keep only the last route per URL and
+     * `route:cache` refuses a duplicate name.
      */
-    public function markRoutesRegistered(string $guard): void
+    public function markRoutesRegistered(string $guard, string $prefix, string $name): void
     {
         if (isset($this->routedGuards[$guard])) {
             throw AuthenticationMisconfigured::routesAlreadyRegistered($guard);
         }
 
+        if (isset($this->routePrefixes[$prefix])) {
+            throw AuthenticationMisconfigured::routesShared($guard, 'prefix', $prefix, $this->routePrefixes[$prefix]);
+        }
+
+        if (isset($this->routeNames[$name])) {
+            throw AuthenticationMisconfigured::routesShared($guard, 'name', $name, $this->routeNames[$name]);
+        }
+
         $this->routedGuards[$guard] = true;
+        $this->routePrefixes[$prefix] = $guard;
+        $this->routeNames[$name] = $guard;
     }
 
     public function routesRegistered(string $guard): bool

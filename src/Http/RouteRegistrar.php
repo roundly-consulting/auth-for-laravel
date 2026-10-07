@@ -173,7 +173,7 @@ final class RouteRegistrar
         }
 
         $this->registered = true;
-        $this->manager->markRoutesRegistered($this->guard->name());
+        $this->manager->markRoutesRegistered($this->guard->name(), $this->prefix, $this->name);
 
         $guard = $this->guard->name();
 

@@ -41,7 +41,7 @@ it('knows which guards registered routes', function (): void {
     $manager = app(AuthenticationManager::class);
 
     expect($manager->routesRegistered('users'))->toBeTrue()
-        ->and(fn () => $manager->markRoutesRegistered('users'))->toThrow(AuthenticationMisconfigured::class);
+        ->and(fn () => $manager->markRoutesRegistered('users', 'other/auth', 'other.'))->toThrow(AuthenticationMisconfigured::class, 'already registered');
 });
 
 it('never resolves a disabled or remembered account', function (): void {
