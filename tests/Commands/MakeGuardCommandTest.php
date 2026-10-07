@@ -69,6 +69,45 @@ it('refuses to overwrite without --force and rejects bad names', function (): vo
     $this->artisan('authentication:guard', ['name' => 'staff'])->assertFailed();
     $this->artisan('authentication:guard', ['name' => 'staff', '--force' => true])->assertSuccessful();
     $this->artisan('authentication:guard', ['name' => 'staff', '--model' => 'bad name'])->assertFailed();
+
+    expect(File::glob($this->scaffold.'/database/migrations/*_create_staff_table.php'))->toHaveCount(1);
+});
+
+/**
+ * Regression (chat review C-12): the migration path is timestamped, so the existence check
+ * never matched an earlier run — a re-run a second later added a second create-table
+ * migration and `migrate` failed with "table already exists".
+ */
+it('finds an earlier run\'s migration by its table, not its timestamp', function (): void {
+    $this->artisan('authentication:guard', ['name' => 'staff'])->assertSuccessful();
+    $first = File::glob($this->scaffold.'/database/migrations/*_create_staff_table.php');
+    File::delete([$this->scaffold.'/app/Models/Staff.php', $this->scaffold.'/database/factories/StaffFactory.php']);
+
+    sleep(1);
+
+    $this->artisan('authentication:guard', ['name' => 'staff'])
+        ->expectsOutputToContain('_create_staff_table.php already exists (use --force).')
+        ->assertFailed();
+
+    expect(File::glob($this->scaffold.'/database/migrations/*_create_staff_table.php'))->toBe($first)
+        ->and($this->scaffold.'/app/Models/Staff.php')->not->toBeFile();
+});
+
+it('overwrites an earlier run\'s migration under --force instead of adding one', function (): void {
+    $this->artisan('authentication:guard', ['name' => 'staff'])->assertSuccessful();
+    $first = File::glob($this->scaffold.'/database/migrations/*_create_staff_table.php');
+    File::put($first[0], '<?php // stale');
+
+    sleep(1);
+
+    $this->artisan('authentication:guard', ['name' => 'staff', '--force' => true])->assertSuccessful();
+
+    expect(File::glob($this->scaffold.'/database/migrations/*_create_staff_table.php'))->toBe($first)
+        ->and(File::get($first[0]))->toContain("Schema::create('staff'");
+
+    (require $first[0])->up();
+
+    expect(Schema::hasTable('staff'))->toBeTrue();
 });
 
 it('scaffolds a model that generates the uuid or ulid key its migration expects', function (string $keyType, string $class, string $trait): void {

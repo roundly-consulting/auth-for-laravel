@@ -47,7 +47,7 @@ final class MakeGuardCommand extends Command
         $namespace = $this->appNamespace().'\\Models';
         $targets = [
             $this->laravel->path("Models/{$class}.php") => $this->model($files, $namespace, $class, $table, $twoFactor, $passkeys),
-            $this->laravel->databasePath('migrations/'.date('Y_m_d_His')."_create_{$table}_table.php") => $this->migration($files, $table, $twoFactor, $passkeys),
+            $this->migrationPath($files, $table) => $this->migration($files, $table, $twoFactor, $passkeys),
             $this->laravel->databasePath("factories/{$class}Factory.php") => $this->factory($files, $namespace, $class),
         ];
 
@@ -160,6 +160,18 @@ final class MakeGuardCommand extends Command
             '{{ table }}' => $table,
             '{{ casts }}' => $casts,
         ]);
+    }
+
+    /**
+     * The table's existing create migration when an earlier run (or the host) wrote one —
+     * its timestamped name never repeats, so a fresh path would add a second create-table
+     * migration — else a new timestamped path.
+     */
+    private function migrationPath(Filesystem $files, string $table): string
+    {
+        $existing = $files->glob($this->laravel->databasePath("migrations/*_create_{$table}_table.php"));
+
+        return $existing[0] ?? $this->laravel->databasePath('migrations/'.date('Y_m_d_His')."_create_{$table}_table.php");
     }
 
     private function migration(Filesystem $files, string $table, bool $twoFactor, bool $passkeys): string
