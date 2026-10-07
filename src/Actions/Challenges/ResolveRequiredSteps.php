@@ -29,7 +29,8 @@ use RoundlyConsulting\Auth\Support\ReauthenticationMethods;
  * registration never counts as an email-possession primary (it proves no mailbox).
  *
  * The risk step-up applies to EVERY primary: E = false exempts email logins from the
- * two-factor policy, not from a `require_second_factor` reaction. A passkey primary that
+ * second-factor policy, not from a `require_second_factor` reaction nor from the enrolment
+ * of a mandated passkey (`passkeys.mode = required`). A passkey primary that
  * counts as MFA (Y) already is the step-up; one that does not must add TOTP — the same
  * passkey cannot step itself up.
  *
@@ -100,20 +101,20 @@ final class ResolveRequiredSteps
             return [];
         }
 
-        // 2. Email-possession primaries are exempt only when the host opts out (E = false).
-        //    PasswordReset is deliberately absent (D12); Registration proves no mailbox.
+        // 2. Email-possession primaries skip the second-factor policy (3.) only when the host opts
+        //    out (E = false) — never a mandated passkey enrolment (4.). PasswordReset is
+        //    deliberately absent (D12); Registration proves no mailbox.
         $emailPrimaries = [LoginMethod::MagicLink, LoginMethod::EmailOtp, LoginMethod::Invitation];
-
-        if (in_array($method, $emailPrimaries, true) && ! $guard->twoFactorAfterEmailLogin()) {
-            return [];
-        }
+        $exempt = in_array($method, $emailPrimaries, true) && ! $guard->twoFactorAfterEmailLogin();
 
         // 3. Verification steps.
         $passkeyAlternative = $secondFactor === PasskeySecondFactor::Allowed && $hasPasskeys && ($twoFactor !== TwoFactorMode::Required || $q);
         $totpStillNeeded = $twoFactor === TwoFactorMode::Required && ! $q;
         $steps = [];
 
-        if ($secondFactor === PasskeySecondFactor::Required
+        if ($exempt) {
+            // E = false: no verification step; only a mandated passkey enrolment (4.) applies.
+        } elseif ($secondFactor === PasskeySecondFactor::Required
             || ($secondFactor === PasskeySecondFactor::RequiredWhenEnrolled && $hasPasskeys)) {
             $steps[] = $hasPasskeys ? $passkey : $enrolPasskey;
 

@@ -60,6 +60,9 @@ function policyRows(): array
         'T=optional Y=false risk=high, totp, passkey' => [['passkeys.satisfies_mfa' => false], ['totp' => true, 'passkey' => true], LoginMethod::Passkey, RiskReaction::RequireSecondFactor, ['second_factor{totp,recovery_code}']],
         // Registration proves no mailbox: E=false does not exempt it.
         'T=required E=false, new account, registration' => [['two_factor.mode' => 'required', 'two_factor.after_email_login' => false], [], LoginMethod::Registration, RiskReaction::Allow, ['enrol_two_factor{totp_enrolment}']],
+        // E=false exempts email primaries from the second-factor policy only: a mandated passkey is still enrolled.
+        'T=optional P=required E=false, nothing, magic link' => [['passkeys.mode' => 'required', 'two_factor.after_email_login' => false], [], LoginMethod::MagicLink, RiskReaction::Allow, ['enrol_passkey{passkey_enrolment}']],
+        'T=required P=required E=false, totp, email otp' => [['two_factor.mode' => 'required', 'passkeys.mode' => 'required', 'two_factor.after_email_login' => false], ['totp' => true], LoginMethod::EmailOtp, RiskReaction::Allow, ['enrol_passkey{passkey_enrolment}']],
     ];
 }
 
@@ -86,7 +89,7 @@ it('resolves the required steps', function (array $settings, array $has, LoginMe
 })->with('policy');
 
 it('pins the number of policy rows', function (): void {
-    expect(policyRows())->toHaveCount(33);
+    expect(policyRows())->toHaveCount(35);
 });
 
 it('denies a risk step-up the account cannot satisfy', function (array $settings, array $has, LoginMethod $method): void {
