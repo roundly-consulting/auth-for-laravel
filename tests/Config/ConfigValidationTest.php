@@ -202,6 +202,17 @@ it('warns that closed registration also closes invitation acceptance', function 
         ->toContain('registration.mode is closed, so invitations cannot be accepted');
 });
 
+it('warns that a 2FA guard has only the per-challenge cap when two-factor\'s limiter is off', function (): void {
+    config()->set('two-factor.attempts', null);
+    $registry = app(GuardRegistry::class);
+
+    expect(implode("\n", ConfigValidation::warnings($registry->all()['users'])))
+        ->toContain('authentication.guards.users: two-factor.attempts is null')
+        ->and(ConfigValidation::warnings($registry->all()['clients']))->not->toContain('two-factor.attempts is null')
+        ->and(ConfigValidation::problems($registry->all()['users'], $registry))->toBe([])
+        ->and($registry->get('users')->name())->toBe('users');
+});
+
 it('keeps the client fixture a distinct guard model', function (): void {
     expect((new Client)->getMorphClass())->not->toBe((new User)->getMorphClass());
 });

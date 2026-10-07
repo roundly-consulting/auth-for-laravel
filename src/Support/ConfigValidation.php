@@ -127,6 +127,12 @@ final class ConfigValidation
             if ($guard->notificationDelivery()->value === 'sync') {
                 $warnings[] = "{$prefix}.notifications.delivery = sync makes known-account responses measurably slower (timing enumeration); prefer after_response or queue.";
             }
+
+            // The host's choice (two-factor documents null as "throttle it yourself"), but with
+            // it the per-challenge cap is the only bound and a fresh login opens a new budget.
+            if ($guard->twoFactorMode() !== TwoFactorMode::Off && config('two-factor.attempts') === null) {
+                $warnings[] = "{$prefix}: two-factor.attempts is null, so two-factor's per-account limiter is off and challenge.max_attempts (per challenge) is the only bound on second-factor codes; every new login opens a fresh budget. Keep the limiter on or throttle the challenge routes yourself.";
+            }
         } catch (AuthenticationMisconfigured) {
             // Reported by problems().
         }

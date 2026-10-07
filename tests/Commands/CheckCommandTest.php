@@ -91,6 +91,29 @@ it('reports warnings without failing', function (): void {
     $this->artisan('authentication:check')->expectsOutputToContain('queue.default is sync')->assertSuccessful();
 });
 
+/**
+ * Chat review C-7a (owner: the host's choice, warn): with two-factor's per-account limiter off,
+ * only the per-challenge cap bounds code guesses, and every fresh password login opens a new one.
+ */
+it('warns, without failing, when two-factor\'s limiter is off for a 2FA guard', function (): void {
+    config()->set('two-factor.attempts', null);
+
+    $this->artisan('authentication:check', ['guard' => 'users'])
+        ->expectsOutputToContain('two-factor.attempts is null')
+        ->assertSuccessful();
+
+    // clients has two-factor off: nothing to bound.
+    $this->artisan('authentication:check', ['guard' => 'clients'])
+        ->doesntExpectOutputToContain('two-factor.attempts is null')
+        ->assertSuccessful();
+
+    config()->set('two-factor.attempts', ['max' => 5, 'decay' => 60]);
+
+    $this->artisan('authentication:check', ['guard' => 'users'])
+        ->doesntExpectOutputToContain('two-factor.attempts is null')
+        ->assertSuccessful();
+});
+
 it('finds the routes of a guard when they come from the route cache', function (): void {
     // After `route:cache` the provider skips registration: the routes are in the router
     // (loaded from the cache file), but no registrar ever ran in this process.
