@@ -121,6 +121,20 @@ it('refuses an existing address with a uniform error and a notice', function ():
     Notification::assertSentOnDemand(AccountExistsNotification::class);
 });
 
+it('mails the account-exists notice in the holder\'s locale, falling back to the invitation\'s', function (?string $holderLocale, string $expected): void {
+    $this->configureGuard('users', ['invitations.allow_existing_email' => true]);
+    $token = invite('taken@example.com');
+    User::factory()->create(['email' => 'taken@example.com', 'locale' => $holderLocale]);
+
+    expect(fn () => Authentication::guard('users')->invitations()->accept(new AcceptInvitationData($token, 'a-long-enough-passphrase', sessionContext())))->toThrow(InvalidInvitation::class);
+
+    Notification::assertSentOnDemandTimes(AccountExistsNotification::class, 1);
+    Notification::assertSentOnDemand(AccountExistsNotification::class, fn ($n, $c, $notifiable, $locale): bool => $notifiable->routes['mail'] === 'taken@example.com' && $locale === $expected);
+})->with([
+    'holder en, invitation sk' => ['en', 'en'],
+    'holder without a locale' => [null, 'sk'],
+]);
+
 it('mails a taken address chosen at acceptance once per cooldown, shared with registration', function (): void {
     $this->configureGuard('users', ['invitations.lock_email' => false, 'registration.login_after' => false, 'throttle.registration.max' => 100]);
     User::factory()->create(['email' => 'taken@example.com']);

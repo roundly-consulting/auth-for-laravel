@@ -93,6 +93,19 @@ it('answers identically for a new and an existing address in the enumeration-saf
     'no login after' => ['optional', false, 'accepted'],
 ]);
 
+it('mails the account-exists notice in the holder\'s locale, falling back to the request\'s', function (?string $holderLocale, string $expected): void {
+    $this->configureGuard('users', ['registration.login_after' => false]);
+    User::factory()->create(['email' => 'taken@example.com', 'locale' => $holderLocale]);
+
+    $this->postJson('/users/auth/register', registration(['email' => 'taken@example.com']), ['Accept-Language' => 'sk'])->assertStatus(202);
+
+    Notification::assertSentOnDemandTimes(AccountExistsNotification::class, 1);
+    Notification::assertSentOnDemand(AccountExistsNotification::class, fn ($n, $c, $notifiable, $locale): bool => $notifiable->routes['mail'] === 'taken@example.com' && $locale === $expected);
+})->with([
+    'holder en, request sk' => ['en', 'en'],
+    'holder without a locale' => [null, 'sk'],
+]);
+
 it('returns a challenge when the new account must enrol a factor, or asks to verify first', function (): void {
     $this->configureGuard('users', ['two_factor.mode' => 'required', 'challenge.enrolment_requires_verified_email' => false]);
 

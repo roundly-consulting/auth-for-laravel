@@ -78,8 +78,10 @@ final readonly class RegisterAccount
         $email = $accounts->normalizeEmail($data->email);
         $attributes = $this->validator->validate($config, $email, $data->password, $data->attributes);
 
-        if ($accounts->emailTaken($email)) {
-            return $this->existing($config, $email, $data, hashed: false);
+        $holder = $accounts->findByEmail($email, withTrashed: true);
+
+        if ($holder !== null) {
+            return $this->existing($config, $email, $data, $holder, hashed: false);
         }
 
         try {
@@ -93,7 +95,7 @@ final readonly class RegisterAccount
             )));
         } catch (UniqueConstraintViolationException) {
             // Lost the insert race: the creator already hashed the password.
-            return $this->existing($config, $email, $data, hashed: true);
+            return $this->existing($config, $email, $data, $accounts->findByEmail($email, withTrashed: true), hashed: true);
         }
 
         event(new AccountRegistered($guard, $account, LoginMethod::Registration));
@@ -126,7 +128,7 @@ final readonly class RegisterAccount
         return new RegistrationResult(RegistrationStatus::Authenticated, $login);
     }
 
-    private function existing(GuardConfig $guard, string $email, RegistrationData $data, bool $hashed): RegistrationResult
+    private function existing(GuardConfig $guard, string $email, RegistrationData $data, ?Account $holder, bool $hashed): RegistrationResult
     {
         if (! $this->enumerationSafe($guard)) {
             throw ValidationException::withMessages(['email' => __('authentication::validation.email_taken')]);
@@ -138,8 +140,9 @@ final readonly class RegisterAccount
             $this->passwords->make($data->password);
         }
 
+        // The notice is the holder's mail, so it speaks the holder's language.
         if ($this->throttle->accountExistsCooldown($guard, $email)) {
-            $this->notifications->sendTo($guard, NotificationType::AccountExists, $email, new NotificationData($guard->name()), $data->context->locale);
+            $this->notifications->sendTo($guard, NotificationType::AccountExists, $email, new NotificationData($guard->name()), $holder?->preferredLocale() ?? $data->context->locale);
         }
 
         return new RegistrationResult($this->safeStatus($guard));

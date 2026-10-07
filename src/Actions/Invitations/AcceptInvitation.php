@@ -98,7 +98,7 @@ final readonly class AcceptInvitation
                 fn (): Account => $this->claimAndCreate($config, $accounts, $invitation, $email, $verified, $data, $attributes),
             );
         } catch (InvitationAddressTaken|UniqueConstraintViolationException $e) {
-            $this->exists($config, $email, $invitation);
+            $this->exists($config, $accounts, $email, $invitation);
 
             throw new InvalidInvitation($e);
         }
@@ -177,10 +177,13 @@ final readonly class AcceptInvitation
         return $account;
     }
 
-    private function exists(GuardConfig $guard, string $email, Invitation $invitation): void
+    private function exists(GuardConfig $guard, AccountRepository $accounts, string $email, Invitation $invitation): void
     {
+        // The notice is the holder's mail, so it speaks the holder's language.
         if ($this->throttle->accountExistsCooldown($guard, $email)) {
-            $this->notifications->sendTo($guard, NotificationType::AccountExists, $email, new NotificationData($guard->name()), $invitation->locale);
+            $locale = $accounts->findByEmail($email, withTrashed: true)?->preferredLocale() ?? $invitation->locale;
+
+            $this->notifications->sendTo($guard, NotificationType::AccountExists, $email, new NotificationData($guard->name()), $locale);
         }
     }
 
