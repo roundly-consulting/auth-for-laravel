@@ -66,6 +66,9 @@ final readonly class IssueTokenPair
                 'amr' => AuthMethodReference::toValues($authMethods),
                 'auth_time' => $authTime->getTimestamp(),
                 'device_name' => $context->deviceName,
+                // The version this session was minted under: a refresh refuses the family once
+                // the account moved past it (see RefreshTokenPair).
+                'tv' => $account->tokenVersion(),
             ],
         ));
 

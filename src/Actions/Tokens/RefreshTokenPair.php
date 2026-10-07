@@ -36,6 +36,11 @@ use SensitiveParameter;
  * redeem. `amr`/`auth_time`/device data are inherited from the family's newest row.
  * Only failures are recorded as activity (volume).
  *
+ * A family minted under an older `token_version` than the account's is revoked and
+ * refused: the login that opened it raced an invalidation (it loaded the account, the
+ * invalidation bumped the version and revoked every family, then the login opened this
+ * one), so no session survives a password reset, a disable or a logout everywhere.
+ *
  * The family can die between the redeem and the issue — reuse detection, a logout,
  * a credential change or a disable landing concurrently. refresh-tokens then refuses to
  * extend it (or hands back an already-revoked row); either way the access token just
@@ -76,6 +81,14 @@ final readonly class RefreshTokenPair
         }
 
         $meta = $redeemed->redeemedToken->meta ?? [];
+
+        // A login that loaded the account before an invalidation bumped `tv` and revoked every
+        // family opens its family after that revoke: the stale version it was minted under is
+        // what still marks it. Families issued before `tv` was recorded carry none.
+        if (is_int($meta['tv'] ?? null) && $meta['tv'] !== $owner->tokenVersion()) {
+            RefreshTokens::sessions($redeemed->user)->revoke($redeemed->familyId, RevocationReason::Security);
+            $this->fail($guard, $context, $owner, 'revoked');
+        }
         // A session without a recorded auth_time (issued by host code) was authenticated
         // when it started — never "just now", which would pass every fresh-login gate.
         $authTime = is_int($meta['auth_time'] ?? null) ? CarbonImmutable::createFromTimestamp($meta['auth_time']) : $redeemed->redeemedToken->sessionStartedAt();

@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use Carbon\CarbonImmutable;
+use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\Event;
 use RoundlyConsulting\Auth\DataTransferObjects\CurrentToken;
 use RoundlyConsulting\Auth\DataTransferObjects\SessionContext;
@@ -93,6 +94,30 @@ it('revokes the family and refuses a refresh once the owner is disabled', functi
 
     expect(fn () => Authentication::guard('users')->refresh($pair->refreshToken, new SessionContext))->toThrow(InvalidRefreshToken::class)
         ->and(RefreshToken::query()->whereNull('revoked_at')->count())->toBe(0);
+});
+
+it('revokes the family and refuses a refresh once the account moved past the version it was minted under', function (): void {
+    $user = User::factory()->create();
+    $pair = issuePair($user);
+    $user->forceFill(['token_version' => 1])->save();
+
+    expect(RefreshToken::query()->sole()->meta['tv'] ?? null)->toBe(0)
+        ->and(fn () => Authentication::guard('users')->refresh($pair->refreshToken, new SessionContext))->toThrow(InvalidRefreshToken::class)
+        ->and(RefreshToken::query()->whereNull('revoked_at')->count())->toBe(0)
+        ->and(LoginActivity::query()->where('type', 'refresh')->where('reason', 'revoked')->count())->toBe(1);
+});
+
+it('keeps refreshing a session issued before its token version was recorded', function (): void {
+    $user = User::factory()->create();
+    $pair = issuePair($user);
+    $row = RefreshToken::query()->sole();
+    $row->forceFill(['meta' => Arr::except($row->meta ?? [], 'tv')])->save();
+    $user->forceFill(['token_version' => 1])->save();
+
+    $refreshed = Authentication::guard('users')->refresh($pair->refreshToken, new SessionContext);
+
+    expect($refreshed->sessionId)->toBe($pair->sessionId)
+        ->and(claimsOf($refreshed)->get('tv'))->toBe(1);
 });
 
 it('lists sessions with the current flag over http', function (): void {

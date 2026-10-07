@@ -4,8 +4,10 @@ declare(strict_types=1);
 
 use Illuminate\Database\Events\QueryExecuted;
 use Illuminate\Database\UniqueConstraintViolationException;
+use Illuminate\Hashing\HashManager;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Event;
+use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Notification;
 use Illuminate\Validation\ValidationException;
 use RoundlyConsulting\Auth\Actions\OneTimeTokens\ConsumeOneTimeToken;
@@ -41,6 +43,7 @@ use RoundlyConsulting\Auth\Notifications\InvitationNotification;
 use RoundlyConsulting\Auth\Notifications\MagicLinkNotification;
 use RoundlyConsulting\Auth\Support\Tables;
 use RoundlyConsulting\Auth\Tests\Fixtures\Models\User;
+use RoundlyConsulting\Auth\Tests\Fixtures\ReentrantHasher;
 use RoundlyConsulting\Jwt\Events\UserTokenIssued;
 use RoundlyConsulting\Jwt\Facades\Jwt;
 use RoundlyConsulting\RefreshTokens\Events\RefreshTokenRedeemed;
@@ -372,3 +375,39 @@ it('keeps the cooldown, the cap and the count when two resends read the invitati
     'the cap' => [2, 0, InvitationSendLimitReached::class, 2],
     'neither: both count' => [5, 0, null, 3],
 ]);
+
+it('lets no session outlive an invalidation that raced its login', function (string $path): void {
+    Notification::fake();
+    $user = User::factory()->create();
+    $fired = false;
+    $reset = static function () use ($user, &$fired): void {
+        if (! $fired) {
+            $fired = true;
+            Authentication::guard('users')->passwords()->set($user->fresh() ?? $user, 'a-brand-new-passphrase');
+        }
+    };
+
+    if ($path === 'direct login') {
+        // The reset lands while the login is still hashing against the account it loaded.
+        $hashing = app(HashManager::class);
+        Hash::swap(new ReentrantHasher($hashing->driver('bcrypt'), static fn () => $reset(), 2));
+        $result = Authentication::guard('users')->attempt(new PasswordCredentials($user->email, 'correct-horse-battery'), sessionContext());
+        Hash::swap($hashing);
+    } else {
+        $secret = enableTotp($user);
+        $pending = totpChallenge($user);
+        // The reset lands right after the finalize claimed the challenge, before the pair is issued.
+        Event::listen(UserTokenIssued::class, static fn () => $reset());
+        $result = Authentication::challenges()->complete(new ChallengeFactorData($pending->token, FactorMethod::Totp, sessionContext(), totpCode($secret)));
+    }
+
+    expect($fired)->toBeTrue()
+        ->and($result->isAuthenticated())->toBeTrue();
+
+    test()->getJson('/users/auth/me', bearer($result->tokens))->assertUnauthorized();
+    test()->postJson('/users/auth/refresh', ['refresh_token' => $result->tokens->refreshToken], ['User-Agent' => 'PestBrowser/1.0'])
+        ->assertStatus(401)
+        ->assertJsonPath('code', 'refresh_invalid');
+
+    expect(RefreshTokens::sessions($user)->all())->toBeEmpty();
+})->with(['direct login', 'challenge finalize']);
