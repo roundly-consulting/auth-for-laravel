@@ -128,9 +128,12 @@ final class ConfigValidation
             $problems[] = "{$prefix}: passkeys are on, but {$model} does not implement ".HasPasskeys::class.'.';
         }
 
-        if ($guard->passkeyMode() === PasskeyMode::Off
-            && ($guard->loginMethodEnabled(LoginMethod::Passkey) || $guard->passkeySecondFactor() !== PasskeySecondFactor::Off)) {
-            $problems[] = "{$prefix}.passkeys.mode is off, so login.passkey must be false and passkeys.second_factor must be off.";
+        // `allowed` only permits a passkey step, so it is harmless with mode off (the shipped
+        // default under AUTHENTICATION_PASSKEYS=off); only a second factor that demands one is not.
+        $demandsPasskey = in_array($guard->passkeySecondFactor(), [PasskeySecondFactor::RequiredWhenEnrolled, PasskeySecondFactor::Required], true);
+
+        if ($guard->passkeyMode() === PasskeyMode::Off && ($guard->loginMethodEnabled(LoginMethod::Passkey) || $demandsPasskey)) {
+            $problems[] = "{$prefix}.passkeys.mode is off, so login.passkey must be false and passkeys.second_factor must be off or allowed.";
         }
 
         $anyLogin = array_filter(

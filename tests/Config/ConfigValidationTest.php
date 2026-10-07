@@ -31,7 +31,9 @@ it('reports each misconfiguration with its exact key', function (string $guard, 
     '2fa without the contract' => ['clients', ['model' => PlainAccount::class, 'two_factor.mode' => 'optional', 'passkeys.mode' => 'off'], 'two_factor.mode is on'],
     'passkeys without the contract' => ['clients', ['model' => PlainAccount::class, 'passkeys.mode' => 'optional'], 'passkeys are on'],
     'passkey login with passkeys off' => ['clients', ['login.passkey' => true], 'passkeys.mode is off'],
-    'second factor with passkeys off' => ['clients', ['passkeys.second_factor' => 'allowed'], 'passkeys.mode is off'],
+    // `allowed` + mode off is accepted (it only permits a passkey step, and there are none).
+    'second factor required with passkeys off' => ['clients', ['passkeys.second_factor' => 'required'], 'passkeys.mode is off'],
+    'second factor required when enrolled with passkeys off' => ['clients', ['passkeys.second_factor' => 'required_when_enrolled'], 'passkeys.mode is off'],
     'no login method' => ['clients', ['login.magic_link' => false], 'at least one login method'],
     'invite only without invitations' => ['clients', ['registration.mode' => 'invite_only'], 'invitations.enabled'],
     'forced enrolment without verification' => ['users', ['two_factor.mode' => 'required', 'verification.mode' => 'off'], 'verification.mode is off'],
@@ -50,6 +52,34 @@ it('reports each misconfiguration with its exact key', function (string $guard, 
     'notification class' => ['users', ['notifications.classes.new_device' => stdClass::class], 'notifications.classes.new_device'],
     'account resource class' => ['users', ['resources.account' => stdClass::class], 'resources.account'],
 ]);
+
+/**
+ * Regression (chat review C-2): `AUTHENTICATION_PASSKEYS=off` is a documented env value, but
+ * the shipped `second_factor` stays `allowed`, and validation flagged that pair, so every
+ * guard on the defaults failed to resolve (every endpoint 500, `authentication:check` exit 1).
+ * `allowed` is only a permission; the runtime already treats mode off as second factor off.
+ */
+it('accepts the shipped config with AUTHENTICATION_PASSKEYS=off', function (): void {
+    $_SERVER['AUTHENTICATION_PASSKEYS'] = 'off';
+    $_SERVER['AUTHENTICATION_USERS_MODEL'] = User::class;
+
+    try {
+        /** @var array{defaults: array<string, mixed>, guards: array<string, mixed>} $shipped */
+        $shipped = require __DIR__.'/../../config/authentication.php';
+    } finally {
+        unset($_SERVER['AUTHENTICATION_PASSKEYS'], $_SERVER['AUTHENTICATION_USERS_MODEL']);
+    }
+
+    config()->set('authentication.defaults', $shipped['defaults']);
+    config()->set('authentication.guards', $shipped['guards']);
+    app(GuardRegistry::class)->flush();
+
+    $registry = app(GuardRegistry::class);
+
+    expect($registry->all()['users']->passkeySecondFactor()->value)->toBe('allowed')
+        ->and(ConfigValidation::problems($registry->all()['users'], $registry))->toBe([])
+        ->and($registry->get('users')->name())->toBe('users');
+});
 
 it('refuses to resolve a guard with a typo before any credential changes', function (): void {
     Notification::fake();
