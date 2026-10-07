@@ -46,12 +46,14 @@ use RoundlyConsulting\Auth\Support\Throttle;
  *
  *  1. possession side effects (an email login verifies the address);
  *  2. account state — disabled / locked / unverified (only now, after a verified factor);
- *  3. password housekeeping (rehash, reset the lockout counter, clear the login bucket);
+ *  3. password rehash;
  *  4. locale fill;
  *  5. new-device detection (notified only once the login completes);
  *  6. risk assessment — deny, notify, or require a second factor;
- *  7. required steps → a challenge, or
- *  8. the success tail.
+ *  7. required steps; only now — the password is about to be confirmed by a challenge or a
+ *     login — reset the lockout counter and clear the login bucket (a uniform refusal above
+ *     must leave both exactly as a wrong password would);
+ *  8. a challenge, or the success tail.
  *
  * @internal the shared login pipeline behind every first factor; log in through the guard context.
  */
@@ -93,9 +95,9 @@ final readonly class CompleteFirstFactor
         // 2. Account state.
         $this->ensureCanLogin->execute($guard, $account, $method, $context, $identifier);
 
-        // 3. Password housekeeping.
+        // 3. Password rehash.
         if ($credentials !== null) {
-            $this->housekeeping($guard, $account, $credentials, $context);
+            $this->rehash($guard, $account, $credentials);
         }
 
         // 4. Locale fill.
@@ -137,11 +139,18 @@ final readonly class CompleteFirstFactor
             $this->deny($guard, $account, $method, $context, $identifier, 'step_up_unavailable');
         }
 
+        // The password is confirmed from here on — by a challenge or a login — so the lockout
+        // counter and the login bucket start over.
+        if ($credentials !== null) {
+            $this->lockout->reset($guard, $account);
+            $this->throttle->clear($guard, ThrottleKind::Login, $credentials->identifier, $context->ipAddress);
+        }
+
+        // 8. A challenge, or the success tail.
         if ($steps !== []) {
             return $this->challenge($guard, $pending, $steps);
         }
 
-        // 8. Success tail.
         return LoginResult::authenticated($this->completeLogin->execute($pending));
     }
 
@@ -168,7 +177,7 @@ final readonly class CompleteFirstFactor
         return LoginResult::challenged($challenge);
     }
 
-    private function housekeeping(GuardConfig $guard, Account $account, PasswordCredentials $credentials, SessionContext $context): void
+    private function rehash(GuardConfig $guard, Account $account, PasswordCredentials $credentials): void
     {
         $model = AccountModels::of($account);
         $hash = $model->getAttribute(Columns::password());
@@ -178,9 +187,6 @@ final readonly class CompleteFirstFactor
 
             event(new PasswordRehashed($guard->name(), $account));
         }
-
-        $this->lockout->reset($guard, $account);
-        $this->throttle->clear($guard, ThrottleKind::Login, $credentials->identifier, $context->ipAddress);
     }
 
     private function deny(GuardConfig $guard, Account $account, LoginMethod $method, SessionContext $context, ?string $identifier, string $reason): never

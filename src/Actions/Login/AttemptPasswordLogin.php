@@ -17,6 +17,7 @@ use RoundlyConsulting\Auth\Enums\AuthMethodReference;
 use RoundlyConsulting\Auth\Enums\LoginMethod;
 use RoundlyConsulting\Auth\Enums\ThrottleKind;
 use RoundlyConsulting\Auth\Events\LoginFailed;
+use RoundlyConsulting\Auth\Exceptions\AuthException;
 use RoundlyConsulting\Auth\Exceptions\InvalidCredentials;
 use RoundlyConsulting\Auth\Exceptions\LoginMethodDisabled;
 use RoundlyConsulting\Auth\Guards\AccountRepository;
@@ -26,8 +27,11 @@ use RoundlyConsulting\Auth\Support\Throttle;
 
 /**
  * Email/identifier + password. Throttled (identifier+IP, IP, identifier) BEFORE any
- * hashing — the attempt is taken first and given back only when the password proves
- * valid, so concurrent guesses are counted while they hash; the password is always checked — against a dummy hash for unknown or
+ * hashing — the attempt is taken first and given back only once the login is challenged
+ * or completes, so concurrent guesses are counted while they hash and a correct password
+ * the login then refuses uniformly (`invalid_credentials`: a disabled or unverified account
+ * without `reveal_account_state`, a uniform risk denial) keeps its attempt like any wrong
+ * one; the password is always checked — against a dummy hash for unknown or
  * passwordless accounts — so neither the response nor its timing reveals whether the
  * account exists. A hard-locked account answers every attempt exactly like a wrong
  * password (`invalid_credentials`, the attempt counted) — a lock never confirms a
@@ -79,10 +83,22 @@ final readonly class AttemptPasswordLogin
             throw new InvalidCredentials;
         }
 
+        try {
+            $result = $this->completeFirstFactor->execute($config, $account, LoginMethod::Password, $context, [AuthMethodReference::Pwd], $credentials);
+        } catch (InvalidCredentials $e) {
+            // Refused exactly like a wrong password, so counted like one.
+            throw $e;
+        } catch (AuthException $e) {
+            // Any other refusal already tells a correct password apart: not a guess.
+            $this->throttle->release($config, $kinds, $credentials->identifier, $context->ipAddress);
+
+            throw $e;
+        }
+
         // Successes are not counted.
         $this->throttle->release($config, $kinds, $credentials->identifier, $context->ipAddress);
 
-        return $this->completeFirstFactor->execute($config, $account, LoginMethod::Password, $context, [AuthMethodReference::Pwd], $credentials);
+        return $result;
     }
 
     private function fail(string $guard, ?Account $account, PasswordCredentials $credentials, SessionContext $context, ActivityOutcome $outcome): void

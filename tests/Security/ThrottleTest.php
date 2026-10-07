@@ -29,6 +29,7 @@ use RoundlyConsulting\Auth\Tests\Fixtures\CountingHasher;
 use RoundlyConsulting\Auth\Tests\Fixtures\Models\User;
 use RoundlyConsulting\Auth\Tests\Fixtures\ReentrantHasher;
 use RoundlyConsulting\Auth\Tests\Fixtures\ReentrantRateLimiter;
+use RoundlyConsulting\Auth\Tests\Fixtures\Support\HighRiskAssessor;
 
 function failLogin(string $identifier, string $ip = '10.0.0.1'): void
 {
@@ -220,3 +221,35 @@ it('counts guesses against a locked account like any other, so a lock is no way 
     expect($hasher->checked)->toHaveCount(5)
         ->and(fn () => Authentication::guard('users')->attempt(new PasswordCredentials($user->email, 'correct-horse-battery'), sessionContext()))->toThrow(TooManyAttempts::class);
 });
+
+function tryPassword(User $user, string $password): void
+{
+    Authentication::guard('users')->attempt(new PasswordCredentials($user->email, $password), sessionContext());
+}
+
+it('keeps the attempt of a correct password the login refuses uniformly', function (array $config, array $state): void {
+    Notification::fake();
+    $this->configureGuard('users', [...$config, 'throttle.login.max' => 5]);
+    $user = User::factory()->create($state);
+
+    // The correct password is one of five candidates: its refusal must count like the others.
+    foreach (['guess-1', 'guess-2', 'correct-horse-battery', 'guess-3', 'guess-4'] as $candidate) {
+        expect(fn () => tryPassword($user, $candidate))->toThrow(InvalidCredentials::class);
+    }
+
+    expect(fn () => tryPassword($user, 'guess-5'))->toThrow(TooManyAttempts::class);
+})->with([
+    'disabled' => [['login.reveal_account_state' => false], ['disabled_at' => now()]],
+    'unverified' => [['login.reveal_account_state' => false, 'verification.mode' => 'required_for_login'], ['email_verified_at' => null]],
+    'risk deny' => [['risk.assessor' => HighRiskAssessor::class, 'risk.reactions.high' => 'deny'], []],
+    'step-up unavailable' => [['risk.assessor' => HighRiskAssessor::class, 'risk.reactions.high' => 'require_second_factor'], []],
+]);
+
+it('leaves the lockout counter alone when a correct password is refused uniformly', function (string $reaction): void {
+    Notification::fake();
+    $this->configureGuard('users', ['lockout.enabled' => true, 'risk.assessor' => HighRiskAssessor::class, 'risk.reactions.high' => $reaction]);
+    $user = User::factory()->create(['failed_login_count' => 3]);
+
+    expect(fn () => tryPassword($user, 'correct-horse-battery'))->toThrow(InvalidCredentials::class)
+        ->and($user->fresh()?->getAttribute('failed_login_count'))->toBe(3);
+})->with(['deny', 'require_second_factor']);
