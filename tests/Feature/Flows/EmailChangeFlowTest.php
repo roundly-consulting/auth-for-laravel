@@ -99,6 +99,24 @@ it('shares the account-exists cooldown with registration, so email changes canno
     Notification::assertSentOnDemandTimes(AccountExistsNotification::class, 1);
 });
 
+it('mails the account-exists notice in the holder\'s locale, falling back to the requester\'s', function (?string $holderLocale, bool $trashed, string $expected): void {
+    $user = User::factory()->create(['locale' => 'sk']);
+    $holder = User::factory()->create(['email' => 'taken@example.com', 'locale' => $holderLocale]);
+
+    if ($trashed) {
+        $holder->delete();
+    }
+
+    $this->postJson('/users/auth/email/change', ['email' => 'taken@example.com'], bearer(issuePair($user)))->assertStatus(202);
+
+    Notification::assertSentOnDemandTimes(AccountExistsNotification::class, 1);
+    Notification::assertSentOnDemand(AccountExistsNotification::class, fn ($n, $c, $notifiable, $locale): bool => $notifiable->routes['mail'] === 'taken@example.com' && $locale === $expected);
+})->with([
+    'holder en, requester sk' => ['en', false, 'en'],
+    'soft-deleted holder en' => ['en', true, 'en'],
+    'holder without a locale' => [null, false, 'sk'],
+]);
+
 it('refuses the unchanged address', function (): void {
     $user = User::factory()->create();
 

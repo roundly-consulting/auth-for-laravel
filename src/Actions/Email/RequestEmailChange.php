@@ -59,10 +59,14 @@ final readonly class RequestEmailChange
 
         $this->throttle->attempt($config, [ThrottleKind::EmailRequestAccount], $old, $data->context);
 
-        if ($accounts->emailTaken($new)) {
+        // Soft-deleted holders count: the address stays reserved.
+        $holder = $accounts->findByEmail($new, withTrashed: true);
+
+        if ($holder !== null) {
             // Shared with registration and invitations: no path mails an address more often.
+            // The notice is the holder's mail, so it speaks the holder's language.
             if ($this->throttle->accountExistsCooldown($config, $new)) {
-                $this->notifications->sendTo($config, NotificationType::AccountExists, $new, new NotificationData($guard), $account->preferredLocale());
+                $this->notifications->sendTo($config, NotificationType::AccountExists, $new, new NotificationData($guard), $holder->preferredLocale() ?? $account->preferredLocale());
             }
 
             $this->notifyOldAddress($config, $guard, $account, $old, $new);
