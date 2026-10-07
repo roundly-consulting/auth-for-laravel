@@ -15,6 +15,7 @@ use RoundlyConsulting\Auth\Enums\AuthMethodReference;
 use RoundlyConsulting\Auth\Enums\InvalidationReason;
 use RoundlyConsulting\Auth\Enums\InvalidationScope;
 use RoundlyConsulting\Auth\Enums\LoginMethod;
+use RoundlyConsulting\Auth\Exceptions\AuthenticationMisconfigured;
 use RoundlyConsulting\Auth\Guards\GuardRegistry;
 use RoundlyConsulting\Auth\Support\AccountModels;
 use RoundlyConsulting\Auth\Support\Models;
@@ -91,10 +92,17 @@ trait InteractsWithAuthentication
      * its token version moved — and under `all` none of the sessions active when
      * actingAsAccount() signed it in survived (a login after the invalidation is fine);
      * without an actingAsAccount() for the account (only `since:`), no session at all may
-     * be active — or, for a reason whose scope is `none`, it did not move.
+     * be active — or, for a reason whose scope is `none`, it did not move. The scope is the
+     * account's guard's (`$guard`, else the default guard; an account of another guard throws).
+     *
+     * @throws AuthenticationMisconfigured when the account belongs to another guard
      */
     public function assertTokensInvalidated(Account $account, InvalidationReason $reason, ?string $guard = null, ?int $since = null): static
     {
+        // Like actingAsAccount(): no guard is the default one, and an account of another
+        // guard fails loudly instead of being judged by the wrong guard's scope.
+        $config = app(GuardRegistry::class)->owning($guard, $account);
+
         $baseline = $since ?? $this->authenticationTokenVersions[$this->authenticationAccountKey($account)] ?? null;
 
         if ($baseline === null) {
@@ -102,7 +110,7 @@ trait InteractsWithAuthentication
         }
 
         $version = $this->freshAccount($account)->tokenVersion();
-        $scope = app(GuardRegistry::class)->get($guard)->invalidationScope($reason);
+        $scope = $config->invalidationScope($reason);
 
         if ($scope === InvalidationScope::None) {
             Assert::assertSame($baseline, $version, "The account token version moved although [{$reason->value}] has scope [none].");

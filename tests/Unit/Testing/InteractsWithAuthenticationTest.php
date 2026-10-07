@@ -7,8 +7,10 @@ use Illuminate\Support\Facades\Notification;
 use PHPUnit\Framework\AssertionFailedError;
 use RoundlyConsulting\Auth\Enums\InvalidationReason;
 use RoundlyConsulting\Auth\Events\TokensIssued;
+use RoundlyConsulting\Auth\Exceptions\AuthenticationMisconfigured;
 use RoundlyConsulting\Auth\Facades\Authentication;
 use RoundlyConsulting\Auth\Notifications\ResetPasswordNotification;
+use RoundlyConsulting\Auth\Tests\Fixtures\Models\Client;
 use RoundlyConsulting\Auth\Tests\Fixtures\Models\User;
 use RoundlyConsulting\RefreshTokens\Facades\RefreshTokens;
 
@@ -104,4 +106,25 @@ it('demands zero sessions under all when only since: is given', function (): voi
 
     expect(fn () => $this->assertTokensInvalidated($user, InvalidationReason::PasswordReset, since: 3))
         ->toThrow(AssertionFailedError::class, 'survived');
+});
+
+/**
+ * Regression (chat review C-16): without a guard the helper read the DEFAULT guard's scope, not
+ * the account's — a `clients` account with clients `others` and users `none` passed although
+ * nothing was invalidated. It now resolves the guard like actingAsAccount (owning).
+ */
+it('judges an account by its own guard, refusing a foreign one', function (): void {
+    $this->configureGuard('clients', ['invalidation.password_changed' => 'others']);
+    $this->configureGuard('users', ['invalidation.password_changed' => 'none']);
+    $client = Client::factory()->create();
+    $this->actingAsAccount($client, 'clients');
+
+    expect(fn () => $this->assertTokensInvalidated($client, InvalidationReason::PasswordChanged))
+        ->toThrow(AuthenticationMisconfigured::class, 'belongs to another guard than [users]')
+        ->and(fn () => $this->assertTokensInvalidated($client, InvalidationReason::PasswordChanged, 'clients'))
+        ->toThrow(AssertionFailedError::class, 'did not move');
+
+    Authentication::guard('clients')->invalidate($client, InvalidationReason::PasswordChanged);
+
+    $this->assertTokensInvalidated($client, InvalidationReason::PasswordChanged, 'clients');
 });
