@@ -19,6 +19,7 @@ use RoundlyConsulting\Auth\Guards\GuardRegistry;
 use RoundlyConsulting\Auth\Support\AccountModels;
 use RoundlyConsulting\Auth\Support\Models;
 use RoundlyConsulting\RefreshTokens\Facades\RefreshTokens;
+use RoundlyConsulting\RefreshTokens\Models\RefreshToken;
 
 /**
  * Test helpers for host applications (use it in your Laravel TestCase). `actingAsAccount`
@@ -39,6 +40,15 @@ trait InteractsWithAuthentication
     protected array $authenticationTokenVersions = [];
 
     /**
+     * Each account's active session (refresh-token family) ids right after
+     * {@see self::actingAsAccount()} signed it in — the sessions an `all`-scope invalidation
+     * must end. A session opened later (a login after a reset) is not among them.
+     *
+     * @var array<string, list<string>>
+     */
+    protected array $authenticationSessionFamilies = [];
+
+    /**
      * Provided by Laravel's (and Testbench's) HTTP testing concern.
      *
      * @return $this
@@ -50,7 +60,8 @@ trait InteractsWithAuthentication
      */
     public function actingAsAccount(Account $account, ?string $guard = null, array $authMethods = [AuthMethodReference::Pwd]): static
     {
-        $this->authenticationTokenVersions[$this->authenticationAccountKey($account)] = $this->freshAccount($account)->tokenVersion();
+        $key = $this->authenticationAccountKey($account);
+        $this->authenticationTokenVersions[$key] = $this->freshAccount($account)->tokenVersion();
 
         $this->authenticationTokens = app(AuthenticationManager::class)->guard($guard)->issueTokens(
             $account,
@@ -58,6 +69,8 @@ trait InteractsWithAuthentication
             LoginMethod::Host,
             $authMethods,
         );
+
+        $this->authenticationSessionFamilies[$key] = $this->activeSessionFamilies($account);
 
         return $this->withHeader('Authorization', 'Bearer '.$this->authenticationTokens->accessToken);
     }
@@ -75,8 +88,10 @@ trait InteractsWithAuthentication
     /**
      * The account's tokens were invalidated per the guard's scope for the reason, since
      * `$since` (default: the version when {@see self::actingAsAccount()} signed it in):
-     * its token version moved — and under `all` no session survived — or, for a reason
-     * whose scope is `none`, it did not move.
+     * its token version moved — and under `all` none of the sessions active when
+     * actingAsAccount() signed it in survived (a login after the invalidation is fine);
+     * without an actingAsAccount() for the account (only `since:`), no session at all may
+     * be active — or, for a reason whose scope is `none`, it did not move.
      */
     public function assertTokensInvalidated(Account $account, InvalidationReason $reason, ?string $guard = null, ?int $since = null): static
     {
@@ -98,10 +113,27 @@ trait InteractsWithAuthentication
         Assert::assertGreaterThan($baseline, $version, "The account token version did not move since {$baseline}.");
 
         if ($scope === InvalidationScope::All) {
-            Assert::assertCount(0, RefreshTokens::sessions(AccountModels::of($account))->all(), 'Sessions survived an invalidation with scope [all].');
+            $seen = $this->authenticationSessionFamilies[$this->authenticationAccountKey($account)] ?? null;
+            $active = $this->activeSessionFamilies($account);
+
+            if ($seen === null) {
+                Assert::assertCount(0, $active, 'Sessions survived an invalidation with scope [all].');
+            } else {
+                Assert::assertSame([], array_values(array_intersect($seen, $active)), 'Sessions active at actingAsAccount() survived an invalidation with scope [all].');
+            }
         }
 
         return $this;
+    }
+
+    /**
+     * @return list<string>
+     */
+    private function activeSessionFamilies(Account $account): array
+    {
+        return array_values(RefreshTokens::sessions(AccountModels::of($account))->all()
+            ->map(static fn (RefreshToken $session): string => $session->family_id)
+            ->all());
     }
 
     private function freshAccount(Account $account): Account

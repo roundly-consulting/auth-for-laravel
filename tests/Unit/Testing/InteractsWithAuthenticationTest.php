@@ -3,11 +3,14 @@
 declare(strict_types=1);
 
 use Illuminate\Support\Facades\Event;
+use Illuminate\Support\Facades\Notification;
 use PHPUnit\Framework\AssertionFailedError;
 use RoundlyConsulting\Auth\Enums\InvalidationReason;
 use RoundlyConsulting\Auth\Events\TokensIssued;
 use RoundlyConsulting\Auth\Facades\Authentication;
+use RoundlyConsulting\Auth\Notifications\ResetPasswordNotification;
 use RoundlyConsulting\Auth\Tests\Fixtures\Models\User;
+use RoundlyConsulting\RefreshTokens\Facades\RefreshTokens;
 
 it('does not pass for an account whose version only moved before the test acted', function (): void {
     // An account whose version moved earlier (an older logout everywhere, say).
@@ -50,4 +53,55 @@ it('announces the pair actingAsAccount issues, like any host-issued login', func
 
     Event::assertDispatched(TokensIssued::class, fn (TokensIssued $event): bool => $event->guard === 'users'
         && $event->sessionId === $this->authenticationTokens?->sessionId);
+});
+
+/**
+ * Regression (chat review C-15): under scope `all` the helper demanded zero sessions, so it
+ * failed on correct code whenever a login followed the invalidation (a reset with
+ * `passwords.reset.login_after`). It now checks the sessions actingAsAccount saw.
+ */
+it('passes for an all-scope invalidation followed by a fresh login', function (): void {
+    Notification::fake();
+    $this->configureGuard('users', ['passwords.reset.login_after' => true, 'two_factor.after_email_login' => false]);
+    $user = User::factory()->create();
+    issuePair($user);
+    $this->actingAsAccount($user);
+
+    $this->postJson('/users/auth/password/forgot', ['email' => $user->email])->assertStatus(202);
+    $token = tokenFromUrl(sentNotification($user, ResetPasswordNotification::class)->data->url);
+
+    $this->postJson('/users/auth/password/reset', ['token' => $token, 'password' => 'a-brand-new-passphrase'], ['User-Agent' => 'PestBrowser/1.0'])
+        ->assertOk()
+        ->assertJsonPath('status', 'authenticated');
+
+    expect(RefreshTokens::sessions($user)->all())->toHaveCount(1);
+
+    $this->assertTokensInvalidated($user, InvalidationReason::PasswordReset);
+});
+
+it('fails an all-scope invalidation that left a session it saw alive', function (): void {
+    $user = User::factory()->create();
+    $kept = issuePair($user);
+    $this->actingAsAccount($user);
+
+    // The version moves, but the earlier session is never revoked.
+    $user->forceFill(['token_version' => $user->tokenVersion() + 1])->save();
+    RefreshTokens::sessions($user)->revoke((string) $this->authenticationTokens?->sessionId);
+
+    expect(RefreshTokens::sessions($user)->find($kept->sessionId))->not->toBeNull()
+        ->and(fn () => $this->assertTokensInvalidated($user, InvalidationReason::PasswordReset))
+        ->toThrow(AssertionFailedError::class, 'survived');
+});
+
+it('demands zero sessions under all when only since: is given', function (): void {
+    $user = User::factory()->create(['token_version' => 3]);
+    issuePair($user);
+
+    Authentication::guard('users')->invalidate($user, InvalidationReason::PasswordReset);
+    $this->assertTokensInvalidated($user, InvalidationReason::PasswordReset, since: 3);
+
+    issuePair($user);
+
+    expect(fn () => $this->assertTokensInvalidated($user, InvalidationReason::PasswordReset, since: 3))
+        ->toThrow(AssertionFailedError::class, 'survived');
 });
