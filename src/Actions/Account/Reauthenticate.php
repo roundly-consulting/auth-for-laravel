@@ -45,8 +45,10 @@ use SensitiveParameter;
 
 /**
  * "Sudo mode": the signed-in account re-proves itself, and its session (`sid`) counts as
- * recently authenticated for `reauthentication.timeout` — the marker records the method,
- * so a second factor enrolled later still demands a second-factor proof. An account with a second factor
+ * recently authenticated for `reauthentication.timeout` (or a route's own window) — the
+ * marker records the method, so a second factor enrolled later still demands a
+ * second-factor proof, and lives as long as a refresh token does, so a longer window
+ * can still find it. An account with a second factor
  * must use it (password and email codes are refused) — a stolen session plus a leaked
  * password must not be able to disable the factor that protects the account.
  *
@@ -120,7 +122,10 @@ final readonly class Reauthenticate
         }
 
         $now = CarbonImmutable::now();
-        $this->marker->put($guard, $sessionKey, new ReauthenticationProof($proven, $now), $config->reauthenticationTimeout());
+
+        // The marker outlives the timeout so a route's longer `reauthenticated:N` window can
+        // still find it; the window itself is enforced on the proof's time, never its TTL.
+        $this->marker->put($guard, $sessionKey, new ReauthenticationProof($proven, $now), max($config->reauthenticationTimeout(), $config->refreshTtl()));
         $this->throttle->clear($config, ThrottleKind::Reauthentication, $sessionKey, null);
 
         $this->recordActivity->execute(new LoginActivityData(

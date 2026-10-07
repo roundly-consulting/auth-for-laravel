@@ -150,6 +150,23 @@ it('protects host routes with the middleware', function (): void {
     $this->get('/_sudo', bearer(issuePair($user, context: null)))->assertOk();
 });
 
+it('lets a route with a longer window accept an explicit re-authentication older than the timeout', function (): void {
+    Route::middleware(['auth:users', 'authentication.reauthenticated:3600,users'])->get('/_sudo', fn () => 'ok');
+    $user = User::factory()->create();
+    $pair = issuePair($user); // 10:00 — outside every window below, so only the marker can pass
+
+    CarbonImmutable::setTestNow('2026-09-26 11:30:00');
+    $this->postJson('/users/auth/reauthenticate', ['method' => 'password', 'password' => 'correct-horse-battery'], bearer($pair))
+        ->assertOk()
+        ->assertJsonPath('confirmed_until', '2026-09-26T11:45:00Z');
+
+    // 20 minutes later: past the 900 s timeout, inside the route's 3600 s window.
+    CarbonImmutable::setTestNow('2026-09-26 11:50:00');
+
+    $this->get('/_sudo', bearer($pair))->assertOk();
+    $this->postJson('/users/auth/two-factor', [], bearer($pair))->assertForbidden()->assertJsonPath('code', 'reauthentication_required');
+});
+
 it('announces a recovery code spent on a re-authentication and records it as such', function (string $claimed): void {
     Notification::fake();
     Event::fake([RecoveryCodeUsed::class, Reauthenticated::class]);
