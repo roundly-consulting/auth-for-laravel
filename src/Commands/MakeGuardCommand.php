@@ -44,6 +44,13 @@ final class MakeGuardCommand extends Command
             return self::FAILURE;
         }
 
+        // It lands in PHP string literals and in the migration's file name.
+        if (preg_match('/^[a-z][a-z0-9_]*$/', $table) !== 1) {
+            $this->components->error('The table name must be a plain identifier (lowercase letters, digits and underscores).');
+
+            return self::FAILURE;
+        }
+
         $namespace = $this->appNamespace().'\\Models';
         $targets = [
             $this->laravel->path("Models/{$class}.php") => $this->model($files, $namespace, $class, $table, $twoFactor, $passkeys),

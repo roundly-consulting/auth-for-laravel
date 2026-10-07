@@ -74,6 +74,22 @@ it('refuses to overwrite without --force and rejects bad names', function (): vo
 });
 
 /**
+ * Regression (chat review C-13): `--table` was only snake-cased — `o'brien` wrote a model and
+ * a migration that do not parse, `a/b` wrote into a subfolder.
+ */
+it('rejects a table name that is not a plain identifier before writing anything', function (string $table): void {
+    $this->artisan('authentication:guard', ['name' => 'staff', '--table' => $table])
+        ->expectsOutputToContain('The table name must be a plain identifier')
+        ->assertFailed();
+
+    expect(File::allFiles($this->scaffold))->toBe([]);
+})->with([
+    'quote' => ["o'brien"],
+    'slash' => ['a/b'],
+    'traversal' => ['../../../escaped'],
+]);
+
+/**
  * Regression (chat review C-12): the migration path is timestamped, so the existence check
  * never matched an earlier run — a re-run a second later added a second create-table
  * migration and `migrate` failed with "table already exists".
