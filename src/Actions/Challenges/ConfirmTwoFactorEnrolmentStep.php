@@ -91,6 +91,6 @@ final readonly class ConfirmTwoFactorEnrolmentStep
 
         $this->invalidate->execute($config, $account, InvalidationReason::TwoFactorChanged, null, $data->context, (int) $challenge->getKey());
 
-        return $this->advance->execute($challenge, $data->challengeToken, FactorMethod::TotpEnrolment, [AuthMethodReference::Otp], $data->context, $account->tokenVersion());
+        return $this->advance->execute($challenge, ChallengeStep::EnrolTwoFactor, $data->challengeToken, FactorMethod::TotpEnrolment, [AuthMethodReference::Otp], $data->context, $account->tokenVersion());
     }
 }

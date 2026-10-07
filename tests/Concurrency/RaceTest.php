@@ -21,6 +21,7 @@ use RoundlyConsulting\Auth\DataTransferObjects\NewAccountData;
 use RoundlyConsulting\Auth\DataTransferObjects\PasswordCredentials;
 use RoundlyConsulting\Auth\DataTransferObjects\PendingChallenge;
 use RoundlyConsulting\Auth\DataTransferObjects\RegistrationData;
+use RoundlyConsulting\Auth\Enums\ChallengeStep;
 use RoundlyConsulting\Auth\Enums\FactorMethod;
 use RoundlyConsulting\Auth\Enums\OneTimeTokenPurpose;
 use RoundlyConsulting\Auth\Enums\RegistrationStatus;
@@ -46,6 +47,9 @@ use RoundlyConsulting\Auth\Tests\Fixtures\Models\User;
 use RoundlyConsulting\Auth\Tests\Fixtures\ReentrantHasher;
 use RoundlyConsulting\Jwt\Events\UserTokenIssued;
 use RoundlyConsulting\Jwt\Facades\Jwt;
+use RoundlyConsulting\Passkeys\Events\PasskeyAuthenticated;
+use RoundlyConsulting\Passkeys\Models\Passkey;
+use RoundlyConsulting\Passkeys\Testing\VirtualAuthenticator;
 use RoundlyConsulting\RefreshTokens\Events\RefreshTokenRedeemed;
 use RoundlyConsulting\RefreshTokens\Facades\RefreshTokens;
 use RoundlyConsulting\TwoFactor\Events\TwoFactorVerificationFailed;
@@ -411,3 +415,59 @@ it('lets no session outlive an invalidation that raced its login', function (str
 
     expect(RefreshTokens::sessions($user)->all())->toBeEmpty();
 })->with(['direct login', 'challenge finalize']);
+
+it('never lets a passkey step that lost the race pop the step after it', function (): void {
+    Notification::fake();
+    $this->configureGuard('users', ['two_factor.mode' => 'required', 'passkeys.second_factor' => 'required', 'two_factor.passkey_satisfies_required' => false]);
+    $user = User::factory()->create();
+    enableTotp($user);
+    $authenticator = registerVirtualPasskey($user);
+    $pending = totpChallenge($user);
+    $complete = static fn ($assertion) => Authentication::challenges()->complete(new ChallengeFactorData($pending->token, FactorMethod::Passkey, sessionContext(), assertion: $assertion));
+    $assertion = $authenticator->assert(Authentication::challenges()->passkeyOptions($pending->token, sessionContext()));
+    $concurrent = null;
+
+    // While this request verifies its assertion, another one restarts the ceremony and completes the step.
+    Event::listen(PasskeyAuthenticated::class, static function () use (&$concurrent, $authenticator, $pending, $complete): void {
+        if ($concurrent === null) {
+            $concurrent = false;
+            $concurrent = $complete($authenticator->assert(Authentication::challenges()->passkeyOptions($pending->token, sessionContext())));
+        }
+    });
+
+    expect(fn () => $complete($assertion))->toThrow(ChallengeInvalid::class)
+        ->and($concurrent?->requiresChallenge())->toBeTrue()
+        ->and(LoginChallenge::query()->sole())
+        ->completed_at->toBeNull()
+        ->completed()->toBe([ChallengeStep::Passkey]);
+});
+
+it('never lets a passkey enrolment that lost the race pop the enrolment after it', function (): void {
+    Notification::fake();
+    $this->configureGuard('users', ['two_factor.mode' => 'required', 'passkeys.second_factor' => 'required', 'two_factor.passkey_satisfies_required' => false]);
+    $user = User::factory()->create();
+    $pending = totpChallenge($user);
+    $complete = static fn ($attestation) => Authentication::challenges()->complete(new ChallengeFactorData($pending->token, FactorMethod::PasskeyEnrolment, sessionContext(), attestation: $attestation));
+    $attestation = VirtualAuthenticator::es256()->register(Authentication::challenges()->passkeyEnrolmentOptions($pending->token, sessionContext()));
+    $outcome = null;
+    $concurrent = null;
+
+    // Right after this request checked the account has no passkey yet, another one restarts the
+    // ceremony and completes the enrolment.
+    interleaveAfterQuery((new Passkey)->getTable(), 1, static function () use (&$outcome, $complete, $attestation): void {
+        try {
+            $outcome = $complete($attestation);
+        } catch (ChallengeInvalid $e) {
+            $outcome = $e;
+        }
+    }, static function () use (&$concurrent, $pending, $complete): void {
+        $concurrent = $complete(VirtualAuthenticator::es256()->register(Authentication::challenges()->passkeyEnrolmentOptions($pending->token, sessionContext())));
+    });
+
+    expect($outcome)->toBeInstanceOf(ChallengeInvalid::class)
+        ->and($concurrent?->requiresChallenge())->toBeTrue()
+        ->and($user->fresh()?->hasTwoFactorEnabled())->toBeFalse()
+        ->and(LoginChallenge::query()->sole())
+        ->completed_at->toBeNull()
+        ->completed()->toBe([ChallengeStep::EnrolPasskey]);
+});

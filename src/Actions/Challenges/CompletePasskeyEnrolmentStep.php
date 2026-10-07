@@ -84,7 +84,7 @@ final readonly class CompletePasskeyEnrolmentStep
 
         $this->invalidate->execute($config, $account, InvalidationReason::PasskeyChanged, null, $data->context, (int) $challenge->getKey());
 
-        return $this->advance->execute($challenge->fresh() ?? $challenge, $data->challengeToken, FactorMethod::PasskeyEnrolment, [AuthMethodReference::Hwk], $data->context, $account->tokenVersion());
+        return $this->advance->execute($challenge, ChallengeStep::EnrolPasskey, $data->challengeToken, FactorMethod::PasskeyEnrolment, [AuthMethodReference::Hwk], $data->context, $account->tokenVersion());
     }
 
     private function fail(LoginChallenge $challenge, ChallengeFactorData $data): never

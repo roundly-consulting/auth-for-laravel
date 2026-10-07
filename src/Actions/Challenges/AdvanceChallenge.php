@@ -22,7 +22,9 @@ use SensitiveParameter;
 /**
  * Records a satisfied step with an optimistic write (`… WHERE version = ?`): of two
  * concurrent submissions exactly one advances, the other gets {@see ChallengeInvalid}.
- * Finalizes the login when no step remains.
+ * The caller passes the copy it verified against — never a re-read, which would carry
+ * another request's progress past the version check — and the step it verified, which
+ * must still be the next one. Finalizes the login when no step remains.
  *
  * @internal a challenge-engine step; drive challenges through `challenges()`.
  */
@@ -31,11 +33,13 @@ final readonly class AdvanceChallenge
     public function __construct(private FinalizeChallenge $finalize) {}
 
     /**
+     * @param  ChallengeStep  $completes  the step the caller verified; must be the challenge's next one
      * @param  list<AuthMethodReference>  $authMethods  added to the challenge's amr
      * @param  int|null  $tokenVersion  the account's new token version, when this step itself bumped it (enrolment)
      */
     public function execute(
         LoginChallenge $challenge,
+        ChallengeStep $completes,
         #[SensitiveParameter] string $token,
         FactorMethod $method,
         array $authMethods,
@@ -43,7 +47,12 @@ final readonly class AdvanceChallenge
         ?int $tokenVersion = null,
     ): LoginResult {
         $remaining = $challenge->remaining();
-        $step = array_shift($remaining) ?? throw new ChallengeInvalid;
+        $step = array_shift($remaining);
+
+        if ($step === null || $step->step !== $completes) {
+            throw new ChallengeInvalid;
+        }
+
         $completed = [...$challenge->completed(), $step->step];
 
         $stored = $challenge->context ?? [];

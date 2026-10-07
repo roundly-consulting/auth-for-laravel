@@ -86,6 +86,6 @@ final readonly class CompleteTwoFactorStep
             ));
         }
 
-        return $this->advance->execute($challenge, $data->challengeToken, $method, [AuthMethodReference::Otp], $data->context);
+        return $this->advance->execute($challenge, ChallengeStep::SecondFactor, $data->challengeToken, $method, [AuthMethodReference::Otp], $data->context);
     }
 }

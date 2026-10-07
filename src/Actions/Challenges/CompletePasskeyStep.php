@@ -35,7 +35,7 @@ final readonly class CompletePasskeyStep
     public function execute(string $guard, ChallengeFactorData $data): LoginResult
     {
         $challenge = $this->findChallenge->execute($guard, $data->challengeToken, $data->context);
-        $challenge->nextRequirement([ChallengeStep::SecondFactor, ChallengeStep::Passkey], FactorMethod::Passkey);
+        $requirement = $challenge->nextRequirement([ChallengeStep::SecondFactor, ChallengeStep::Passkey], FactorMethod::Passkey);
 
         $account = $challenge->account;
 
@@ -56,7 +56,7 @@ final readonly class CompletePasskeyStep
             $this->fail($challenge, $data);
         }
 
-        return $this->advance->execute($challenge->fresh() ?? $challenge, $data->challengeToken, FactorMethod::Passkey, [AuthMethodReference::Hwk], $data->context);
+        return $this->advance->execute($challenge, $requirement->step, $data->challengeToken, FactorMethod::Passkey, [AuthMethodReference::Hwk], $data->context);
     }
 
     private function fail(LoginChallenge $challenge, ChallengeFactorData $data): never

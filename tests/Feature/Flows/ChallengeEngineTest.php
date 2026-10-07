@@ -42,7 +42,7 @@ function passStep(PendingChallenge $pending, ?SessionContext $context = null): L
     $context ??= sessionContext();
     $challenge = app(FindActiveChallenge::class)->execute('users', $pending->token, $context);
 
-    return app(AdvanceChallenge::class)->execute($challenge, $pending->token, FactorMethod::Totp, [AuthMethodReference::Otp], $context);
+    return app(AdvanceChallenge::class)->execute($challenge, ChallengeStep::SecondFactor, $pending->token, FactorMethod::Totp, [AuthMethodReference::Otp], $context);
 }
 
 beforeEach(function (): void {
@@ -115,7 +115,17 @@ it('lets exactly one of two concurrent step submissions advance', function (): v
 
     passStep($pending);
 
-    expect(fn () => app(AdvanceChallenge::class)->execute($stale, $pending->token, FactorMethod::Totp, [], sessionContext()))->toThrow(ChallengeInvalid::class);
+    expect(fn () => app(AdvanceChallenge::class)->execute($stale, ChallengeStep::SecondFactor, $pending->token, FactorMethod::Totp, [], sessionContext()))->toThrow(ChallengeInvalid::class);
+});
+
+it('refuses to advance past a step other than the one the caller verified', function (): void {
+    $pending = challengeFor($this->user);
+    $challenge = app(FindActiveChallenge::class)->execute('users', $pending->token, sessionContext());
+
+    expect(fn () => app(AdvanceChallenge::class)->execute($challenge, ChallengeStep::Passkey, $pending->token, FactorMethod::Passkey, [], sessionContext()))->toThrow(ChallengeInvalid::class)
+        ->and(LoginChallenge::query()->sole())
+        ->version->toBe(0)
+        ->completed()->toBe([]);
 });
 
 it('refuses a replayed final step', function (): void {
