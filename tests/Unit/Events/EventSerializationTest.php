@@ -7,7 +7,10 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Queue\SerializesModels;
 use RoundlyConsulting\Auth\Contracts\Account;
 use RoundlyConsulting\Auth\DataTransferObjects\InvitationData;
+use RoundlyConsulting\Auth\Events\AccountDisabled;
+use RoundlyConsulting\Auth\Events\AccountEnabled;
 use RoundlyConsulting\Auth\Events\AccountLocked;
+use RoundlyConsulting\Auth\Events\AccountUnlocked;
 use RoundlyConsulting\Auth\Events\InvitationCreated;
 use RoundlyConsulting\Auth\Events\PasskeyRemoved;
 use RoundlyConsulting\Auth\Events\PasswordChanged;
@@ -52,11 +55,12 @@ function eventWithActor(string $class, User $user, ?Model $actor): object
     return match ($class) {
         PasskeyRemoved::class => new PasskeyRemoved('users', $user, 5, actor: $actor),
         AccountLocked::class => new AccountLocked('users', $user, CarbonImmutable::now(), actor: $actor),
+        AccountDisabled::class => new AccountDisabled('users', $user, 'fraud review', actor: $actor),
         default => new $class('users', $user, actor: $actor),
     };
 }
 
-dataset('events with an actor', [PasswordChanged::class, TwoFactorDisabled::class, PasskeyRemoved::class, AccountLocked::class]);
+dataset('events with an actor', [PasswordChanged::class, TwoFactorDisabled::class, PasskeyRemoved::class, AccountLocked::class, AccountDisabled::class, AccountEnabled::class, AccountUnlocked::class]);
 
 it('serializes the actor by its identifier and restores it', function (string $class): void {
     $user = User::factory()->create();

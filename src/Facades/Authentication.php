@@ -79,10 +79,10 @@ use RoundlyConsulting\Passkeys\DataTransferObjects\RequestOptionsData;
  * @method static int logoutOthers(Account $account, CurrentToken $current)
  * @method static int logoutEverywhere(Account $account)
  * @method static TokenPair|null invalidate(Account $account, InvalidationReason $reason, ?CurrentToken $keep = null, ?SessionContext $context = null)
- * @method static void disable(Account $account, ?string $reason = null)
- * @method static void enable(Account $account)
+ * @method static void disable(Account $account, ?string $reason = null, ?Model $actor = null)
+ * @method static void enable(Account $account, ?Model $actor = null)
  * @method static CarbonImmutable lock(Account $account, ?int $seconds = null, ?Model $actor = null)
- * @method static void unlock(Account $account)
+ * @method static void unlock(Account $account, ?Model $actor = null)
  * @method static Account updateLocale(Account $account, LocaleData $data)
  * @method static LengthAwarePaginator<int, LoginActivity> activity(Account $account, int $perPage = 20)
  *

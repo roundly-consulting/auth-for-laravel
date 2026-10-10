@@ -270,18 +270,24 @@ final readonly class GuardContext
 
     // ── Account ──────────────────────────────────────────────────────────
 
-    public function disable(Account $account, ?string $reason = null): void
+    /**
+     * Disable the account and end every session; `actor:` (the admin) goes on the event.
+     */
+    public function disable(Account $account, ?string $reason = null, ?Model $actor = null): void
     {
         $this->own($account);
 
-        $this->make(DisableAccount::class)->execute($this->name(), $account, $reason);
+        $this->make(DisableAccount::class)->execute($this->name(), $account, $reason, $actor);
     }
 
-    public function enable(Account $account): void
+    /**
+     * Enable a disabled account again; `actor:` (the admin) goes on the event.
+     */
+    public function enable(Account $account, ?Model $actor = null): void
     {
         $this->own($account);
 
-        $this->make(EnableAccount::class)->execute($this->name(), $account);
+        $this->make(EnableAccount::class)->execute($this->name(), $account, $actor);
     }
 
     /**
@@ -295,11 +301,14 @@ final readonly class GuardContext
         return $this->make(LockAccount::class)->execute($this->name(), $account, $seconds, $actor);
     }
 
-    public function unlock(Account $account): void
+    /**
+     * Lift a hard lock; `actor:` (the admin) goes on the event.
+     */
+    public function unlock(Account $account, ?Model $actor = null): void
     {
         $this->own($account);
 
-        $this->make(UnlockAccount::class)->execute($this->name(), $account);
+        $this->make(UnlockAccount::class)->execute($this->name(), $account, $actor);
     }
 
     /**

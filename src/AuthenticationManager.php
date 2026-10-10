@@ -303,14 +303,14 @@ final class AuthenticationManager
         return $this->guard()->invalidate($account, $reason, $keep, $context);
     }
 
-    public function disable(Account $account, ?string $reason = null): void
+    public function disable(Account $account, ?string $reason = null, ?Model $actor = null): void
     {
-        $this->guard()->disable($account, $reason);
+        $this->guard()->disable($account, $reason, $actor);
     }
 
-    public function enable(Account $account): void
+    public function enable(Account $account, ?Model $actor = null): void
     {
-        $this->guard()->enable($account);
+        $this->guard()->enable($account, $actor);
     }
 
     public function lock(Account $account, ?int $seconds = null, ?Model $actor = null): CarbonImmutable
@@ -318,9 +318,9 @@ final class AuthenticationManager
         return $this->guard()->lock($account, $seconds, $actor);
     }
 
-    public function unlock(Account $account): void
+    public function unlock(Account $account, ?Model $actor = null): void
     {
-        $this->guard()->unlock($account);
+        $this->guard()->unlock($account, $actor);
     }
 
     public function updateLocale(Account $account, LocaleData $data): Account

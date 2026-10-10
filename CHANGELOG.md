@@ -10,6 +10,7 @@ All notable changes to `auth-for-laravel` are documented in this file. The forma
 
 - Actor-aware notifications. `passwords()->set()`, `twoFactor()->disable()`, `passkeys()->remove()` and `lock()` take an optional, trailing `actor:` (any saved Eloquent model, e.g. the admin). With another actor the owner's mail says an administrator acted (the new `notifications.<type>.by_actor.*` copy, en + sk), and the `PasswordChanged`, `TwoFactorDisabled`, `PasskeyRemoved` and `AccountLocked` events carry it as `actor`. The account itself counts as no actor; without one nothing changes. An unsaved actor, or another actor together with a `$current` token, throws `InvalidArgumentException` before anything is written.
 - `ActorData` (the actor's morph type and key, with `is()` and `resolve()`), `NotificationData::$actor` and `NotificationType::actorAware()`. The queued delivery job carries only this reference, never the actor model.
+- `disable()`, `enable()` and `unlock()` take the same optional `actor:` and put it on `AccountDisabled`, `AccountEnabled` and `AccountUnlocked` (`actor`), so audit listeners read who acted from every account-state event. They still send no notification.
 
 ## 1.1.1 - 2026-10-07
 
