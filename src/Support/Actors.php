@@ -43,7 +43,7 @@ final class Actors
         }
 
         if ($current !== null) {
-            throw new InvalidArgumentException('Another actor cannot keep a current token: pass the account\'s own token, or none.');
+            throw new InvalidArgumentException('Another actor cannot keep a current token: leave out $current when passing actor:.');
         }
 
         return $actor;

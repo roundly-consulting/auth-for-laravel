@@ -230,7 +230,7 @@ it('refuses an unsaved actor before anything is written', function (string $writ
     Notification::assertNothingSent();
 })->with('actor-aware writes');
 
-it('refuses another actor together with a current token, changing nothing', function (string $write): void {
+it('refuses another actor together with a current token, changing nothing', function (string $write, string $token): void {
     Notification::fake();
     $spec = actorWrite($write);
     Event::fake([$spec['event'], AccountTokensInvalidated::class]);
@@ -240,9 +240,11 @@ it('refuses another actor together with a current token, changing nothing', func
     prepareActorWrite($write, $user);
     $userPair = issuePair($user);
     $adminPair = issuePair($admin);
+    // The admin's own token, or the account's: with another actor neither is kept.
+    $current = currentTokenOf($token === 'admin' ? $adminPair : $userPair);
 
-    expect(fn () => runActorWrite($write, $user, $admin, currentTokenOf($adminPair)))
-        ->toThrow(InvalidArgumentException::class, 'Another actor cannot keep a current token: pass the account\'s own token, or none.');
+    expect(fn () => runActorWrite($write, $user, $admin, $current))
+        ->toThrow(InvalidArgumentException::class, 'Another actor cannot keep a current token: leave out $current when passing actor:.');
 
     expectActorWriteUndone($write, $user);
     Event::assertNotDispatched($spec['event']);
@@ -250,7 +252,7 @@ it('refuses another actor together with a current token, changing nothing', func
     Notification::assertNothingSent();
     $this->getJson('/users/auth/me', bearer($userPair))->assertOk();
     $this->getJson('/users/auth/me', bearer($adminPair))->assertOk();
-})->with(['two_factor', 'passkey']);
+})->with(['two_factor', 'passkey'])->with(['admin', 'own']);
 
 it('keeps the current token when the account itself is the actor', function (): void {
     Notification::fake();
