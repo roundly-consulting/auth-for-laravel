@@ -6,6 +6,10 @@ All notable changes to `auth-for-laravel` are documented in this file. The forma
 
 ## Unreleased
 
+## 1.2.0 - 2026-10-11
+
+No breaking changes. Every new argument, event property and DTO field is optional and trailing, so existing calls, `new` event constructions and listeners keep working unchanged. The mails change only when a host passes `actor:`, and a host that published the translations gets the new `by_actor` keys from the package (Laravel merges a published copy over the package's lines).
+
 ### Added
 
 - Actor-aware notifications. `passwords()->set()`, `twoFactor()->disable()`, `passkeys()->remove()` and `lock()` take an optional, trailing `actor:` (any saved Eloquent model, e.g. the admin). With another actor the owner's mail says an administrator acted (the new `notifications.<type>.by_actor.*` copy, en + sk), and the `PasswordChanged`, `TwoFactorDisabled`, `PasskeyRemoved` and `AccountLocked` events carry it as `actor`. The account itself counts as no actor; without one nothing changes. An unsaved actor, or another actor together with a `$current` token, throws `InvalidArgumentException` before anything is written.
@@ -15,6 +19,7 @@ All notable changes to `auth-for-laravel` are documented in this file. The forma
 ### Changed
 
 - Documentation: change a package exception's response with `$exceptions->map()` or `$exceptions->respond()`; `$exceptions->render()` callbacks never see it, because the exception renders itself first.
+- Maintenance: `roundly-consulting/package-toolkit-for-laravel` is now required at `^1.3` (was `^1.0`); the facade fix under Security builds on it, so `composer update` pulls it in. The dev-only `testing-for-laravel` floor is now `^1.2`.
 
 ### Security
 
