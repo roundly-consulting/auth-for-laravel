@@ -37,6 +37,7 @@ use RoundlyConsulting\Auth\Guards\GuardConfig;
 use RoundlyConsulting\Auth\Guards\GuardContext;
 use RoundlyConsulting\Auth\Http\RouteRegistrar;
 use RoundlyConsulting\Auth\Models\LoginActivity;
+use RoundlyConsulting\PackageToolkit\Concerns\RedactsSensitiveArguments;
 use RoundlyConsulting\Passkeys\DataTransferObjects\AuthenticationResponseData;
 use RoundlyConsulting\Passkeys\DataTransferObjects\RequestOptionsData;
 
@@ -91,6 +92,8 @@ use RoundlyConsulting\Passkeys\DataTransferObjects\RequestOptionsData;
  */
 final class Authentication extends Facade
 {
+    use RedactsSensitiveArguments;
+
     protected static function getFacadeAccessor(): string
     {
         return AuthenticationManager::class;

@@ -16,6 +16,10 @@ All notable changes to `auth-for-laravel` are documented in this file. The forma
 
 - Documentation: change a package exception's response with `$exceptions->map()` or `$exceptions->respond()`; `$exceptions->render()` callbacks never see it, because the exception renders itself first.
 
+### Security
+
+- Flat facade calls (`Authentication::consumeMagicLink($token)`, `verifyEmailOtp($email, $code)`, `refresh($refreshToken)`) no longer leave `#[SensitiveParameter]` arguments in the facade's stack frame: the `Authentication` facade uses package-toolkit's `RedactsSensitiveArguments`, which hides exactly the arguments the `AuthenticationManager` method marks, while every other argument stays visible. Requires package-toolkit `^1.3`.
+
 ## 1.1.1 - 2026-10-07
 
 ### Added

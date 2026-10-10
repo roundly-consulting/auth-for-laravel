@@ -15,3 +15,7 @@ it('documents its root and reaches every host-facing action', function (): void 
         ->toDocumentItsRoot()
         ->toReachEveryAction(__DIR__.'/../../src/Actions');
 });
+
+it('keeps its sensitive arguments out of the facade frame', function (): void {
+    expect(Authentication::class)->toRedactSensitiveArguments(methods: 3);
+});
