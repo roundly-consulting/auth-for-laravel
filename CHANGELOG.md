@@ -12,6 +12,10 @@ All notable changes to `auth-for-laravel` are documented in this file. The forma
 - `ActorData` (the actor's morph type and key, with `is()` and `resolve()`), `NotificationData::$actor` and `NotificationType::actorAware()`. The queued delivery job carries only this reference, never the actor model.
 - `disable()`, `enable()` and `unlock()` take the same optional `actor:` and put it on `AccountDisabled`, `AccountEnabled` and `AccountUnlocked` (`actor`), so audit listeners read who acted from every account-state event. They still send no notification.
 
+### Changed
+
+- Documentation: change a package exception's response with `$exceptions->map()` or `$exceptions->respond()`; `$exceptions->render()` callbacks never see it, because the exception renders itself first.
+
 ## 1.1.1 - 2026-10-07
 
 ### Added

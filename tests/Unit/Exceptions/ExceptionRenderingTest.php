@@ -2,9 +2,15 @@
 
 declare(strict_types=1);
 
+use Illuminate\Contracts\Debug\ExceptionHandler;
+use Illuminate\Foundation\Configuration\Exceptions as ExceptionsConfiguration;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use RoundlyConsulting\Auth\Enums\ReauthenticationMethod;
 use RoundlyConsulting\Auth\Exceptions;
+use RoundlyConsulting\Auth\Exceptions\AuthException;
+use RoundlyConsulting\Auth\Tests\Fixtures\Support\ApiProblem;
+use Symfony\Component\HttpFoundation\Response;
 
 dataset('exceptions', [
     [Exceptions\InvalidCredentials::class, 422, 'invalid_credentials', 'identifier'],
@@ -86,4 +92,75 @@ it('falls back to the code when a message is missing', function (): void {
     app('translator')->addLines(['messages.errors.not_found' => 'authentication::messages.errors.not_found'], 'en', 'authentication');
 
     expect((new Exceptions\SessionNotFound)->getMessage())->toBeString();
+});
+
+/*
+ * How a host changes the response, pinned against Laravel's own handler: `render()`
+ * maps the exception first, then lets an exception that renders itself answer, and only
+ * then runs the `$exceptions->render()` callbacks. So for package exceptions `map()` and
+ * `respond()` work, and `render()` callbacks never run.
+ */
+function hostExceptions(): ExceptionsConfiguration
+{
+    return new ExceptionsConfiguration(app(ExceptionHandler::class));
+}
+
+it('never runs a host render() callback for a package exception', function (): void {
+    $called = false;
+    hostExceptions()->render(function (AuthException $e) use (&$called): JsonResponse {
+        $called = true;
+
+        return new JsonResponse(['host' => true], 400);
+    });
+
+    $response = app(ExceptionHandler::class)->render(Request::create('/'), Exceptions\TooManyAttempts::retryAfter(30));
+
+    expect($called)->toBeFalse()
+        ->and($response->getStatusCode())->toBe(429)
+        ->and(json_decode((string) $response->getContent(), true)['code'])->toBe('too_many_attempts')
+        ->and($response->headers->get('Retry-After'))->toBe('30');
+});
+
+it('renders the host exception a package exception is mapped to', function (): void {
+    hostExceptions()->map(AuthException::class, fn (AuthException $e): Throwable => new ApiProblem($e->errorCode(), $e->getMessage(), $e->status(), $e));
+
+    $response = app(ExceptionHandler::class)->render(Request::create('/'), new Exceptions\InvalidCredentials);
+
+    expect($response->getStatusCode())->toBe(422)
+        ->and($response->headers->get('Content-Type'))->toBe('application/problem+json')
+        ->and(json_decode((string) $response->getContent(), true))->toBe(['type' => 'invalid_credentials', 'title' => 'These credentials do not match our records.', 'status' => 422]);
+});
+
+it('reports the mapped exception, so it must stay unreported itself', function (): void {
+    $reported = [];
+    $record = function (ApiProblem $problem) use (&$reported): void {
+        $reported[] = $problem;
+    };
+    hostExceptions()->map(AuthException::class, fn (AuthException $e): Throwable => new ApiProblem($e->errorCode(), $e->getMessage(), $e->status(), $e, $record));
+
+    app(ExceptionHandler::class)->report($exception = new Exceptions\InvalidCredentials);
+
+    expect($reported)->toHaveCount(1)
+        ->and($reported[0]->getPrevious())->toBe($exception);
+});
+
+it('hands a host respond() callback the response the exception rendered itself', function (): void {
+    $seen = [];
+    hostExceptions()->respond(function (Response $response, Throwable $e, Request $request) use (&$seen): Response {
+        $seen = [$response->getStatusCode(), $e];
+
+        if ($e instanceof AuthException) {
+            $response->setContent((string) json_encode(['error' => ['code' => $e->errorCode(), 'message' => $e->getMessage()]]));
+        }
+
+        return $response;
+    });
+
+    $response = app(ExceptionHandler::class)->render(Request::create('/'), $exception = Exceptions\AccountLocked::retryAfter(90));
+
+    expect($seen)->toBe([423, $exception])
+        ->and($response->getStatusCode())->toBe(423)
+        ->and($response->headers->get('Cache-Control'))->toContain('no-store')
+        ->and($response->headers->get('Retry-After'))->toBe('90')
+        ->and(json_decode((string) $response->getContent(), true))->toBe(['error' => ['code' => 'account_locked', 'message' => $exception->getMessage()]]);
 });

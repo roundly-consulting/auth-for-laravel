@@ -16,7 +16,11 @@ use Throwable;
  *     {"message": "…", "code": "…", "errors": {"<field>": ["…"]}, …extra}
  *
  * Laravel calls {@see self::render()} on the exception itself, so no global handler is
- * touched; a host overrides the shape with `$exceptions->render(...)`.
+ * touched. Laravel maps exceptions (`$exceptions->map()`) before it calls `render()`, and
+ * runs `$exceptions->render()` callbacks only when `render()` returns nothing — so those
+ * callbacks never see a package exception. To change the response, replace the exception
+ * with `map()` (keep the mapped one unreported: `map()` applies to reporting too), or
+ * reshape the rendered response with `$exceptions->respond()`.
  */
 abstract class AuthException extends RuntimeException
 {
