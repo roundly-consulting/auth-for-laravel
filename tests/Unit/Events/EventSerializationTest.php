@@ -2,14 +2,19 @@
 
 declare(strict_types=1);
 
+use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Queue\SerializesModels;
 use RoundlyConsulting\Auth\Contracts\Account;
 use RoundlyConsulting\Auth\DataTransferObjects\InvitationData;
+use RoundlyConsulting\Auth\Events\AccountLocked;
 use RoundlyConsulting\Auth\Events\InvitationCreated;
+use RoundlyConsulting\Auth\Events\PasskeyRemoved;
 use RoundlyConsulting\Auth\Events\PasswordChanged;
+use RoundlyConsulting\Auth\Events\TwoFactorDisabled;
 use RoundlyConsulting\Auth\Facades\Authentication;
 use RoundlyConsulting\Auth\Models\Invitation;
+use RoundlyConsulting\Auth\Tests\Fixtures\Models\Operator;
 use RoundlyConsulting\Auth\Tests\Fixtures\Models\User;
 
 /**
@@ -38,6 +43,37 @@ it('serializes an invitation by its identifier', function (): void {
     expect($serialized)->not->toContain('invitee@example.com')
         ->and(unserialize($serialized)->invitation->getKey())->toBe($invitation->getKey());
 });
+
+/**
+ * An event that carries who acted, built with that actor.
+ */
+function eventWithActor(string $class, User $user, ?Model $actor): object
+{
+    return match ($class) {
+        PasskeyRemoved::class => new PasskeyRemoved('users', $user, 5, actor: $actor),
+        AccountLocked::class => new AccountLocked('users', $user, CarbonImmutable::now(), actor: $actor),
+        default => new $class('users', $user, actor: $actor),
+    };
+}
+
+dataset('events with an actor', [PasswordChanged::class, TwoFactorDisabled::class, PasskeyRemoved::class, AccountLocked::class]);
+
+it('serializes the actor by its identifier and restores it', function (string $class): void {
+    $user = User::factory()->create();
+    $actor = Operator::factory()->create();
+    $serialized = serialize(eventWithActor($class, $user, $actor));
+
+    expect($serialized)->not->toContain($actor->email)
+        ->not->toContain((string) $actor->getRawOriginal('password'));
+
+    $copy = unserialize($serialized);
+
+    expect($copy)->toBeInstanceOf($class)
+        ->and($copy->actor)->toBeInstanceOf(Operator::class)
+        ->and($copy->actor->is($actor))->toBeTrue()
+        ->and($copy->account->is($user))->toBeTrue()
+        ->and(unserialize(serialize(eventWithActor($class, $user, null)))->actor)->toBeNull();
+})->with('events with an actor');
 
 it('uses SerializesModels on every event that carries a model', function (): void {
     $carriers = [];

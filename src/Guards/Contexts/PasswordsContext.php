@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace RoundlyConsulting\Auth\Guards\Contexts;
 
 use Illuminate\Contracts\Container\Container;
+use Illuminate\Database\Eloquent\Model;
 use Illuminate\Validation\ValidationException;
 use RoundlyConsulting\Auth\Actions\Passwords\ChangePassword;
 use RoundlyConsulting\Auth\Actions\Passwords\RequestPasswordReset;
@@ -40,13 +41,14 @@ final readonly class PasswordsContext
     /**
      * Set a password from host code (an admin, a support tool): the policy, the
      * invalidation of `$reason` (no device kept — the caller is not the account) and the
-     * owner's notification.
+     * owner's notification. Pass the admin as `actor:` and the owner is told an
+     * administrator changed it; the event carries the actor.
      */
-    public function set(Account $account, #[SensitiveParameter] string $password, InvalidationReason $reason = InvalidationReason::PasswordReset): void
+    public function set(Account $account, #[SensitiveParameter] string $password, InvalidationReason $reason = InvalidationReason::PasswordReset, ?Model $actor = null): void
     {
         $this->own($account);
 
-        $this->make(SetPassword::class)->execute($this->guardName(), $account, $password, $reason);
+        $this->make(SetPassword::class)->execute($this->guardName(), $account, $password, $reason, $actor);
     }
 
     /**

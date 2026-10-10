@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace RoundlyConsulting\Auth\Guards\Contexts;
 
 use Illuminate\Contracts\Container\Container;
+use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Collection;
 use RoundlyConsulting\Auth\Actions\Passkeys\BeginPasskeyRegistration;
 use RoundlyConsulting\Auth\Actions\Passkeys\ListPasskeys;
@@ -25,7 +26,8 @@ use RoundlyConsulting\Passkeys\Models\Passkey;
  * An account's passkeys on one guard — `Authentication::passkeys()` /
  * `Authentication::guard('clients')->passkeys()`. Every method refuses another guard's
  * account before it writes; a passkey of another account is `PasskeyNotFound`. Changes
- * notify the owner and apply `invalidation.passkey_changed` (none by default).
+ * notify the owner and apply `invalidation.passkey_changed` (none by default); an admin
+ * removing one passes themselves as `actor:` so the owner is told an administrator acted.
  *
  * The HTTP layer demands a recent re-authentication to register or remove one — host
  * code acting for the user vouches for it, or calls `reauthentication()->ensureFor()`.
@@ -82,13 +84,14 @@ final readonly class PasskeysContext
     }
 
     /**
-     * Remove one of the account's passkeys — refused for the last way in.
+     * Remove one of the account's passkeys — refused for the last way in. An admin passes
+     * themselves as `actor:` (and no `$current`): the owner is told an administrator did it.
      */
-    public function remove(Account $account, Passkey|int $passkey, ?CurrentToken $current = null, ?SessionContext $context = null): ?TokenPair
+    public function remove(Account $account, Passkey|int $passkey, ?CurrentToken $current = null, ?SessionContext $context = null, ?Model $actor = null): ?TokenPair
     {
         $this->own($account);
 
-        return $this->make(RemovePasskey::class)->execute($this->guardName(), $account, self::id($passkey), $current, $context);
+        return $this->make(RemovePasskey::class)->execute($this->guardName(), $account, self::id($passkey), $current, $context, $actor);
     }
 
     private static function id(Passkey|int $passkey): int

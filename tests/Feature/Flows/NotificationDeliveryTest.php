@@ -9,6 +9,7 @@ use Illuminate\Support\Facades\Bus;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Notification;
 use Illuminate\Support\Facades\Schema;
+use RoundlyConsulting\Auth\DataTransferObjects\ActorData;
 use RoundlyConsulting\Auth\DataTransferObjects\NotificationData;
 use RoundlyConsulting\Auth\Enums\NotificationType;
 use RoundlyConsulting\Auth\Exceptions\AuthenticationMisconfigured;
@@ -18,7 +19,9 @@ use RoundlyConsulting\Auth\Jobs\DeliverAuthenticationNotification;
 use RoundlyConsulting\Auth\Notifications\AccountExistsNotification;
 use RoundlyConsulting\Auth\Notifications\MagicLinkNotification;
 use RoundlyConsulting\Auth\Notifications\NewDeviceLoginNotification;
+use RoundlyConsulting\Auth\Notifications\PasswordChangedNotification;
 use RoundlyConsulting\Auth\Support\NotificationDispatcher;
+use RoundlyConsulting\Auth\Tests\Fixtures\Models\Operator;
 use RoundlyConsulting\Auth\Tests\Fixtures\Models\User;
 
 it('delivers after the response by default', function (): void {
@@ -90,6 +93,50 @@ it('keeps plaintext secrets out of the queue store', function (): void {
         ->and($payload)->not->toContain('EmailOtpNotification')
         ->and($payload)->not->toContain($user->email)
         ->and(json_decode($payload, true)['data']['command'] ?? '')->not->toContain('code');
+});
+
+it('queues the actor as a type and key, never the actor model', function (): void {
+    Schema::create('jobs', function (Blueprint $table): void {
+        $table->id();
+        $table->string('queue')->index();
+        $table->longText('payload');
+        $table->unsignedTinyInteger('attempts');
+        $table->unsignedInteger('reserved_at')->nullable();
+        $table->unsignedInteger('available_at');
+        $table->unsignedInteger('created_at');
+    });
+    config()->set('queue.default', 'database');
+    config()->set('queue.connections.database', ['driver' => 'database', 'table' => 'jobs', 'queue' => 'default', 'retry_after' => 90]);
+    $this->configureGuard('users', ['notifications.delivery' => 'queue']);
+    $user = User::factory()->create();
+    $admin = Operator::factory()->create(['name' => 'Grace Hopper']);
+
+    Authentication::guard('users')->passwords()->set($user, 'n3w-Passphrase!', actor: $admin);
+
+    $payload = json_decode((string) DB::table('jobs')->value('payload'), true);
+    $command = decrypt($payload['data']['command']);
+
+    expect($command)->toBeString()
+        ->not->toContain($admin->email)
+        ->not->toContain('Grace Hopper')
+        ->not->toContain((string) $admin->getRawOriginal('password'))
+        // No serialized Operator instance, only its type string.
+        ->not->toContain('O:'.strlen(Operator::class).':"'.Operator::class.'"')
+        ->toContain(Operator::class);
+
+    $job = unserialize($command);
+    $actor = $job->notification->data->actor;
+
+    expect($job)->toBeInstanceOf(DeliverAuthenticationNotification::class)
+        ->and($actor)->toBeInstanceOf(ActorData::class)
+        ->and($actor->is($admin))->toBeTrue()
+        ->and($actor->resolve()?->is($admin))->toBeTrue();
+
+    Notification::fake();
+    $job->handle();
+
+    Notification::assertSentTo($user, PasswordChangedNotification::class, fn (PasswordChangedNotification $sent): bool => $sent->data->actor?->is($admin) === true
+        && $sent->toMail($user)->subject === 'Your Laravel password was changed by an administrator');
 });
 
 it('localizes mail through the account locale', function (): void {

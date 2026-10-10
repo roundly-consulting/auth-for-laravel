@@ -8,6 +8,7 @@ use Carbon\CarbonImmutable;
 use Illuminate\Auth\AuthenticationException;
 use Illuminate\Contracts\Container\Container;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
+use Illuminate\Database\Eloquent\Model;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
 use RoundlyConsulting\Auth\Actions\Account\DisableAccount;
@@ -285,12 +286,13 @@ final readonly class GuardContext
 
     /**
      * Hard-lock the account (default `lockout.duration`) and tell its owner; sessions stay.
+     * Pass the admin as `actor:` and the owner is told an administrator locked it.
      */
-    public function lock(Account $account, ?int $seconds = null): CarbonImmutable
+    public function lock(Account $account, ?int $seconds = null, ?Model $actor = null): CarbonImmutable
     {
         $this->own($account);
 
-        return $this->make(LockAccount::class)->execute($this->name(), $account, $seconds);
+        return $this->make(LockAccount::class)->execute($this->name(), $account, $seconds, $actor);
     }
 
     public function unlock(Account $account): void

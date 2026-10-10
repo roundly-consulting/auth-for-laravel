@@ -35,6 +35,11 @@ return [
         'intro' => 'Heslo k vášmu účtu bolo práve zmenené.',
         'action' => 'Skontrolovať účet',
         'outro' => 'Ak ste to neboli vy, okamžite si obnovte heslo.',
+        'by_actor' => [
+            'subject' => 'Vaše heslo do aplikácie :app zmenil administrátor',
+            'intro' => 'Administrátor zmenil heslo k vášmu účtu.',
+            'outro' => 'Ak ste to nečakali, okamžite kontaktujte podporu.',
+        ],
     ],
     'email_change_confirmation' => [
         'subject' => 'Potvrďte svoju novú e-mailovú adresu',
@@ -83,6 +88,11 @@ return [
         'intro' => 'Vo vašom účte bolo vypnuté dvojfaktorové overenie.',
         'action' => 'Skontrolovať účet',
         'outro' => 'Ak ste to neboli vy, okamžite kontaktujte podporu.',
+        'by_actor' => [
+            'subject' => 'Dvojfaktorové overenie vypol administrátor',
+            'intro' => 'Administrátor vypol vo vašom účte dvojfaktorové overenie.',
+            'outro' => 'Ak ste to nečakali, okamžite kontaktujte podporu a dvojfaktorové overenie znova zapnite.',
+        ],
     ],
     'recovery_code_used' => [
         'subject' => 'Bol použitý záchranný kód',
@@ -101,12 +111,22 @@ return [
         'intro' => 'Z vášho účtu bol odstránený prístupový kľúč.',
         'action' => 'Skontrolovať prístupové kľúče',
         'outro' => 'Ak ste to neboli vy, okamžite kontaktujte podporu.',
+        'by_actor' => [
+            'subject' => 'Administrátor odstránil z vášho účtu prístupový kľúč',
+            'intro' => 'Administrátor odstránil z vášho účtu prístupový kľúč. Na prihlásenie ho už nemožno použiť.',
+            'outro' => 'Ak ste to nečakali, okamžite kontaktujte podporu.',
+        ],
     ],
     'account_locked' => [
         'subject' => 'Váš účet v aplikácii :app bol zablokovaný',
         'intro' => 'Váš účet bol po príliš veľkom počte neúspešných pokusov o prihlásenie dočasne zablokovaný.',
         'action' => 'Obnoviť heslo',
         'outro' => 'Ak ste tieto pokusy nevykonali vy, zvážte zmenu hesla.',
+        'by_actor' => [
+            'subject' => 'Váš účet v aplikácii :app zablokoval administrátor',
+            'intro' => 'Administrátor dočasne zablokoval váš účet. Kým blokovanie neskončí, nemôžete sa prihlásiť.',
+            'outro' => 'Ak ste to nečakali, kontaktujte podporu.',
+        ],
     ],
     'refresh_token_reuse' => [
         'subject' => 'Podozrivá aktivita vo vašom účte v aplikácii :app',

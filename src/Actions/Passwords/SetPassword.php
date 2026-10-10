@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace RoundlyConsulting\Auth\Actions\Passwords;
 
+use Illuminate\Database\Eloquent\Model;
 use RoundlyConsulting\Auth\Actions\Sessions\InvalidateAccountTokens;
 use RoundlyConsulting\Auth\Contracts\Account;
 use RoundlyConsulting\Auth\DataTransferObjects\NotificationData;
@@ -12,6 +13,7 @@ use RoundlyConsulting\Auth\Enums\InvalidationReason;
 use RoundlyConsulting\Auth\Enums\NotificationType;
 use RoundlyConsulting\Auth\Events\PasswordChanged;
 use RoundlyConsulting\Auth\Guards\GuardRegistry;
+use RoundlyConsulting\Auth\Support\Actors;
 use RoundlyConsulting\Auth\Support\NotificationDispatcher;
 use RoundlyConsulting\Auth\Support\PasswordWriter;
 use SensitiveParameter;
@@ -19,7 +21,8 @@ use SensitiveParameter;
 /**
  * Sets a password from host code (an admin, a support tool): policy, hash, the
  * invalidation of the given reason (no kept device — the caller is not the account),
- * the owner's notification.
+ * the owner's notification. Pass the admin as `$actor` and the owner is told an
+ * administrator changed it (the `by_actor` copy); without one the mail reads as before.
  */
 final readonly class SetPassword
 {
@@ -30,9 +33,11 @@ final readonly class SetPassword
         private NotificationDispatcher $notifications,
     ) {}
 
-    public function execute(string $guard, Account $account, #[SensitiveParameter] string $password, InvalidationReason $reason = InvalidationReason::PasswordReset): void
+    public function execute(string $guard, Account $account, #[SensitiveParameter] string $password, InvalidationReason $reason = InvalidationReason::PasswordReset, ?Model $actor = null): void
     {
         $config = $this->guards->owning($guard, $account);
+        $actor = Actors::other($account, $actor);
+        $data = new NotificationData($guard, actor: Actors::reference($actor));
 
         $this->policy->execute($config, $password, $account);
 
@@ -40,7 +45,7 @@ final readonly class SetPassword
 
         $this->invalidate->execute($config, $account, $reason, null, new SessionContext);
 
-        event(new PasswordChanged($guard, $account));
-        $this->notifications->send($config, NotificationType::PasswordChanged, $account, new NotificationData($guard));
+        event(new PasswordChanged($guard, $account, $actor));
+        $this->notifications->send($config, NotificationType::PasswordChanged, $account, $data);
     }
 }

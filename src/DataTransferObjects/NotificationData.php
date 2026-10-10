@@ -10,6 +10,8 @@ use SensitiveParameter;
 /**
  * What every authentication notification is built from. `replacements` are the
  * translation placeholders of the notification's copy (a dictionary, not a shape).
+ * `actor` is who acted when it was not the account itself (a host passed `actor:`); an
+ * actor-aware type then renders its `by_actor` copy.
  */
 final readonly class NotificationData
 {
@@ -22,5 +24,6 @@ final readonly class NotificationData
         #[SensitiveParameter] public ?string $code = null,
         public ?CarbonImmutable $expiresAt = null,
         public array $replacements = [],
+        public ?ActorData $actor = null,
     ) {}
 }

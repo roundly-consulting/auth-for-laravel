@@ -8,6 +8,7 @@ use Carbon\CarbonImmutable;
 use Illuminate\Auth\AuthenticationException;
 use Illuminate\Container\Container;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
+use Illuminate\Database\Eloquent\Model;
 use Illuminate\Http\Request;
 use Illuminate\Routing\Router;
 use Illuminate\Support\Collection;
@@ -312,9 +313,9 @@ final class AuthenticationManager
         $this->guard()->enable($account);
     }
 
-    public function lock(Account $account, ?int $seconds = null): CarbonImmutable
+    public function lock(Account $account, ?int $seconds = null, ?Model $actor = null): CarbonImmutable
     {
-        return $this->guard()->lock($account, $seconds);
+        return $this->guard()->lock($account, $seconds, $actor);
     }
 
     public function unlock(Account $account): void

@@ -24,5 +24,15 @@ return new class extends Migration
                 $table->softDeletes();
             });
         }
+
+        // A model that is no account, to act on one (`actor:`).
+        Schema::create('operators', function (Blueprint $table): void {
+            $table->id();
+            $table->string('name')->nullable();
+            $table->string('email')->unique();
+            $table->string('password')->nullable();
+            $table->timestamps();
+            $table->softDeletes();
+        });
     }
 };

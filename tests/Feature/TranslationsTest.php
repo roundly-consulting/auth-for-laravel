@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use Illuminate\Support\Arr;
+use Illuminate\Support\Facades\File;
 
 dataset('translation files', ['messages', 'notifications', 'validation']);
 
@@ -47,10 +48,26 @@ it('loads the slovak lines through the package namespace', function (): void {
     app()->setLocale('sk');
 
     expect(trans('authentication::messages.errors.invalid_credentials'))->toBe('Tieto prihlasovacie údaje sa nezhodujú s našimi záznamami.')
-        ->and(trans('authentication::notifications.magic_link.subject', ['app' => 'Roundly']))->toBe('Váš prihlasovací odkaz do aplikácie Roundly');
+        ->and(trans('authentication::notifications.magic_link.subject', ['app' => 'Roundly']))->toBe('Váš prihlasovací odkaz do aplikácie Roundly')
+        ->and(trans('authentication::notifications.password_changed.by_actor.subject', ['app' => 'Roundly']))->toBe('Vaše heslo do aplikácie Roundly zmenil administrátor');
 
     app()->setLocale('en');
 
     expect(trans('authentication::messages.errors.invalid_credentials'))->toBe('These credentials do not match our records.')
         ->and(trans('authentication::notifications.magic_link.subject', ['app' => 'Roundly']))->toBe('Your sign-in link for Roundly');
+});
+
+it('keeps the administrator copy for a host that published the translations before it existed', function (): void {
+    $dir = sys_get_temp_dir().'/authentication-lang-'.getmypid().'-'.bin2hex(random_bytes(4));
+    File::ensureDirectoryExists($dir.'/vendor/authentication/en');
+    File::put($dir.'/vendor/authentication/en/notifications.php', "<?php return ['password_changed' => ['subject' => 'Our own subject']];");
+
+    try {
+        app('translator')->getLoader()->addPath($dir);
+
+        expect(trans('authentication::notifications.password_changed.subject'))->toBe('Our own subject')
+            ->and(trans('authentication::notifications.password_changed.by_actor.subject', ['app' => 'Roundly']))->toBe('Your Roundly password was changed by an administrator');
+    } finally {
+        File::deleteDirectory($dir);
+    }
 });

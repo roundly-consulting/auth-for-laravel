@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use Carbon\CarbonImmutable;
 use Illuminate\Notifications\AnonymousNotifiable;
+use RoundlyConsulting\Auth\DataTransferObjects\ActorData;
 use RoundlyConsulting\Auth\DataTransferObjects\NotificationData;
 use RoundlyConsulting\Auth\Enums\NotificationType;
 use RoundlyConsulting\Auth\Guards\GuardRegistry;
@@ -99,3 +100,37 @@ it('passes a reason it does not know through unchanged', function (): void {
 
     expect($mail->introLines[0])->toContain('(a host-supplied reason)');
 });
+
+it('renders the administrator copy of an actor-aware type, keeping its action', function (NotificationType $type): void {
+    $class = app(GuardRegistry::class)->get('users')->notificationClass($type);
+    $key = 'authentication::notifications.'.$type->value;
+    $actor = new ActorData('App\\Models\\Admin', 7);
+
+    $mail = (new $class(new NotificationData('users', url: 'https://x.test/account', actor: $actor)))->toMail(new AnonymousNotifiable);
+    $base = (new $class(new NotificationData('users', url: 'https://x.test/account')))->toMail(new AnonymousNotifiable);
+
+    expect($type->actorAware())->toBeTrue()
+        ->and($mail->subject)->toBe(__("{$key}.by_actor.subject", ['app' => 'Laravel']))
+        ->and($mail->introLines)->toBe([__("{$key}.by_actor.intro")])
+        ->and($mail->outroLines)->toBe([__("{$key}.by_actor.outro")])
+        ->and($mail->subject)->not->toBe($base->subject)
+        ->and($mail->introLines)->not->toBe($base->introLines)
+        ->and($mail->outroLines)->not->toBe($base->outroLines)
+        ->and($mail->actionText)->toBe($base->actionText)->toBe(__("{$key}.action"))
+        ->and($mail->actionUrl)->toBe('https://x.test/account');
+})->with([NotificationType::PasswordChanged, NotificationType::TwoFactorDisabled, NotificationType::PasskeyRemoved, NotificationType::AccountLocked]);
+
+it('keeps the base copy of a type that is not actor-aware, even with an actor', function (NotificationType $type): void {
+    $class = app(GuardRegistry::class)->get('users')->notificationClass($type);
+    $data = static fn (?ActorData $actor): NotificationData => new NotificationData('users', url: 'https://x.test#token=t', code: '123456', expiresAt: CarbonImmutable::now()->addMinutes(5), replacements: ['remaining' => 2, 'new_email' => 'n@x.test', 'ip' => '1.1.1.1', 'user_agent' => 'UA', 'time' => 'now', 'reason' => 'test'], actor: $actor);
+
+    $this->freezeTime();
+    $mail = (new $class($data(new ActorData('App\\Models\\Admin', 7))))->toMail(new AnonymousNotifiable);
+    $base = (new $class($data(null)))->toMail(new AnonymousNotifiable);
+
+    expect($type->actorAware())->toBeFalse()
+        ->and($mail->subject)->toBe($base->subject)
+        ->and($mail->introLines)->toBe($base->introLines)
+        ->and($mail->outroLines)->toBe($base->outroLines)
+        ->and($mail->actionText)->toBe($base->actionText);
+})->with(array_values(array_filter(NotificationType::cases(), static fn (NotificationType $type): bool => ! in_array($type, [NotificationType::PasswordChanged, NotificationType::TwoFactorDisabled, NotificationType::PasskeyRemoved, NotificationType::AccountLocked], true))));

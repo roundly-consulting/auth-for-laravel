@@ -14,6 +14,10 @@ use RoundlyConsulting\Auth\Enums\NotificationType;
  * `authentication::notifications.<type>.*` (publish `authentication-translations` to
  * change it); swap a class per guard through `notifications.classes.<type>`.
  *
+ * When another actor did it (`data->actor`, an actor-aware type), the subject, intro and
+ * outro come from `<type>.by_actor.*` instead; the action, code and expiry lines stay. A
+ * swapped class can read `$this->data->actor` to name the actor itself.
+ *
  * Never implements `ShouldQueue`: queued delivery goes through the encrypted
  * `DeliverAuthenticationNotification` job only, because an instance holds the
  * plaintext link or code.
@@ -44,11 +48,12 @@ abstract class AuthenticationNotification extends Notification
     public function toMail(object $notifiable): MailMessage
     {
         $key = 'authentication::notifications.'.$this->type()->value;
+        $copy = $this->data->actor !== null && $this->type()->actorAware() ? "{$key}.by_actor" : $key;
         $replacements = $this->replacements();
 
         $mail = (new MailMessage)
-            ->subject($this->translate("{$key}.subject", $replacements))
-            ->line($this->translate("{$key}.intro", $replacements));
+            ->subject($this->translate("{$copy}.subject", $replacements))
+            ->line($this->translate("{$copy}.intro", $replacements));
 
         if ($this->data->code !== null) {
             $mail->line($this->translate('authentication::notifications.code_line', $replacements));
@@ -62,7 +67,7 @@ abstract class AuthenticationNotification extends Notification
             $mail->line(trans_choice('authentication::notifications.expiry', (int) ($replacements['minutes'] ?? $this->minutesLeft()), $replacements));
         }
 
-        return $mail->line($this->translate("{$key}.outro", $replacements));
+        return $mail->line($this->translate("{$copy}.outro", $replacements));
     }
 
     /**

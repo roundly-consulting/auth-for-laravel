@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace RoundlyConsulting\Auth\Guards\Contexts;
 
 use Illuminate\Contracts\Container\Container;
+use Illuminate\Database\Eloquent\Model;
 use RoundlyConsulting\Auth\Actions\TwoFactor\ConfirmTwoFactorEnrolment;
 use RoundlyConsulting\Auth\Actions\TwoFactor\DisableTwoFactor;
 use RoundlyConsulting\Auth\Actions\TwoFactor\GetTwoFactorStatus;
@@ -28,7 +29,8 @@ use SensitiveParameter;
  *
  * Pass the caller's `$current` token (and `$context`) when acting for the signed-in
  * account: its device is kept under `others` and the re-issued pair is returned. Leave
- * them out for admin/CLI calls. The HTTP layer also demands a recent re-authentication
+ * them out for admin/CLI calls, and pass the admin as `actor:` so the owner is told an
+ * administrator acted. The HTTP layer also demands a recent re-authentication
  * for start/disable/regenerate — host code acting for the user vouches for it, or calls
  * `reauthentication()->ensureFor()` first.
  */
@@ -74,13 +76,14 @@ final readonly class TwoFactorContext
     }
 
     /**
-     * Turn TOTP off (refused while the guard requires it).
+     * Turn TOTP off (refused while the guard requires it). An admin passes themselves as
+     * `actor:` (and no `$current`): the owner is told an administrator did it.
      */
-    public function disable(Account $account, ?CurrentToken $current = null, ?SessionContext $context = null): ?TokenPair
+    public function disable(Account $account, ?CurrentToken $current = null, ?SessionContext $context = null, ?Model $actor = null): ?TokenPair
     {
         $this->own($account);
 
-        return $this->make(DisableTwoFactor::class)->execute($this->guardName(), $account, $current, $context);
+        return $this->make(DisableTwoFactor::class)->execute($this->guardName(), $account, $current, $context, $actor);
     }
 
     /**

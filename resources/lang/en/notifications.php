@@ -35,6 +35,11 @@ return [
         'intro' => 'The password of your account was just changed.',
         'action' => 'Review your account',
         'outro' => 'If this was not you, reset your password immediately.',
+        'by_actor' => [
+            'subject' => 'Your :app password was changed by an administrator',
+            'intro' => 'An administrator changed the password of your account.',
+            'outro' => 'If you did not expect this, contact support immediately.',
+        ],
     ],
     'email_change_confirmation' => [
         'subject' => 'Confirm your new email address',
@@ -83,6 +88,11 @@ return [
         'intro' => 'Two-factor authentication was disabled on your account.',
         'action' => 'Review your account',
         'outro' => 'If this was not you, contact support immediately.',
+        'by_actor' => [
+            'subject' => 'Two-factor authentication disabled by an administrator',
+            'intro' => 'An administrator disabled two-factor authentication on your account.',
+            'outro' => 'If you did not expect this, contact support immediately and turn two-factor authentication back on.',
+        ],
     ],
     'recovery_code_used' => [
         'subject' => 'A recovery code was used',
@@ -101,12 +111,22 @@ return [
         'intro' => 'A passkey was removed from your account.',
         'action' => 'Review your passkeys',
         'outro' => 'If this was not you, contact support immediately.',
+        'by_actor' => [
+            'subject' => 'An administrator removed a passkey from your account',
+            'intro' => 'An administrator removed a passkey from your account. It can no longer be used to sign in.',
+            'outro' => 'If you did not expect this, contact support immediately.',
+        ],
     ],
     'account_locked' => [
         'subject' => 'Your :app account was locked',
         'intro' => 'Your account was temporarily locked after too many failed sign-in attempts.',
         'action' => 'Reset your password',
         'outro' => 'If these attempts were not yours, consider changing your password.',
+        'by_actor' => [
+            'subject' => 'Your :app account was locked by an administrator',
+            'intro' => 'An administrator temporarily locked your account. You cannot sign in until the lock ends.',
+            'outro' => 'If you did not expect this, contact support.',
+        ],
     ],
     'refresh_token_reuse' => [
         'subject' => 'Suspicious activity on your :app account',

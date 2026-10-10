@@ -33,4 +33,16 @@ enum NotificationType: string
     case RefreshTokenReuse = 'refresh_token_reuse';
     case SignInBlocked = 'sign_in_blocked';
     case UnusualSignIn = 'unusual_sign_in';
+
+    /**
+     * A type someone other than the account can cause through host code (an admin, a
+     * support tool): with an actor it renders `notifications.<type>.by_actor.*`.
+     */
+    public function actorAware(): bool
+    {
+        return match ($this) {
+            self::PasswordChanged, self::TwoFactorDisabled, self::PasskeyRemoved, self::AccountLocked => true,
+            default => false,
+        };
+    }
 }
