@@ -131,6 +131,23 @@ it('renders the host exception a package exception is mapped to', function (): v
         ->and(json_decode((string) $response->getContent(), true))->toBe(['type' => 'invalid_credentials', 'title' => 'These credentials do not match our records.', 'status' => 422]);
 });
 
+it('runs host render() callbacks after map(), once nothing renders itself', function (): void {
+    $seen = null;
+    hostExceptions()->map(AuthException::class, fn (AuthException $e): Throwable => new LogicException($e->getMessage(), 0, $e));
+    hostExceptions()->render(function (LogicException $e) use (&$seen): JsonResponse {
+        $seen = $e;
+
+        return new JsonResponse(['host' => true], 418);
+    });
+
+    $response = app(ExceptionHandler::class)->render(Request::create('/'), $exception = new Exceptions\InvalidCredentials);
+
+    expect($seen)->toBeInstanceOf(LogicException::class)
+        ->and($seen?->getPrevious())->toBe($exception)
+        ->and($response->getStatusCode())->toBe(418)
+        ->and(json_decode((string) $response->getContent(), true))->toBe(['host' => true]);
+});
+
 it('reports the mapped exception, so it must stay unreported itself', function (): void {
     $reported = [];
     $record = function (ApiProblem $problem) use (&$reported): void {
