@@ -6,6 +6,8 @@ All notable changes to `auth-for-laravel` are documented in this file. The forma
 
 ## Unreleased
 
+## 1.2.1 - 2026-10-11
+
 ### Changed
 
 - Maintenance: requires the latest roundly packages — package-toolkit `^1.3.0`, enums `^1.1.0`, crypto `^1.1.2`, jwt `^1.1.3`, passkeys `^1.1.1`, qr `^1.1.1`, refresh-tokens `^1.1.1`, two-factor `^1.1.4`; dev: testing `^1.2.1`.
