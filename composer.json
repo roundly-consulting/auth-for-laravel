@@ -43,14 +43,14 @@
         "illuminate/support": "^12.0|^13.0",
         "illuminate/translation": "^12.0|^13.0",
         "illuminate/validation": "^12.0|^13.0",
-        "roundly-consulting/crypto-for-laravel": "^1.0",
-        "roundly-consulting/enums-for-laravel": "^1.0",
-        "roundly-consulting/jwt-for-laravel": "^1.0",
-        "roundly-consulting/package-toolkit-for-laravel": "^1.3",
-        "roundly-consulting/passkeys-for-laravel": "^1.0",
-        "roundly-consulting/qr-for-laravel": "^1.0",
-        "roundly-consulting/refresh-tokens-for-laravel": "^1.0",
-        "roundly-consulting/two-factor-for-laravel": "^1.0",
+        "roundly-consulting/crypto-for-laravel": "^1.1.2",
+        "roundly-consulting/enums-for-laravel": "^1.1.0",
+        "roundly-consulting/jwt-for-laravel": "^1.1.3",
+        "roundly-consulting/package-toolkit-for-laravel": "^1.3.0",
+        "roundly-consulting/passkeys-for-laravel": "^1.1.1",
+        "roundly-consulting/qr-for-laravel": "^1.1.1",
+        "roundly-consulting/refresh-tokens-for-laravel": "^1.1.1",
+        "roundly-consulting/two-factor-for-laravel": "^1.1.4",
         "symfony/polyfill-intl-normalizer": "^1.31"
     },
     "require-dev": {
@@ -62,7 +62,7 @@
         "pestphp/pest-plugin-arch": "^4.0",
         "pestphp/pest-plugin-laravel": "^4.0",
         "phpstan/extension-installer": "^1.4",
-        "roundly-consulting/testing-for-laravel": "^1.2"
+        "roundly-consulting/testing-for-laravel": "^1.2.1"
     },
     "suggest": {
         "roundly-consulting/permissions-for-laravel": "Bind ResolvesAccessTokenClaims to put effective permissions into the access token.",
