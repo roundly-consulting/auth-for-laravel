@@ -53,6 +53,15 @@ abstract class TestCase extends PackageTestCase
     }
 
     /**
+     * Migrate once per worker and schema signature; each test still starts on empty tables
+     * with the key counters where a fresh migrate leaves them.
+     */
+    protected function keepsMigratedSchema(): bool
+    {
+        return true;
+    }
+
+    /**
      * @return array<string, mixed>
      */
     protected function configBeforeBoot(): array
