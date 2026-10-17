@@ -1,6 +1,9 @@
 # larastan's extension.neon and the package toolkit's Blueprint-macro declarations
 # are both auto-loaded by phpstan/extension-installer — including either by hand
-# here would load it twice.
+# here would load it twice. The installer skips the root package, so this package's own
+# macro declaration is included here.
+includes:
+    - extension.neon
 parameters:
     level: 7
     paths:
@@ -11,6 +14,8 @@ parameters:
         - tests/Fixtures/Models/User.php
         # Analysed so the host-facing InteractsWithAuthentication trait has a concrete user.
         - tests/TestCase.php
+        # A host migration calling the schema macro: proves it is declared for Larastan.
+        - tests/PHPStan
     # This package ships its own config/ dir; env() is correct there.
     configDirectories:
         - config

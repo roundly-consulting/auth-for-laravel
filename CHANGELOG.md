@@ -6,6 +6,15 @@ All notable changes to `auth-for-laravel` are documented in this file. The forma
 
 ## Unreleased
 
+### Fixed
+
+- Larastan / PHPStan now knows the `$table->authenticationColumns(): void` schema macro that the
+  published users-table migration and every `authentication:guard` migration call. A macro only
+  exists once the provider boots, which static analysis cannot count on, so such a migration could
+  fail with "Call to an undefined method". The package ships a PHPStan extension that
+  `phpstan/extension-installer` loads automatically (`extra.phpstan.includes`); without the
+  installer, include `vendor/roundly-consulting/auth-for-laravel/extension.neon`.
+
 ## 1.2.1 - 2026-10-11
 
 ### Changed

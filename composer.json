@@ -98,6 +98,11 @@
             "providers": [
                 "RoundlyConsulting\\Auth\\AuthenticationServiceProvider"
             ]
+        },
+        "phpstan": {
+            "includes": [
+                "extension.neon"
+            ]
         }
     }
 }

@@ -1,0 +1,5 @@
+services:
+    -
+        class: RoundlyConsulting\Auth\PHPStan\AuthenticationMacrosExtension
+        tags:
+            - phpstan.broker.methodsClassReflectionExtension
