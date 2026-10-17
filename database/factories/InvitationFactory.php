@@ -7,6 +7,7 @@ namespace RoundlyConsulting\Auth\Database\Factories;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Factories\Factory;
 use RoundlyConsulting\Auth\Models\Invitation;
+use RoundlyConsulting\Auth\Support\Models;
 use RoundlyConsulting\Crypto\Random\Token;
 
 /**
@@ -15,6 +16,17 @@ use RoundlyConsulting\Crypto\Random\Token;
 final class InvitationFactory extends Factory
 {
     protected $model = Invitation::class;
+
+    /**
+     * Build the model the host configured in `authentication.models.invitation`, not the packaged
+     * one, so a host subclass comes out of the factory with its own events, observers and table.
+     *
+     * @return class-string<Invitation>
+     */
+    public function modelName(): string
+    {
+        return Models::invitation();
+    }
 
     /**
      * @return array<string, mixed>

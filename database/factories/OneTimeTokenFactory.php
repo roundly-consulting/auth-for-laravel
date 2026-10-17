@@ -9,6 +9,7 @@ use Illuminate\Database\Eloquent\Factories\Factory;
 use Illuminate\Database\Eloquent\Model;
 use RoundlyConsulting\Auth\Enums\OneTimeTokenPurpose;
 use RoundlyConsulting\Auth\Models\OneTimeToken;
+use RoundlyConsulting\Auth\Support\Models;
 use RoundlyConsulting\Crypto\Random\Token;
 
 /**
@@ -17,6 +18,18 @@ use RoundlyConsulting\Crypto\Random\Token;
 final class OneTimeTokenFactory extends Factory
 {
     protected $model = OneTimeToken::class;
+
+    /**
+     * Build the model the host configured in `authentication.models.one_time_token`, not the
+     * packaged one, so a host subclass comes out of the factory with its own events, observers and
+     * table.
+     *
+     * @return class-string<OneTimeToken>
+     */
+    public function modelName(): string
+    {
+        return Models::oneTimeToken();
+    }
 
     /**
      * @return array<string, mixed>

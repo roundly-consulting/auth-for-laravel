@@ -44,6 +44,8 @@ ArchPresets::modelsResolveThroughSeam(__DIR__.'/../../src', 'Support', [
     'authentication.models.login_activity',
 ]);
 
+ArchPresets::factoriesResolveThroughSeam(__DIR__.'/../../database/factories', __DIR__.'/../../src', 'Support');
+
 // 4 create migrations + the users-table stub.
 ArchPresets::morphColumnsUseTheSeam(__DIR__.'/../../database/migrations');
 

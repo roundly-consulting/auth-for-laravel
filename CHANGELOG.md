@@ -8,6 +8,7 @@ All notable changes to `auth-for-laravel` are documented in this file. The forma
 
 ### Fixed
 
+- Factories build the configured model when a host swaps it.
 - Larastan / PHPStan now knows the `$table->authenticationColumns(): void` schema macro that the
   published users-table migration and every `authentication:guard` migration call. A macro only
   exists once the provider boots, which static analysis cannot count on, so such a migration could

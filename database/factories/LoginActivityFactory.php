@@ -9,6 +9,7 @@ use Illuminate\Database\Eloquent\Model;
 use RoundlyConsulting\Auth\Enums\ActivityOutcome;
 use RoundlyConsulting\Auth\Enums\ActivityType;
 use RoundlyConsulting\Auth\Models\LoginActivity;
+use RoundlyConsulting\Auth\Support\Models;
 
 /**
  * @extends Factory<LoginActivity>
@@ -16,6 +17,18 @@ use RoundlyConsulting\Auth\Models\LoginActivity;
 final class LoginActivityFactory extends Factory
 {
     protected $model = LoginActivity::class;
+
+    /**
+     * Build the model the host configured in `authentication.models.login_activity`, not the
+     * packaged one, so a host subclass comes out of the factory with its own events, observers and
+     * table.
+     *
+     * @return class-string<LoginActivity>
+     */
+    public function modelName(): string
+    {
+        return Models::loginActivity();
+    }
 
     /**
      * @return array<string, mixed>

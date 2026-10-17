@@ -11,6 +11,7 @@ use RoundlyConsulting\Auth\Enums\ChallengeStep;
 use RoundlyConsulting\Auth\Enums\FactorMethod;
 use RoundlyConsulting\Auth\Enums\LoginMethod;
 use RoundlyConsulting\Auth\Models\LoginChallenge;
+use RoundlyConsulting\Auth\Support\Models;
 use RoundlyConsulting\Crypto\Random\Token;
 
 /**
@@ -19,6 +20,17 @@ use RoundlyConsulting\Crypto\Random\Token;
 final class LoginChallengeFactory extends Factory
 {
     protected $model = LoginChallenge::class;
+
+    /**
+     * Build the model the host configured in `authentication.models.challenge`, not the packaged
+     * one, so a host subclass comes out of the factory with its own events, observers and table.
+     *
+     * @return class-string<LoginChallenge>
+     */
+    public function modelName(): string
+    {
+        return Models::challenge();
+    }
 
     /**
      * @return array<string, mixed>
