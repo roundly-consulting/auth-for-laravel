@@ -6,6 +6,8 @@ All notable changes to `auth-for-laravel` are documented in this file. The forma
 
 ## Unreleased
 
+## 1.2.2 - 2026-10-17
+
 ### Fixed
 
 - Factories build the configured model when a host swaps it.
