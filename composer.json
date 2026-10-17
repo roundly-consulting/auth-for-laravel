@@ -62,7 +62,7 @@
         "pestphp/pest-plugin-arch": "^4.0",
         "pestphp/pest-plugin-laravel": "^4.0",
         "phpstan/extension-installer": "^1.4",
-        "roundly-consulting/testing-for-laravel": "^1.2.1"
+        "roundly-consulting/testing-for-laravel": "^1.5.0"
     },
     "suggest": {
         "roundly-consulting/permissions-for-laravel": "Bind ResolvesAccessTokenClaims to put effective permissions into the access token.",
