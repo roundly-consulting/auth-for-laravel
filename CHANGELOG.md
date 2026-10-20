@@ -6,6 +6,14 @@ All notable changes to `auth-for-laravel` are documented in this file. The forma
 
 ## Unreleased
 
+### Fixed
+
+- `AccountUserProvider::validateCredentials()` returns `false` for a password that isn't a string, instead of throwing a `password_verify()` `TypeError`.
+
+### Security
+
+- The account user provider only looks up accounts by non-empty string credentials and never returns a disabled account, so a host's Laravel `token` guard on this provider can't be bypassed with array or numeric input on MySQL (cf. GHSA-f9x3-7vq9-cph6, fixed in laravel/framework 12.68 / 13.29).
+
 ## 1.2.2 - 2026-10-17
 
 ### Fixed
