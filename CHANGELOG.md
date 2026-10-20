@@ -6,14 +6,16 @@ All notable changes to `auth-for-laravel` are documented in this file. The forma
 
 ## Unreleased
 
+## 1.2.3 - 2026-10-20
+
 ### Fixed
 
 - `AccountUserProvider::validateCredentials()` returns `false` for a password that isn't a string, instead of throwing a `password_verify()` `TypeError`.
-- `accounts()->findByKey()` returns `null` for a key that doesn't match `authentication.key_type` (bigint: canonical digits; uuid / ulid: that shape) and sends no query. Before, a malformed key such as `1abc`, ` 1` or `1.0` could match account 1 on MySQL or SQLite, and PostgreSQL threw a query exception. `authentication:logout-everywhere` uses the same check.
+- `accounts()->findByKey()` returns `null` for a key that doesn't match `authentication.key_type` (bigint: canonical digits; uuid / ulid: that shape) and sends no query. Before, a malformed key such as `1abc`, ` 1` or `1.0` could match account 1 on MySQL or SQLite, and PostgreSQL threw a query exception. `authentication:logout-everywhere` uses the same check, so it refuses a leading-zero or negative key (`007`, `-1`); before, `007` matched account 7.
 
 ### Security
 
-- The account user provider only looks up accounts by non-empty string credentials and never returns a disabled account, so a host's Laravel `token` guard on this provider can't be bypassed with array or numeric input on MySQL (cf. GHSA-f9x3-7vq9-cph6, fixed in laravel/framework 12.68 / 13.29).
+- The account user provider only looks up accounts by non-empty string credentials (array, numeric and query-closure credentials are refused: they match nobody and send no query) and never returns a disabled account, so a host's Laravel `token` guard on this provider can't be bypassed with array or numeric input on MySQL (cf. GHSA-f9x3-7vq9-cph6, fixed in laravel/framework 12.68 / 13.29).
 
 ## 1.2.2 - 2026-10-17
 
