@@ -9,6 +9,7 @@ All notable changes to `auth-for-laravel` are documented in this file. The forma
 ### Fixed
 
 - `AccountUserProvider::validateCredentials()` returns `false` for a password that isn't a string, instead of throwing a `password_verify()` `TypeError`.
+- `accounts()->findByKey()` returns `null` for a key that doesn't match `authentication.key_type` (bigint: canonical digits; uuid / ulid: that shape) and sends no query. Before, a malformed key such as `1abc`, ` 1` or `1.0` could match account 1 on MySQL or SQLite, and PostgreSQL threw a query exception. `authentication:logout-everywhere` uses the same check.
 
 ### Security
 

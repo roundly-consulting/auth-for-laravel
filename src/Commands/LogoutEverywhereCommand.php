@@ -5,11 +5,9 @@ declare(strict_types=1);
 namespace RoundlyConsulting\Auth\Commands;
 
 use Illuminate\Console\Command;
-use Illuminate\Support\Str;
 use RoundlyConsulting\Auth\AuthenticationManager;
 use RoundlyConsulting\Auth\Guards\AccountRepository;
 use RoundlyConsulting\Auth\Guards\GuardRegistry;
-use RoundlyConsulting\PackageToolkit\Enums\KeyType;
 
 /**
  * Incident response: ends every session of one account.
@@ -25,13 +23,8 @@ final class LogoutEverywhereCommand extends Command
         $guard = $guards->get($this->text('guard'));
         $id = $this->text('id');
 
-        $valid = match (KeyType::fromConfig('authentication.key_type')) {
-            KeyType::BigInt => ctype_digit($id),
-            KeyType::Uuid => Str::isUuid($id),
-            KeyType::Ulid => Str::isUlid($id),
-        };
-
-        $account = $valid ? (new AccountRepository($guard))->findByKey($id) : null;
+        // A key not shaped like authentication.key_type finds nothing.
+        $account = (new AccountRepository($guard))->findByKey($id);
 
         if ($account === null) {
             $this->components->error("No [{$guard->name()}] account with key [{$id}].");

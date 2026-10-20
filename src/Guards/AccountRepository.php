@@ -8,10 +8,12 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Database\Eloquent\SoftDeletingScope;
+use Illuminate\Support\Str;
 use Normalizer;
 use RoundlyConsulting\Auth\Contracts\Account;
 use RoundlyConsulting\Auth\Exceptions\AuthenticationMisconfigured;
 use RoundlyConsulting\Auth\Support\AccountModels;
+use RoundlyConsulting\PackageToolkit\Enums\KeyType;
 use RoundlyConsulting\PackageToolkit\Support\RawExpression;
 
 /**
@@ -88,8 +90,18 @@ final readonly class AccountRepository
         return $account instanceof Account ? $account : null;
     }
 
+    /**
+     * A key that doesn't have the shape of `authentication.key_type` finds nothing and sends
+     * no query: engines coerce malformed keys differently (MySQL reads `1abc` as 1, Postgres
+     * casts ` 1` and `0x1` to 1 and throws on `1abc`), so a malformed key could name another
+     * account or end in a 500.
+     */
     public function findByKey(int|string $key): ?Account
     {
+        if (! self::wellFormedKey($key)) {
+            return null;
+        }
+
         $account = $this->query()->whereKey($key)->first();
 
         return $account instanceof Account ? $account : null;
@@ -128,6 +140,19 @@ final readonly class AccountRepository
         $composed = Normalizer::normalize($value, Normalizer::FORM_C);
 
         return is_string($composed) ? $composed : $value;
+    }
+
+    /**
+     * bigint: a non-negative int or its canonical digits (no sign, padding or leading zero,
+     * within PHP_INT_MAX); uuid / ulid: a string of that shape.
+     */
+    private static function wellFormedKey(int|string $key): bool
+    {
+        return match (KeyType::fromConfig('authentication.key_type')) {
+            KeyType::BigInt => is_int($key) ? $key >= 0 : ctype_digit($key) && (string) (int) $key === $key,
+            KeyType::Uuid => Str::isUuid($key),
+            KeyType::Ulid => Str::isUlid($key),
+        };
     }
 
     /**
