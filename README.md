@@ -28,7 +28,7 @@ from the roundly security packages it builds on.
 
 ## Installation
 
-Requires PHP 8.4 (`ext-bcmath`, `ext-mbstring`, `ext-openssl`), Laravel 12 or 13, a cache store
+Requires PHP 8.4 (`ext-bcmath`, `ext-mbstring`, `ext-openssl`), Laravel 13, a cache store
 with atomic locks, and a mail transport.
 
 ```bash
