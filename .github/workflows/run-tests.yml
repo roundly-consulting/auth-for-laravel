@@ -10,12 +10,10 @@ jobs:
       fail-fast: true
       matrix:
         os: [ubuntu-latest]
-        php: [8.4]
-        laravel: [12.*, 13.*]
+        php: [8.4, 8.5, 8.6]
+        laravel: [13.*]
         stability: [prefer-stable]
         include:
-          - laravel: 12.*
-            testbench: 10.*
           - laravel: 13.*
             testbench: 11.*
 
@@ -34,7 +32,9 @@ jobs:
 
       - name: Install dependencies
         run: |
-          composer require --dev "laravel/framework:${{ matrix.laravel }}" "orchestra/testbench:${{ matrix.testbench }}" --no-interaction --no-update
+          # Laravel's 13.x releases before 13.32 predate PHP 8.6 (their session handlers miss
+          # create_sid()), so a PHP 8.6 job resolves the framework from 13.32.
+          composer require --dev "laravel/framework:${{ matrix.php == 8.6 && '^13.32' || matrix.laravel }}" "orchestra/testbench:${{ matrix.testbench }}" --no-interaction --no-update
           composer update --${{ matrix.stability }} --prefer-dist --no-interaction
 
       - name: List Installed Dependencies
