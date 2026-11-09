@@ -65,4 +65,5 @@ it('hashes a password for a taken address exactly like for a free one when regis
 })->with([
     'verification required for login' => [['verification.mode' => 'required_for_login']],
     'no login after registration' => [['registration.login_after' => false]],
+    'uniform response, tokens otherwise issued' => [['registration.uniform_response' => true]],
 ]);

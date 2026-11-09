@@ -41,12 +41,12 @@ use RoundlyConsulting\Auth\Support\Throttle;
 
 /**
  * Open registration. When the answer would not issue tokens anyway (verification
- * required for login, or `login_after = false`), an address already in use gets an
- * "account exists" notice and the caller the very same status a new account would —
- * registration cannot probe for accounts — including through its timing: the taken
- * address pays the same password hash a new account's creation does. When tokens WOULD
- * be issued immediately the difference is observable regardless, so a plain "email
- * taken" error is returned.
+ * required for login, `login_after = false`, or `registration.uniform_response`, which
+ * never signs in), an address already in use gets an "account exists" notice and the
+ * caller the very same status a new account would — registration cannot probe for
+ * accounts — including through its timing: the taken address pays the same password hash
+ * a new account's creation does. When tokens WOULD be issued immediately the difference
+ * is observable regardless, so a plain "email taken" error is returned.
  */
 final readonly class RegisterAccount
 {
@@ -150,7 +150,9 @@ final readonly class RegisterAccount
 
     private function enumerationSafe(GuardConfig $guard): bool
     {
-        return $guard->verificationMode() === EmailVerificationMode::RequiredForLogin || ! $guard->loginAfterRegistration();
+        return $guard->registrationAnswersUniformly()
+            || $guard->verificationMode() === EmailVerificationMode::RequiredForLogin
+            || ! $guard->loginAfterRegistration();
     }
 
     private function safeStatus(GuardConfig $guard): RegistrationStatus

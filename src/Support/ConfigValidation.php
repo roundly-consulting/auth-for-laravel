@@ -303,6 +303,7 @@ final class ConfigValidation
         $guard->includesEmailClaim();
         $guard->registrationRequiresPassword();
         $guard->loginAfterRegistration();
+        $guard->registrationAnswersUniformly();
         $guard->invitationsEnabled();
         $guard->invitationLocksEmail();
         $guard->invitationReplacesPending();

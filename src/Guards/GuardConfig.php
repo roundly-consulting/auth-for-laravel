@@ -321,6 +321,15 @@ final readonly class GuardConfig
         return $this->flag($this->settings['registration']['login_after'] ?? null, 'registration.login_after', true);
     }
 
+    /**
+     * `registration.uniform_response`: answer a taken address exactly like a free one in
+     * every verification mode — which means registration never signs in.
+     */
+    public function registrationAnswersUniformly(): bool
+    {
+        return $this->flag($this->settings['registration']['uniform_response'] ?? null, 'registration.uniform_response', false);
+    }
+
     public function registrationRules(): ?string
     {
         return $this->optionalString($this->settings['registration']['rules'] ?? null, 'registration.rules');

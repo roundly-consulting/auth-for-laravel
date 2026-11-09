@@ -136,6 +136,10 @@ return [
             'mode' => env('AUTHENTICATION_REGISTRATION', 'closed'),  // open|invite_only|closed
             'require_password' => true,          // when login.password is on
             'login_after' => true,
+            // true → a taken address gets the very answer a free one does in EVERY verification
+            // mode (its holder is mailed an "account exists" notice); registration then never
+            // signs in, whatever login_after says. Planned default for the next major: true.
+            'uniform_response' => false,
             'rules' => null,                     // class-string<ProvidesRegistrationRules>|null
             'creator' => CreateAccount::class,   // class-string<CreatesAccounts>
         ],

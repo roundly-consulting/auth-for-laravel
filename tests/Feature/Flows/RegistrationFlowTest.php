@@ -18,6 +18,7 @@ use RoundlyConsulting\Auth\Support\RegistrationValidator;
 use RoundlyConsulting\Auth\Tests\Fixtures\Models\User;
 use RoundlyConsulting\Auth\Tests\Fixtures\Support\NestedProfileRules;
 use RoundlyConsulting\Auth\Tests\Fixtures\Support\ProfileRules;
+use RoundlyConsulting\RefreshTokens\Facades\RefreshTokens;
 
 beforeEach(function (): void {
     Notification::fake();
@@ -92,6 +93,34 @@ it('answers identically for a new and an existing address in the enumeration-saf
     'required for login' => ['required_for_login', true, 'verification_required'],
     'no login after' => ['optional', false, 'accepted'],
 ]);
+
+it('answers identically for a new and a taken address in every verification mode with uniform_response', function (string $mode, bool $loginAfter, string $status): void {
+    $this->configureGuard('users', ['registration.uniform_response' => true, 'verification.mode' => $mode, 'registration.login_after' => $loginAfter]);
+    User::factory()->create(['email' => 'taken@example.com']);
+
+    $new = $this->postJson('/users/auth/register', registration(['email' => 'fresh@example.com']), ['User-Agent' => 'PestBrowser/1.0'])->assertStatus(202)->json();
+    $taken = $this->postJson('/users/auth/register', registration(['email' => 'taken@example.com']), ['User-Agent' => 'PestBrowser/1.0'])->assertStatus(202)->json();
+
+    // Never signed in — an immediate pair is exactly what would tell the two apart.
+    expect($new)->toBe($taken)
+        ->and($new)->toBe(['status' => $status])
+        ->and(RefreshTokens::sessions(User::query()->where('email', 'fresh@example.com')->sole())->all())->toBeEmpty();
+    Notification::assertSentOnDemand(AccountExistsNotification::class, fn ($n, $c, $notifiable): bool => $notifiable->routes['mail'] === 'taken@example.com');
+})->with([
+    'off, login after' => ['off', true, 'accepted'],
+    'optional, login after' => ['optional', true, 'accepted'],
+    'required for actions, login after' => ['required_for_actions', true, 'accepted'],
+    'required for login, login after' => ['required_for_login', true, 'verification_required'],
+    'optional, no login after' => ['optional', false, 'accepted'],
+    'required for login, no login after' => ['required_for_login', false, 'verification_required'],
+]);
+
+it('keeps answering "email taken" without uniform_response when tokens would be issued', function (): void {
+    $this->configureGuard('users', ['registration.uniform_response' => false]);
+    User::factory()->create(['email' => 'taken@example.com']);
+
+    $this->postJson('/users/auth/register', registration(['email' => 'taken@example.com']))->assertStatus(422)->assertJsonValidationErrors('email');
+});
 
 it('mails the account-exists notice in the holder\'s locale, falling back to the request\'s', function (?string $holderLocale, string $expected): void {
     $this->configureGuard('users', ['registration.login_after' => false]);

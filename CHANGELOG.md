@@ -9,11 +9,13 @@ All notable changes to `auth-for-laravel` are documented in this file. The forma
 ### Added
 
 - `verification.secure_on_email_login` (per guard, default `false`): the magic-link or email-code login that verifies an unverified address removes everything set on the account before the address was proven — the password, the two-factor enrolment (confirmed or pending), the passkeys — and ends every session, refresh token, pending challenge and credential one-time secret. Whoever registered an address before its owner did (account pre-hijacking) keeps no way in. Fires the new `AccountClaimed` event. Race-safe: the verification is claimed with a conditional update in the same transaction, and a password login racing it gets a pair that is refused. A `NOT NULL` password column gets an empty string, which never matches.
+- `registration.uniform_response` (per guard, default `false`): registration answers a taken address exactly like a free one in every verification mode (the holder gets the "account exists" notice, the request pays the same password hash) and never signs in.
+- `GuardPreset::hardened()`: a guard block with the safe values — `registration.uniform_response`, `verification.mode = required_for_login`, `verification.secure_on_email_login`, `lockout.enabled` — with the guard's own settings merged on top.
 - `authentication:check` warns when `secure_on_email_login` is on but `verify_on_email_login` is off (it would never apply).
 
 ### Planned for the next major
 
-- `verification.secure_on_email_login` defaults to `true`. To keep today's behaviour, set it to `false` explicitly.
+- `registration.uniform_response` defaults to `true` (registration no longer signs in), `verification.mode` to `required_for_login`, `verification.secure_on_email_login` to `true` and `lockout.enabled` to `true` — the values of `GuardPreset::hardened()`. To keep today's behaviour, set them explicitly; the security docs list the upgrade notes.
 
 ## 2.0.0 - 2026-11-07
 
