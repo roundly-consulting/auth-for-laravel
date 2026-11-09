@@ -39,6 +39,7 @@ dataset('boolean guard settings', [
     'invitationReplacesPending' => ['invitationReplacesPending', ['invitations', 'replace_pending']],
     'invitationAllowsExistingEmail' => ['invitationAllowsExistingEmail', ['invitations', 'allow_existing_email']],
     'verifiesEmailOnEmailLogin' => ['verifiesEmailOnEmailLogin', ['verification', 'verify_on_email_login']],
+    'securesAccountOnEmailLogin' => ['securesAccountOnEmailLogin', ['verification', 'secure_on_email_login']],
     'emailChangeEnabled' => ['emailChangeEnabled', ['email_change', 'enabled']],
     'emailChangeNotifiesOldAddress' => ['emailChangeNotifiesOldAddress', ['email_change', 'notify_old']],
     'emailChangeRequiresReauthentication' => ['emailChangeRequiresReauthentication', ['email_change', 'require_reauthentication']],
@@ -126,8 +127,8 @@ it('names every switch by the very offset chain it reads (strict config)', funct
 
     preg_match_all('/\$this->(?:flag|choice)\(\$this->settings((?:\[\x27[a-z_]+\x27\])+) \?\? null, \x27([a-z_.]+)\x27/', $source, $reads, PREG_SET_ORDER);
 
-    // Pinned: every switch leaf (51 on/off + 2 two-way), so an empty parse cannot pass.
-    expect($reads)->toHaveCount(53);
+    // Pinned: every switch leaf (52 on/off + 2 two-way), so an empty parse cannot pass.
+    expect($reads)->toHaveCount(54);
 
     foreach ($reads as [, $chain, $key]) {
         expect(str_replace(["']['", "['", "']"], ['.', '', ''], $chain))->toBe($key);

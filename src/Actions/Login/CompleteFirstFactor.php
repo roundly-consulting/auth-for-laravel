@@ -44,7 +44,8 @@ use RoundlyConsulting\Auth\Support\Throttle;
 /**
  * The hub every primary method ends in, in this exact order:
  *
- *  1. possession side effects (an email login verifies the address);
+ *  1. possession side effects (an email login verifies the address — and, with
+ *     `verification.secure_on_email_login`, discards what was set before it was proven);
  *  2. account state — disabled / locked / unverified (only now, after a verified factor);
  *  3. password rehash;
  *  4. locale fill;
@@ -70,6 +71,7 @@ final readonly class CompleteFirstFactor
         private NotificationDispatcher $notifications,
         private Throttle $throttle,
         private Lockout $lockout,
+        private SecureClaimedAccount $secureClaimed,
     ) {}
 
     /**
@@ -89,7 +91,11 @@ final readonly class CompleteFirstFactor
         // 1. Possession side effects.
         if (in_array($method, [LoginMethod::MagicLink, LoginMethod::EmailOtp], true)
             && $guard->verifiesEmailOnEmailLogin() && ! $account->hasVerifiedEmail()) {
-            $account->markEmailAsVerified();
+            if ($guard->securesAccountOnEmailLogin()) {
+                $this->secureClaimed->execute($guard, $account, $method, $context);
+            } else {
+                $account->markEmailAsVerified();
+            }
         }
 
         // 2. Account state.

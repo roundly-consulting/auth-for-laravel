@@ -101,5 +101,5 @@ it('uses SerializesModels on every event that carries a model', function (): voi
     }
 
     // Pinned, so the sweep cannot pass over an empty set.
-    expect($carriers)->toHaveCount(39);
+    expect($carriers)->toHaveCount(40);
 });

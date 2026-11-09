@@ -124,6 +124,10 @@ final class ConfigValidation
                 $warnings[] = "{$prefix}.registration.mode is closed, so invitations cannot be accepted; use invite_only for invitation-only sign-up.";
             }
 
+            if ($guard->securesAccountOnEmailLogin() && ! $guard->verifiesEmailOnEmailLogin()) {
+                $warnings[] = "{$prefix}.verification.secure_on_email_login never applies because verification.verify_on_email_login is off (an email login leaves the address unverified).";
+            }
+
             if ($guard->notificationDelivery()->value === 'sync') {
                 $warnings[] = "{$prefix}.notifications.delivery = sync makes known-account responses measurably slower (timing enumeration); prefer after_response or queue.";
             }
@@ -304,6 +308,7 @@ final class ConfigValidation
         $guard->invitationReplacesPending();
         $guard->invitationAllowsExistingEmail();
         $guard->verifiesEmailOnEmailLogin();
+        $guard->securesAccountOnEmailLogin();
         $guard->emailChangeEnabled();
         $guard->emailChangeNotifiesOldAddress();
         $guard->emailChangeRequiresReauthentication();

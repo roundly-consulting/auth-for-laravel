@@ -160,6 +160,11 @@ return [
             'max_attempts' => 5,
             'resend_decay' => 60,
             'verify_on_email_login' => true,
+            // true → a magic link / email code login that verifies an unverified address removes
+            // what was set before the address was proven (password, 2FA, passkeys) and ends every
+            // session: whoever registered the address first keeps no way in. Fires AccountClaimed.
+            // Planned default for the next major: true.
+            'secure_on_email_login' => false,
         ],
 
         'email_change' => [

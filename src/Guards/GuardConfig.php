@@ -401,6 +401,15 @@ final readonly class GuardConfig
         return $this->flag($this->settings['verification']['verify_on_email_login'] ?? null, 'verification.verify_on_email_login', true);
     }
 
+    /**
+     * `verification.secure_on_email_login`: an email login that verifies an unverified
+     * address discards everything set before the address was proven (see SecureClaimedAccount).
+     */
+    public function securesAccountOnEmailLogin(): bool
+    {
+        return $this->flag($this->settings['verification']['secure_on_email_login'] ?? null, 'verification.secure_on_email_login', false);
+    }
+
     public function emailChangeEnabled(): bool
     {
         return $this->flag($this->settings['email_change']['enabled'] ?? null, 'email_change.enabled', true);

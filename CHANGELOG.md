@@ -6,6 +6,15 @@ All notable changes to `auth-for-laravel` are documented in this file. The forma
 
 ## Unreleased
 
+### Added
+
+- `verification.secure_on_email_login` (per guard, default `false`): the magic-link or email-code login that verifies an unverified address removes everything set on the account before the address was proven — the password, the two-factor enrolment (confirmed or pending), the passkeys — and ends every session, refresh token, pending challenge and credential one-time secret. Whoever registered an address before its owner did (account pre-hijacking) keeps no way in. Fires the new `AccountClaimed` event. Race-safe: the verification is claimed with a conditional update in the same transaction, and a password login racing it gets a pair that is refused. A `NOT NULL` password column gets an empty string, which never matches.
+- `authentication:check` warns when `secure_on_email_login` is on but `verify_on_email_login` is off (it would never apply).
+
+### Planned for the next major
+
+- `verification.secure_on_email_login` defaults to `true`. To keep today's behaviour, set it to `false` explicitly.
+
 ## 2.0.0 - 2026-11-07
 
 ### Changed
