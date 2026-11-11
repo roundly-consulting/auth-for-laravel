@@ -6,6 +6,7 @@ namespace RoundlyConsulting\Auth\Http\Resources;
 
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
+use RoundlyConsulting\Auth\Enums\InvitationStatus;
 use RoundlyConsulting\Auth\Models\Invitation;
 
 /**
@@ -16,7 +17,7 @@ use RoundlyConsulting\Auth\Models\Invitation;
 class InvitationResource extends JsonResource
 {
     /**
-     * @return array<string, mixed>
+     * @return array{id: mixed, email: string, status: value-of<InvitationStatus>, payload: array<string, mixed>, locale: string|null, send_count: int, last_sent_at: string|null, expires_at: string, accepted_at: string|null, revoked_at: string|null, created_at: string|null}
      */
     public function toArray(Request $request): array
     {

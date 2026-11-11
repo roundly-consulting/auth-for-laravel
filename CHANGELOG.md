@@ -4,6 +4,21 @@ All notable changes to `auth-for-laravel` are documented in this file. The forma
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
 [Semantic Versioning](https://semver.org/).
 
+## Unreleased
+
+### Added
+
+- OpenAPI-ready responses: generators that read code (e.g. dedoc/scramble, then openapi-typescript) now document every package route's response — the token pair or the challenge on each login step, every resource field with its type and enum values, the 202 acknowledgements, the credential-change bodies with their optional re-issued pair, list items and pagination. The JSON and status codes are unchanged.
+- `LoginResponse::resource(LoginResult $result)`: the `TokenPairResource|ChallengeResource` a login result renders as, for host controllers that want the same typed response.
+- `PendingChallenge::completedSteps()` / `remainingSteps()`: the challenge steps in their wire form.
+- `RecoveryCodesResource`, `PasskeyRequestOptionsResource` and `PasskeyCreationOptionsResource`: the existing recovery-code and passkey-option bodies under narrower types.
+- `RoundlyConsulting\Auth\OpenApi\AuthErrorResponses`: an optional Scramble extension that documents the error body (`message`, `code`, `errors`, …) on every package route. Scramble is suggested, never required.
+
+### Changed
+
+- Package controllers declare the resource they return instead of `JsonResponse`, and `ListLoginActivity` / `ListInvitations` declare the concrete `LengthAwarePaginator` they already returned.
+- Documentation: an "OpenAPI" section in the HTTP API reference.
+
 ## 2.1.0 - 2026-11-09
 
 ### Added

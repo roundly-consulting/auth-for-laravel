@@ -52,6 +52,12 @@ it('keeps qr-for-laravel behind one adapter (a qr API change touches one file)',
     expect(array_map('basename', $importers))->toBe(['QrCodeRenderer.php']);
 });
 
+it('keeps the OpenAPI generator in its optional extension (a dev dependency, never loaded at runtime)', function (): void {
+    $importers = array_values(array_filter(sourceFiles(), static fn (string $file): bool => str_contains(code($file), 'Dedoc\\')));
+
+    expect(array_map('basename', $importers))->toBe(['AuthErrorResponses.php']);
+});
+
 it('never builds an otpauth URI itself (two-factor owns the one URI builder)', function (): void {
     foreach (sourceFiles() as $file) {
         expect(code($file))->not->toContain('ProvisioningUri');

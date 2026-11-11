@@ -16,6 +16,6 @@ final class ListPasskeysController
     {
         $guard = RequestGuard::config($request);
 
-        return PasskeyResource::collection($passkeys->execute($guard->name(), RequestGuard::requireAccount($request, $guard)));
+        return new AnonymousResourceCollection($passkeys->execute($guard->name(), RequestGuard::requireAccount($request, $guard)), PasskeyResource::class);
     }
 }

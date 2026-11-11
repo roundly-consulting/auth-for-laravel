@@ -7,7 +7,6 @@ namespace RoundlyConsulting\Auth\Http\Controllers\Login;
 use Illuminate\Http\JsonResponse;
 use RoundlyConsulting\Auth\Actions\Login\RequestMagicLink;
 use RoundlyConsulting\Auth\Http\Requests\EmailRequest;
-use RoundlyConsulting\Auth\Http\Responses\LoginResponse;
 
 final class RequestMagicLinkController
 {
@@ -16,6 +15,6 @@ final class RequestMagicLinkController
         $data = $request->toData();
         $magicLink->execute($request->guardConfig()->name(), $data->email, $data->context);
 
-        return LoginResponse::status('sent');
+        return new JsonResponse(['status' => 'sent'], 202);
     }
 }

@@ -11,6 +11,12 @@ use RoundlyConsulting\Auth\Http\Resources\AccountResource;
 
 final class MeController
 {
+    /**
+     * The guard's `resources.account` decides the body at runtime; OpenAPI generators that
+     * read `@response` (Scramble) document the default {@see AccountResource} shape.
+     *
+     * @response AccountResource
+     */
     public function __invoke(Request $request): JsonResource
     {
         $guard = RequestGuard::config($request);

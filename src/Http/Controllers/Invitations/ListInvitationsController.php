@@ -18,10 +18,10 @@ final class ListInvitationsController
         $status = $request->query('status');
         $perPage = $request->query('per_page');
 
-        return InvitationResource::collection($invitations->execute(
+        return new AnonymousResourceCollection($invitations->execute(
             RequestGuard::name($request),
             is_string($status) ? InvitationStatus::tryFrom($status) : null,
             is_string($perPage) && ctype_digit($perPage) ? (int) $perPage : 20,
-        ));
+        ), InvitationResource::class);
     }
 }

@@ -9,7 +9,7 @@ use RoundlyConsulting\Auth\Actions\TwoFactor\ConfirmTwoFactorEnrolment;
 use RoundlyConsulting\Auth\DataTransferObjects\CurrentToken;
 use RoundlyConsulting\Auth\Http\RequestGuard;
 use RoundlyConsulting\Auth\Http\Requests\CodeRequest;
-use RoundlyConsulting\Auth\Http\Responses\LoginResponse;
+use RoundlyConsulting\Auth\Http\Resources\TokenPairResource;
 
 final class ConfirmController
 {
@@ -20,6 +20,6 @@ final class ConfirmController
 
         $tokens = $confirm->execute($guard->name(), RequestGuard::requireAccount($request, $guard), $data->code, CurrentToken::fromRequest($request, $guard), $data->context);
 
-        return LoginResponse::withTokens(['status' => 'enabled'], $tokens, $request);
+        return new JsonResponse(['status' => 'enabled', 'tokens' => $tokens === null ? null : new TokenPairResource($tokens)]);
     }
 }

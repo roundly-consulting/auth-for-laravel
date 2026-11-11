@@ -17,6 +17,7 @@ use RoundlyConsulting\Auth\Guards\ConfigMerger;
 use RoundlyConsulting\Auth\Guards\GuardConfig;
 use RoundlyConsulting\Auth\Notifications\AuthenticationNotification;
 use RoundlyConsulting\Auth\Tests\Fixtures\Models\User;
+use RoundlyConsulting\Auth\Tests\OpenApiTestCase;
 use RoundlyConsulting\Auth\Tests\PublishSandboxTestCase;
 use RoundlyConsulting\Auth\Tests\SwappedModelsTestCase;
 use RoundlyConsulting\Auth\Tests\TestCase;
@@ -41,6 +42,9 @@ uses(SwappedModelsTestCase::class)->in('Swaps');
 // Publishing writes files: into a throwaway config/ and database/ set before boot, never the
 // testbench skeleton every parallel process loads its configuration from.
 uses(PublishSandboxTestCase::class)->in('Publish');
+
+// The OpenAPI export runs with a generator registered, as a host that documents its API.
+uses(OpenApiTestCase::class)->in('OpenApi');
 
 /**
  * @param  array<string, mixed>  $overrides

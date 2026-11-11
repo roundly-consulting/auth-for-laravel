@@ -8,7 +8,7 @@ use Illuminate\Http\JsonResponse;
 use RoundlyConsulting\Auth\Actions\Passwords\ChangePassword;
 use RoundlyConsulting\Auth\Http\RequestGuard;
 use RoundlyConsulting\Auth\Http\Requests\ChangePasswordRequest;
-use RoundlyConsulting\Auth\Http\Responses\LoginResponse;
+use RoundlyConsulting\Auth\Http\Resources\TokenPairResource;
 
 final class ChangePasswordController
 {
@@ -17,6 +17,6 @@ final class ChangePasswordController
         $guard = $request->guardConfig();
         $tokens = $change->execute($guard->name(), RequestGuard::requireAccount($request, $guard), $request->toData());
 
-        return LoginResponse::withTokens(['status' => 'changed'], $tokens, $request);
+        return new JsonResponse(['status' => 'changed', 'tokens' => $tokens === null ? null : new TokenPairResource($tokens)]);
     }
 }

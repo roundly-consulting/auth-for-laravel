@@ -7,7 +7,6 @@ namespace RoundlyConsulting\Auth\Http\Controllers\Email;
 use Illuminate\Http\JsonResponse;
 use RoundlyConsulting\Auth\Actions\Email\VerifyEmail;
 use RoundlyConsulting\Auth\Http\Requests\VerifyEmailRequest;
-use RoundlyConsulting\Auth\Http\Responses\LoginResponse;
 
 final class VerifyEmailController
 {
@@ -16,6 +15,6 @@ final class VerifyEmailController
         $data = $request->toData();
         $verify->execute($request->guardConfig()->name(), $data->token, $data->email, $data->context);
 
-        return LoginResponse::status('verified', 200);
+        return new JsonResponse(['status' => 'verified']);
     }
 }

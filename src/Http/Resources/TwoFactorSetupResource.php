@@ -12,6 +12,11 @@ use RoundlyConsulting\Auth\DataTransferObjects\TwoFactorSetupData;
  * A TOTP enrolment, shown once. Not final: a documented extension point.
  *
  * @property TwoFactorSetupData $resource
+ * @property-read string $secret
+ * @property-read string $provisioningUri
+ * @property-read string|null $qrSvg
+ * @property-read list<string> $recoveryCodes
+ * @property-read string $issuer
  */
 class TwoFactorSetupResource extends JsonResource
 {
@@ -19,18 +24,17 @@ class TwoFactorSetupResource extends JsonResource
     public static $wrap = null;
 
     /**
-     * @return array<string, mixed>
+     * @return array{secret: string, provisioning_uri: string, qr_svg: string|null, recovery_codes: list<string>, issuer: string}
      */
     public function toArray(Request $request): array
     {
-        $setup = $this->resource;
-
+        // Read through the resource so OpenAPI generators type the fields from @property-read.
         return [
-            'secret' => $setup->secret,
-            'provisioning_uri' => $setup->provisioningUri,
-            'qr_svg' => $setup->qrSvg,
-            'recovery_codes' => $setup->recoveryCodes,
-            'issuer' => $setup->issuer,
+            'secret' => $this->secret,
+            'provisioning_uri' => $this->provisioningUri,
+            'qr_svg' => $this->qrSvg,
+            'recovery_codes' => $this->recoveryCodes,
+            'issuer' => $this->issuer,
         ];
     }
 }

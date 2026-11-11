@@ -54,6 +54,7 @@
         "symfony/polyfill-intl-normalizer": "^1.31"
     },
     "require-dev": {
+        "dedoc/scramble": "^0.13.53",
         "larastan/larastan": "^3.0",
         "laravel/pint": "^1.18",
         "nunomaduro/collision": "^8.5",
@@ -66,7 +67,8 @@
     },
     "suggest": {
         "roundly-consulting/permissions-for-laravel": "Bind ResolvesAccessTokenClaims to put effective permissions into the access token.",
-        "roundly-consulting/geolocation-for-laravel": "Listen to LoginActivityRecorded / TokensIssued to enrich activity rows and sessions with location."
+        "roundly-consulting/geolocation-for-laravel": "Listen to LoginActivityRecorded / TokensIssued to enrich activity rows and sessions with location.",
+        "dedoc/scramble": "Generate OpenAPI docs for the package routes; register RoundlyConsulting\\Auth\\OpenApi\\AuthErrorResponses to document the error body."
     },
     "autoload": {
         "psr-4": {

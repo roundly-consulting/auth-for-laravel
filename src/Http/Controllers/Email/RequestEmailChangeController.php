@@ -10,7 +10,6 @@ use RoundlyConsulting\Auth\DataTransferObjects\CurrentToken;
 use RoundlyConsulting\Auth\Enums\SensitiveAction;
 use RoundlyConsulting\Auth\Http\RequestGuard;
 use RoundlyConsulting\Auth\Http\Requests\RequestEmailChangeRequest;
-use RoundlyConsulting\Auth\Http\Responses\LoginResponse;
 use RoundlyConsulting\Auth\Support\SensitiveActionGate;
 
 final class RequestEmailChangeController
@@ -26,6 +25,6 @@ final class RequestEmailChangeController
 
         $change->execute($guard->name(), $account, $request->toData());
 
-        return LoginResponse::status('sent');
+        return new JsonResponse(['status' => 'sent'], 202);
     }
 }

@@ -12,7 +12,7 @@ use RoundlyConsulting\Auth\DataTransferObjects\SessionContext;
 use RoundlyConsulting\Auth\Enums\SensitiveAction;
 use RoundlyConsulting\Auth\Exceptions\PasskeyNotFound;
 use RoundlyConsulting\Auth\Http\RequestGuard;
-use RoundlyConsulting\Auth\Http\Responses\LoginResponse;
+use RoundlyConsulting\Auth\Http\Resources\TokenPairResource;
 use RoundlyConsulting\Auth\Support\SensitiveActionGate;
 
 final class RemovePasskeyController
@@ -31,6 +31,6 @@ final class RemovePasskeyController
 
         $tokens = $remove->execute($guard->name(), $account, (int) $passkey, $current, SessionContext::fromRequest($request, $guard));
 
-        return LoginResponse::withTokens(['status' => 'removed'], $tokens, $request);
+        return new JsonResponse(['status' => 'removed', 'tokens' => $tokens === null ? null : new TokenPairResource($tokens)]);
     }
 }

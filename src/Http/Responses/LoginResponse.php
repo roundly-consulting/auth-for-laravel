@@ -18,11 +18,19 @@ final class LoginResponse
 {
     public static function make(LoginResult $result, Request $request): JsonResponse
     {
-        if ($result->tokens !== null) {
-            return self::tokens($result->tokens, $request);
-        }
+        return self::resource($result)->toResponse($request)->setStatusCode(200);
+    }
 
-        return (new ChallengeResource($result->challenge))->toResponse($request)->setStatusCode(200);
+    /**
+     * The resource a {@see LoginResult} renders as: the token pair or the challenge. A
+     * controller that returns it typed `TokenPairResource|ChallengeResource` gets the same
+     * 200 body as {@see self::make()}, and OpenAPI generators can document both shapes.
+     */
+    public static function resource(LoginResult $result): TokenPairResource|ChallengeResource
+    {
+        return $result->tokens !== null
+            ? new TokenPairResource($result->tokens)
+            : new ChallengeResource($result->challenge);
     }
 
     public static function tokens(TokenPair $tokens, Request $request): JsonResponse

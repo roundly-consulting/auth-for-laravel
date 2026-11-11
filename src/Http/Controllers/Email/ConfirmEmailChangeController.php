@@ -7,7 +7,6 @@ namespace RoundlyConsulting\Auth\Http\Controllers\Email;
 use Illuminate\Http\JsonResponse;
 use RoundlyConsulting\Auth\Actions\Email\ConfirmEmailChange;
 use RoundlyConsulting\Auth\Http\Requests\TokenRequest;
-use RoundlyConsulting\Auth\Http\Responses\LoginResponse;
 
 final class ConfirmEmailChangeController
 {
@@ -16,6 +15,6 @@ final class ConfirmEmailChangeController
         $data = $request->toData();
         $confirm->execute($request->guardConfig()->name(), $data->token, $data->context);
 
-        return LoginResponse::status('changed', 200);
+        return new JsonResponse(['status' => 'changed']);
     }
 }

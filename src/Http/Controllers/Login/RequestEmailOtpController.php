@@ -7,7 +7,6 @@ namespace RoundlyConsulting\Auth\Http\Controllers\Login;
 use Illuminate\Http\JsonResponse;
 use RoundlyConsulting\Auth\Actions\Login\RequestEmailOtp;
 use RoundlyConsulting\Auth\Http\Requests\EmailRequest;
-use RoundlyConsulting\Auth\Http\Responses\LoginResponse;
 
 final class RequestEmailOtpController
 {
@@ -16,6 +15,6 @@ final class RequestEmailOtpController
         $data = $request->toData();
         $otp->execute($request->guardConfig()->name(), $data->email, $data->context);
 
-        return LoginResponse::status('sent');
+        return new JsonResponse(['status' => 'sent'], 202);
     }
 }

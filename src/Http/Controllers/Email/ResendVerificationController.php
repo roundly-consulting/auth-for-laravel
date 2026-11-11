@@ -7,7 +7,6 @@ namespace RoundlyConsulting\Auth\Http\Controllers\Email;
 use Illuminate\Http\JsonResponse;
 use RoundlyConsulting\Auth\Actions\Email\ResendEmailVerification;
 use RoundlyConsulting\Auth\Http\Requests\EmailRequest;
-use RoundlyConsulting\Auth\Http\Responses\LoginResponse;
 
 final class ResendVerificationController
 {
@@ -16,6 +15,6 @@ final class ResendVerificationController
         $data = $request->toData();
         $resend->execute($request->guardConfig()->name(), $data->email, $data->context);
 
-        return LoginResponse::status('sent');
+        return new JsonResponse(['status' => 'sent'], 202);
     }
 }

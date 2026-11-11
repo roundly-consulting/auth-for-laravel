@@ -6,6 +6,8 @@ namespace RoundlyConsulting\Auth\Http\Resources;
 
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
+use RoundlyConsulting\Auth\Enums\ActivityOutcome;
+use RoundlyConsulting\Auth\Enums\ActivityType;
 use RoundlyConsulting\Auth\Models\LoginActivity;
 
 /**
@@ -17,7 +19,7 @@ use RoundlyConsulting\Auth\Models\LoginActivity;
 class LoginActivityResource extends JsonResource
 {
     /**
-     * @return array<string, mixed>
+     * @return array{type: value-of<ActivityType>, outcome: value-of<ActivityOutcome>, method: string|null, ip_address: string|null, user_agent: string|null, country_code: string|null, city: string|null, new_device: bool, session_id: string|null, created_at: string|null}
      */
     public function toArray(Request $request): array
     {

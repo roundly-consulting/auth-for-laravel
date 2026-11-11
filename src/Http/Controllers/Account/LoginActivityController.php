@@ -17,10 +17,10 @@ final class LoginActivityController
         $guard = RequestGuard::config($request);
         $perPage = $request->query('per_page');
 
-        return LoginActivityResource::collection($activity->execute(
+        return new AnonymousResourceCollection($activity->execute(
             $guard->name(),
             RequestGuard::requireAccount($request, $guard),
             is_string($perPage) && ctype_digit($perPage) ? (int) $perPage : 20,
-        ));
+        ), LoginActivityResource::class);
     }
 }

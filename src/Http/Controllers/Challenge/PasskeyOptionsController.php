@@ -6,14 +6,14 @@ namespace RoundlyConsulting\Auth\Http\Controllers\Challenge;
 
 use RoundlyConsulting\Auth\Actions\Challenges\BeginPasskeyStep;
 use RoundlyConsulting\Auth\Http\Requests\ChallengeTokenRequest;
-use RoundlyConsulting\Auth\Http\Resources\PasskeyOptionsResource;
+use RoundlyConsulting\Auth\Http\Resources\PasskeyRequestOptionsResource;
 
 final class PasskeyOptionsController
 {
-    public function __invoke(ChallengeTokenRequest $request, BeginPasskeyStep $step): PasskeyOptionsResource
+    public function __invoke(ChallengeTokenRequest $request, BeginPasskeyStep $step): PasskeyRequestOptionsResource
     {
         $data = $request->toData();
 
-        return new PasskeyOptionsResource($step->execute($request->guardConfig()->name(), $data->token, $data->context));
+        return new PasskeyRequestOptionsResource($step->execute($request->guardConfig()->name(), $data->token, $data->context));
     }
 }

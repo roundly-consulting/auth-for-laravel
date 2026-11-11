@@ -22,7 +22,7 @@ class InvitationPreviewResource extends JsonResource
     public static $wrap = null;
 
     /**
-     * @return array<string, mixed>
+     * @return array{email: string, guard: string, expires_at: string, payload: array<string, mixed>}
      */
     public function toArray(Request $request): array
     {

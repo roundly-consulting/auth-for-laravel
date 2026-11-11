@@ -11,7 +11,7 @@ use RoundlyConsulting\Auth\DataTransferObjects\CurrentToken;
 use RoundlyConsulting\Auth\DataTransferObjects\SessionContext;
 use RoundlyConsulting\Auth\Enums\SensitiveAction;
 use RoundlyConsulting\Auth\Http\RequestGuard;
-use RoundlyConsulting\Auth\Http\Responses\LoginResponse;
+use RoundlyConsulting\Auth\Http\Resources\TokenPairResource;
 use RoundlyConsulting\Auth\Support\SensitiveActionGate;
 
 final class DisableController
@@ -26,6 +26,6 @@ final class DisableController
 
         $tokens = $disable->execute($guard->name(), $account, $current, SessionContext::fromRequest($request, $guard));
 
-        return LoginResponse::withTokens(['status' => 'disabled'], $tokens, $request);
+        return new JsonResponse(['status' => 'disabled', 'tokens' => $tokens === null ? null : new TokenPairResource($tokens)]);
     }
 }

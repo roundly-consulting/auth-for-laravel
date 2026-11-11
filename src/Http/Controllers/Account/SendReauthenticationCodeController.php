@@ -9,7 +9,6 @@ use Illuminate\Http\Request;
 use RoundlyConsulting\Auth\Actions\Account\SendReauthenticationCode;
 use RoundlyConsulting\Auth\DataTransferObjects\SessionContext;
 use RoundlyConsulting\Auth\Http\RequestGuard;
-use RoundlyConsulting\Auth\Http\Responses\LoginResponse;
 
 final class SendReauthenticationCodeController
 {
@@ -19,6 +18,6 @@ final class SendReauthenticationCodeController
 
         $send->execute($guard->name(), RequestGuard::requireAccount($request, $guard), SessionContext::fromRequest($request, $guard));
 
-        return LoginResponse::status('sent');
+        return new JsonResponse(['status' => 'sent'], 202);
     }
 }

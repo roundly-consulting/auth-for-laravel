@@ -17,11 +17,11 @@ use RoundlyConsulting\Auth\Contracts\Account;
 class AccountResource extends JsonResource
 {
     /**
-     * @return array<string, mixed>
+     * @return array{id: mixed, email: string|null, email_verified: bool, locale: string|null, timezone: string|null}
      */
     public function toArray(Request $request): array
     {
-        $account = $this->resource;
+        $account = $this->account();
 
         return [
             'id' => $account->getAuthIdentifier(),
@@ -30,5 +30,13 @@ class AccountResource extends JsonResource
             'locale' => $account->accountLocale(),
             'timezone' => $account->accountTimezone(),
         ];
+    }
+
+    /**
+     * The wrapped account, typed by its contract.
+     */
+    protected function account(): Account
+    {
+        return $this->resource;
     }
 }

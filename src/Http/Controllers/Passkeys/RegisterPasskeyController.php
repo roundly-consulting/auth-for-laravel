@@ -10,7 +10,7 @@ use RoundlyConsulting\Auth\DataTransferObjects\CurrentToken;
 use RoundlyConsulting\Auth\Enums\SensitiveAction;
 use RoundlyConsulting\Auth\Http\RequestGuard;
 use RoundlyConsulting\Auth\Http\Requests\RegisterPasskeyRequest;
-use RoundlyConsulting\Auth\Http\Responses\LoginResponse;
+use RoundlyConsulting\Auth\Http\Resources\TokenPairResource;
 use RoundlyConsulting\Auth\Support\SensitiveActionGate;
 use RoundlyConsulting\Passkeys\Http\Resources\PasskeyResource;
 
@@ -27,6 +27,9 @@ final class RegisterPasskeyController
         $data = $request->toData();
         $result = $register->execute($guard->name(), $account, $data->response, $data->name, $current, $data->context);
 
-        return LoginResponse::withTokens(['passkey' => (new PasskeyResource($result->passkey))->toArray($request)], $result->tokens, $request, 201);
+        return new JsonResponse([
+            'passkey' => new PasskeyResource($result->passkey),
+            'tokens' => $result->tokens === null ? null : new TokenPairResource($result->tokens),
+        ], 201);
     }
 }

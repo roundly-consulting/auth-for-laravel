@@ -18,6 +18,6 @@ final class ListSessionsController
         $guard = RequestGuard::config($request);
         $current = CurrentToken::fromRequest($request, $guard);
 
-        return SessionResource::collection($sessions->execute($guard->name(), RequestGuard::requireAccount($request, $guard), $current->sessionId));
+        return new AnonymousResourceCollection($sessions->execute($guard->name(), RequestGuard::requireAccount($request, $guard), $current->sessionId), SessionResource::class);
     }
 }
