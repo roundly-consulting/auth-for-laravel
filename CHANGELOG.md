@@ -6,6 +6,8 @@ All notable changes to `auth-for-laravel` are documented in this file. The forma
 
 ## Unreleased
 
+## 2.2.0 - 2026-11-11
+
 ### Added
 
 - OpenAPI-ready responses: generators that read code (e.g. dedoc/scramble, then openapi-typescript) now document every package route's response — the token pair or the challenge on each login step, every resource field with its type and enum values, the 202 acknowledgements, the credential-change bodies with their optional re-issued pair, list items and pagination. The JSON and status codes are unchanged.
