@@ -12,6 +12,7 @@ return [
         'factor_not_allowed' => 'Tento spôsob overenia tu nie je možné použiť.',
         'invalid_invitation' => 'Táto pozvánka je neplatná alebo jej platnosť vypršala.',
         'refresh_invalid' => 'Platnosť vašej relácie vypršala. Prihláste sa znova.',
+        'refresh_superseded' => 'Táto relácia bola práve obnovená inde; použite najnovší token.',
         'enrolment_required' => 'Pre tento účet je potrebné nastaviť ďalší spôsob overenia pri prihlásení, čo tu nie je možné.',
         'too_many_attempts' => 'Príliš veľa pokusov. Skúste to znova neskôr.',
         'account_disabled' => 'Tento účet bol deaktivovaný.',

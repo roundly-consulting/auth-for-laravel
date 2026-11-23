@@ -49,7 +49,7 @@
         "roundly-consulting/package-toolkit-for-laravel": "^2.0",
         "roundly-consulting/passkeys-for-laravel": "^2.0",
         "roundly-consulting/qr-for-laravel": "^2.0",
-        "roundly-consulting/refresh-tokens-for-laravel": "^2.0",
+        "roundly-consulting/refresh-tokens-for-laravel": "^2.1",
         "roundly-consulting/two-factor-for-laravel": "^2.0",
         "symfony/polyfill-intl-normalizer": "^1.31"
     },

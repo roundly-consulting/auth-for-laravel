@@ -15,7 +15,9 @@ use RoundlyConsulting\Auth\Enums\ActivityType;
 use RoundlyConsulting\Auth\Enums\AuthMethodReference;
 use RoundlyConsulting\Auth\Enums\ThrottleKind;
 use RoundlyConsulting\Auth\Events\TokensRefreshed;
+use RoundlyConsulting\Auth\Exceptions\AuthException;
 use RoundlyConsulting\Auth\Exceptions\InvalidRefreshToken;
+use RoundlyConsulting\Auth\Exceptions\RefreshSuperseded;
 use RoundlyConsulting\Auth\Guards\AccountRepository;
 use RoundlyConsulting\Auth\Guards\GuardRegistry;
 use RoundlyConsulting\Auth\Support\Throttle;
@@ -31,10 +33,17 @@ use SensitiveParameter;
  * Rotates a refresh token into a new pair within the same session.
  *
  * The redeem is scoped to this guard's owner morph class, so a token of another guard
- * is "unknown" and is NOT consumed. `redeem()` + `issue(familyId)` is used rather than
+ * is "unknown" and is NOT consumed. `attempt()` + `issue(familyId)` is used rather than
  * `rotate()`: the replacement's access reference must be the jti minted AFTER the
  * redeem. `amr`/`auth_time`/device data are inherited from the family's newest row.
  * Only failures are recorded as activity (volume).
+ *
+ * A token rotated moments ago by a concurrent refresh of the same session (inside
+ * `refresh-tokens.rotation.grace`, the session still alive) is answered with 409
+ * `refresh_superseded` rather than 401: the client keeps the token that refresh handed
+ * out instead of signing out. Nothing is revoked and no reuse is reported; the attempt
+ * is recorded as a failed refresh with reason `superseded` and counts towards the
+ * refresh throttle.
  *
  * A family minted under an older `token_version` than the account's is revoked and
  * refused: the login that opened it raced an invalidation (it loaded the account, the
@@ -68,7 +77,13 @@ final readonly class RefreshTokenPair
 
         $this->throttle->attempt($config, [ThrottleKind::Refresh], null, $context, ActivityType::Refresh);
 
-        $redeemed = RefreshTokens::redeem($refreshToken, $accounts->morphClass());
+        $attempt = RefreshTokens::attempt($refreshToken, $accounts->morphClass());
+
+        if ($attempt->superseded()) {
+            $this->fail($guard, $context, null, 'superseded', new RefreshSuperseded);
+        }
+
+        $redeemed = $attempt->result;
         $owner = $redeemed?->user;
 
         if ($redeemed === null || ! $owner instanceof Account) {
@@ -136,7 +151,7 @@ final readonly class RefreshTokenPair
         );
     }
 
-    private function fail(string $guard, SessionContext $context, ?Account $account, string $reason): never
+    private function fail(string $guard, SessionContext $context, ?Account $account, string $reason, ?AuthException $exception = null): never
     {
         $this->recordActivity->execute(new LoginActivityData(
             guard: $guard,
@@ -147,6 +162,6 @@ final readonly class RefreshTokenPair
             account: $account,
         ));
 
-        throw new InvalidRefreshToken;
+        throw $exception ?? new InvalidRefreshToken;
     }
 }

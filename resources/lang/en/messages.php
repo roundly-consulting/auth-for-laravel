@@ -12,6 +12,7 @@ return [
         'factor_not_allowed' => 'This verification method cannot be used here.',
         'invalid_invitation' => 'This invitation is invalid or has expired.',
         'refresh_invalid' => 'Your session has expired. Please sign in again.',
+        'refresh_superseded' => 'This session was just refreshed elsewhere; use the newest token.',
         'enrolment_required' => 'This account must set up an additional sign-in factor, which cannot be done here.',
         'too_many_attempts' => 'Too many attempts. Please try again later.',
         'account_disabled' => 'This account has been disabled.',
