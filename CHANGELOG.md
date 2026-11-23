@@ -6,6 +6,27 @@ All notable changes to `auth-for-laravel` are documented in this file. The forma
 
 ## Unreleased
 
+## 2.3.0 - 2026-11-23
+
+**Upgrade note for clients:** `POST …/auth/refresh` can now answer **409 `refresh_superseded`**. It means another
+request refreshed the same session moments ago and the session is still alive. Keep the access/refresh token
+(or cookie) that concurrent refresh returned, do **not** sign the user out, and retry the original request once
+with it. A client that treats every non-200 refresh as "signed out" keeps today's behaviour, but signs users out
+needlessly when several servers refresh at once. Every other refresh failure is still 401 `refresh_invalid`.
+Requires `roundly-consulting/refresh-tokens-for-laravel` ^2.1.
+
+### Added
+
+- `RefreshSuperseded` (409, `refresh_superseded`, EN + SK message `authentication::messages.errors.refresh_superseded`,
+  publishable like the others). The refresh answers with it when its token was rotated inside
+  `refresh-tokens.rotation.grace` by a concurrent refresh and the session lives on. Nothing is revoked, no reuse
+  is reported, the refresh throttle still counts the attempt, and login activity records a `failed_token` refresh
+  with reason `superseded`.
+
+### Changed
+
+- `RefreshTokenPair` redeems through `RefreshTokens::attempt()` (refresh-tokens 2.1).
+
 ## 2.2.0 - 2026-11-11
 
 ### Added
