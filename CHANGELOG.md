@@ -6,6 +6,26 @@ All notable changes to `auth-for-laravel` are documented in this file. The forma
 
 ## Unreleased
 
+## 2.4.0 - 2026-11-24
+
+Four opt-in invitation options. With the defaults nothing changes.
+
+### Added
+
+- `invitations.reject_other_email` (default `false`): with `lock_email`, an accept naming another address is refused
+  with `InvitationEmailMismatch` (422, `invitation_email_mismatch`, field `email`) instead of quietly using the
+  invited one. Case and spaces don't count. The invitation stays pending, the registration throttle counts the
+  attempt, and login activity records a `failed_credentials` acceptance with that reason.
+- `invitations.mail_payload_keys` (default `[]`): listed payload keys become `:key` placeholders of the invitation
+  mail. Strings (cut at 255 characters) and ints render as given, anything else as `''`; unlisted keys never reach
+  the mail.
+- `invitations.distinct_errors` (default `false`): a dead link answers `InvitationAlreadyAccepted`
+  (`invitation_accepted`), `InvitationRevoked` (`invitation_revoked`) or `InvitationExpired` (`invitation_expired`),
+  all 422, on preview and accept. Unknown tokens and links replaced by a newer send stay `invalid_invitation`.
+- `InvitationData::$replacePending` (`?bool`, default `null` = `invitations.replace_pending`): create an invitation
+  without revoking an open one to the same address.
+- EN + SK messages for the four new codes.
+
 ## 2.3.0 - 2026-11-23
 
 **Upgrade note for clients:** `POST …/auth/refresh` can now answer **409 `refresh_superseded`**. It means another
