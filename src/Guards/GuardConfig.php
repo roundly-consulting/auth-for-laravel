@@ -355,6 +355,16 @@ final readonly class GuardConfig
         return $this->flag($this->settings['invitations']['lock_email'] ?? null, 'invitations.lock_email', true);
     }
 
+    public function invitationRejectsOtherEmail(): bool
+    {
+        return $this->flag($this->settings['invitations']['reject_other_email'] ?? null, 'invitations.reject_other_email', false);
+    }
+
+    public function invitationDistinctErrors(): bool
+    {
+        return $this->flag($this->settings['invitations']['distinct_errors'] ?? null, 'invitations.distinct_errors', false);
+    }
+
     public function invitationReplacesPending(): bool
     {
         return $this->flag($this->settings['invitations']['replace_pending'] ?? null, 'invitations.replace_pending', true);
@@ -381,6 +391,14 @@ final readonly class GuardConfig
     public function invitationPreviewPayloadKeys(): array
     {
         return $this->stringList($this->settings['invitations']['preview_payload_keys'] ?? null, 'invitations.preview_payload_keys');
+    }
+
+    /**
+     * @return list<string>
+     */
+    public function invitationMailPayloadKeys(): array
+    {
+        return $this->stringList($this->settings['invitations']['mail_payload_keys'] ?? null, 'invitations.mail_payload_keys');
     }
 
     public function invitationAbility(): string

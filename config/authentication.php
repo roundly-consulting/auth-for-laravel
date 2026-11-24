@@ -148,11 +148,22 @@ return [
             'enabled' => false,
             'ttl' => 604_800,                    // 7 days
             'lock_email' => true,
+            // With lock_email: refuse (invitation_email_mismatch) an accept that names another
+            // address, instead of silently using the invited one. The invitation stays pending.
+            'reject_other_email' => false,
+            // create() revokes an open invitation to the same address (per call: InvitationData::$replacePending).
             'replace_pending' => true,
             'allow_existing_email' => false,
             'resend_cooldown' => 60,
             'max_sends' => 5,
             'preview_payload_keys' => [],        // payload keys exposed by the preview endpoint
+            // Payload keys the invitation mail may use as :key placeholders (string/int values,
+            // cut at 255 chars; anything else renders empty). Unlisted keys never reach the mail.
+            'mail_payload_keys' => [],
+            // Tell a dead link apart: invitation_accepted / invitation_revoked / invitation_expired
+            // instead of the uniform invalid_invitation. Unknown or replaced (re-sent) links stay
+            // invalid_invitation. Only the token holder learns their own invitation's state.
+            'distinct_errors' => false,
             'ability' => 'authentication.invitations.manage',  // Gate ability for management routes
         ],
 

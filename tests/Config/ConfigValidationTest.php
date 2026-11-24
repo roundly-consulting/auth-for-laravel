@@ -98,6 +98,9 @@ it('lists a junk leaf of every later step instead of throwing', function (Closur
 })->with([
     'notifications.classes.magic_link' => [fn () => test()->configureGuard('users', ['notifications.classes.magic_link' => false]), 'authentication.guards.users.notifications.classes.magic_link'],
     'registration.rules' => [fn () => test()->configureGuard('users', ['registration.rules' => 123]), 'authentication.guards.users.registration.rules'],
+    'invitations.reject_other_email' => [fn () => test()->configureGuard('users', ['invitations.reject_other_email' => 'sometimes']), 'authentication.guards.users.invitations.reject_other_email'],
+    'invitations.distinct_errors' => [fn () => test()->configureGuard('users', ['invitations.distinct_errors' => ['yes']]), 'authentication.guards.users.invitations.distinct_errors'],
+    'invitations.mail_payload_keys' => [fn () => test()->configureGuard('users', ['invitations.mail_payload_keys' => ['company_name', '']]), 'authentication.guards.users.invitations.mail_payload_keys'],
     'registration.creator' => [fn () => test()->configureGuard('users', ['registration.creator' => 123]), 'authentication.guards.users.registration.creator'],
     'risk.assessor' => [fn () => test()->configureGuard('users', ['risk.assessor' => 123]), 'authentication.guards.users.risk.assessor'],
     'tokens.claims_resolver' => [fn () => test()->configureGuard('users', ['tokens.claims_resolver' => 123]), 'authentication.guards.users.tokens.claims_resolver'],

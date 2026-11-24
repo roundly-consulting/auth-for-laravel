@@ -22,7 +22,8 @@ use RoundlyConsulting\Auth\Support\Models;
  * Creates an invitation and returns its link once (`->invitation`, `->token`, `->url`) —
  * mailed to the invitee unless `send: false`, in which case the host delivers the link
  * itself (Slack, SMS, an admin screen). An earlier pending
- * invitation for the same address is revoked (`replace_pending`); an address that
+ * invitation for the same address is revoked (`replace_pending`, or per call
+ * `InvitationData::$replacePending`); an address that
  * already has an account is refused unless `allow_existing_email` (admin-facing, so the
  * error is fine to show). The locale must be one of the guard's `locale.supported` — it
  * becomes the new account's locale on accept.
@@ -55,7 +56,7 @@ final readonly class CreateInvitation
             throw ValidationException::withMessages(['email' => __('authentication::validation.email_taken')]);
         }
 
-        if ($config->invitationReplacesPending()) {
+        if ($data->replacePending ?? $config->invitationReplacesPending()) {
             Models::invitations()->where('guard', $guard)->where('email', $email)->pending($now)->get()
                 ->each(static function (Invitation $pending) use ($now, $guard): void {
                     Models::invitations()->whereKey($pending->getKey())->update(['revoked_at' => $now]);

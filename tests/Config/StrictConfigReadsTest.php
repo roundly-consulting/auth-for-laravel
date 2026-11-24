@@ -201,6 +201,8 @@ it('refuses a mistyped list leaf instead of dropping entries (strict config)', f
     'authenticated middleware with a blank' => [['routes' => ['authenticated_middleware' => ['verified', '']]], 'routes.authenticated_middleware', static fn (GuardConfig $g): array => $g->authenticatedRouteMiddleware()],
     'locales a map' => [['locale' => ['supported' => ['en' => 'English']]], 'locale.supported', static fn (GuardConfig $g): array => $g->supportedLocales()],
     'reauthentication methods not a list' => [['reauthentication' => ['methods' => 'password']], 'reauthentication.methods', static fn (GuardConfig $g): array => $g->reauthenticationMethods()],
+    'mail payload keys not a list' => [['invitations' => ['mail_payload_keys' => 'company_name']], 'invitations.mail_payload_keys', static fn (GuardConfig $g): array => $g->invitationMailPayloadKeys()],
+    'mail payload keys with a non-string' => [['invitations' => ['mail_payload_keys' => ['company_name', 7]]], 'invitations.mail_payload_keys', static fn (GuardConfig $g): array => $g->invitationMailPayloadKeys()],
 ]);
 
 it('refuses a guard whose scalar leaf is junk when it resolves, before any flow runs (strict config)', function (): void {

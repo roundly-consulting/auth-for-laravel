@@ -32,6 +32,7 @@ use RoundlyConsulting\Auth\Events\InvitationAccepted;
 use RoundlyConsulting\Auth\Exceptions\EnrolmentRequired;
 use RoundlyConsulting\Auth\Exceptions\InvalidInvitation;
 use RoundlyConsulting\Auth\Exceptions\InvitationAddressTaken;
+use RoundlyConsulting\Auth\Exceptions\InvitationEmailMismatch;
 use RoundlyConsulting\Auth\Exceptions\RegistrationClosed;
 use RoundlyConsulting\Auth\Guards\AccountRepository;
 use RoundlyConsulting\Auth\Guards\GuardConfig;
@@ -50,8 +51,10 @@ use RoundlyConsulting\Auth\Support\Throttle;
  * accepted_at IS NULL AND revoked_at IS NULL AND expires_at > now`) precedes the
  * account creation in ONE transaction, so two concurrent accepts create one account.
  * The invited address counts as verified (possession proven); with `lock_email = false`
- * another address may be used, stored unverified. An address that already has an
- * account rolls the claim back: uniform `invalid_invitation`, and a notice to that
+ * another address may be used, stored unverified; with `lock_email` and
+ * `reject_other_email`, another address is refused (`invitation_email_mismatch`, the
+ * invitation stays pending) instead of quietly replaced by the invited one. An address
+ * that already has an account rolls the claim back: uniform `invalid_invitation`, and a notice to that
  * address — at most one per address per cooldown, shared with registration.
  *
  * Like registration, the answer after the account exists is never an error: an
@@ -85,6 +88,8 @@ final readonly class AcceptInvitation
 
         $invitation = $this->preview->execute($guard, $data->token);
         $accounts = new AccountRepository($config);
+
+        $this->refuseOtherEmail($config, $accounts, $invitation, $data);
 
         $email = ! $config->invitationLocksEmail() && $data->email !== null
             ? $accounts->normalizeEmail($data->email)
@@ -133,6 +138,35 @@ final readonly class AcceptInvitation
         }
 
         return new RegistrationResult(RegistrationStatus::Authenticated, $login);
+    }
+
+    /**
+     * Case and surrounding spaces never make another address: the account gets the
+     * invited address either way.
+     */
+    private function refuseOtherEmail(GuardConfig $config, AccountRepository $accounts, Invitation $invitation, AcceptInvitationData $data): void
+    {
+        if ($data->email === null || ! $config->invitationLocksEmail() || ! $config->invitationRejectsOtherEmail()) {
+            return;
+        }
+
+        $given = $accounts->normalizeEmail($data->email);
+
+        if (mb_strtolower($given) === mb_strtolower($invitation->email)) {
+            return;
+        }
+
+        $this->recordActivity->execute(new LoginActivityData(
+            guard: $config->name(),
+            type: ActivityType::InvitationAccepted,
+            outcome: ActivityOutcome::FailedCredentials,
+            context: $data->context,
+            method: LoginMethod::Invitation->value,
+            reason: 'invitation_email_mismatch',
+            identifier: $given,
+        ));
+
+        throw new InvitationEmailMismatch;
     }
 
     /**

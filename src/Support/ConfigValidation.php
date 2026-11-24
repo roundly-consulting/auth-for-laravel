@@ -235,6 +235,7 @@ final class ConfigValidation
         $guard->invitationResendCooldown();
         $guard->invitationMaxSends();
         $guard->invitationPreviewPayloadKeys();
+        $guard->invitationMailPayloadKeys();
         $guard->invitationAbility();
         $guard->verificationResendDecay();
         $guard->passwordMaxLength();
@@ -306,6 +307,8 @@ final class ConfigValidation
         $guard->registrationAnswersUniformly();
         $guard->invitationsEnabled();
         $guard->invitationLocksEmail();
+        $guard->invitationRejectsOtherEmail();
+        $guard->invitationDistinctErrors();
         $guard->invitationReplacesPending();
         $guard->invitationAllowsExistingEmail();
         $guard->verifiesEmailOnEmailLogin();

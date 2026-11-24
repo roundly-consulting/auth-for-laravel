@@ -10,6 +10,7 @@ final readonly class InvitationData
 {
     /**
      * @param  array<string, mixed>  $payload  host role/meta JSON, surfaced on acceptance
+     * @param  bool|null  $replacePending  revoke an open invitation to the same address; null = the guard's `invitations.replace_pending`
      */
     public function __construct(
         public string $email,
@@ -18,5 +19,6 @@ final readonly class InvitationData
         public ?string $locale = null,
         public ?int $ttl = null,
         public bool $send = true,
+        public ?bool $replacePending = null,
     ) {}
 }

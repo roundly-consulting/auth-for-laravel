@@ -13,6 +13,7 @@ use RoundlyConsulting\Auth\Events\InvitationSent;
 use RoundlyConsulting\Auth\Exceptions\InvalidInvitation;
 use RoundlyConsulting\Auth\Exceptions\InvitationNotFound;
 use RoundlyConsulting\Auth\Exceptions\InvitationSendLimitReached;
+use RoundlyConsulting\Auth\Guards\GuardConfig;
 use RoundlyConsulting\Auth\Guards\GuardRegistry;
 use RoundlyConsulting\Auth\Models\Invitation;
 use RoundlyConsulting\Auth\Support\Models;
@@ -29,7 +30,8 @@ use RoundlyConsulting\Crypto\Random\Token;
  * {@see InvitationSent} track real mails only), and a mail past `max_sends` is refused
  * ({@see InvitationSendLimitReached}). Only a pending invitation gets a link;
  * another guard's is unknown here ({@see InvitationNotFound}). The plaintext is never
- * stored or logged.
+ * stored or logged. The payload keys listed in `mail_payload_keys` become `:key`
+ * placeholders of the mail's copy — nothing unlisted reaches it.
  */
 final readonly class SendInvitation
 {
@@ -75,11 +77,36 @@ final readonly class SendInvitation
                 guard: $guard,
                 url: $url,
                 expiresAt: $invitation->expires_at,
+                replacements: $this->payloadReplacements($config, $invitation),
             ), $invitation->locale);
 
             event(new InvitationSent($guard, $invitation));
         }
 
         return new InvitationLink($invitation, $token, $url);
+    }
+
+    /**
+     * A listed key always has a value, so its placeholder never renders as `:key`: a
+     * string (cut at 255 characters) or an int as given, anything else (an array, null,
+     * a missing key) as ''.
+     *
+     * @return array<string, string|int>
+     */
+    private function payloadReplacements(GuardConfig $config, Invitation $invitation): array
+    {
+        $replacements = [];
+
+        foreach ($config->invitationMailPayloadKeys() as $key) {
+            $value = $invitation->payloadValue($key);
+
+            $replacements[$key] = match (true) {
+                is_string($value) => mb_substr($value, 0, 255),
+                is_int($value) => $value,
+                default => '',
+            };
+        }
+
+        return $replacements;
     }
 }
